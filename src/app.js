@@ -46,6 +46,8 @@ const state = {
   mealProvided: null,
   hasPlane: null,
   hasShuttle: null,
+  fareOverride: null,   // 교통비 수동 입력 (null이면 자동 계산)
+  formEditMode: false,  // 출장신청서 수정 패널 열림 여부
 }
 
 // ── KTX / 버스 운임표 (마산역 출발 왕복) ─────────────────────────────────────
@@ -74,7 +76,14 @@ function goToCard(n) {
   if (!next) return
 
   // 진입 전 준비
-  if (n === 4)  prepareCard4Online()
+  if (n === 4) {
+    selectOnlineMode(state.isOnline)              // 토글 UI 동기화
+    // fee Q 박스: meta 있으면 다시 노출 (뒤로가기 재진입 시)
+    const feeQ = document.getElementById('c4-fee-q')
+    if (feeQ && state.parsedMeta?.registration && state.hasFee !== true) {
+      feeQ.classList.remove('hidden')
+    }
+  }
   if (n === 6)  resetCard6()
   if (n === 7)  resetCard7()
   if (n === 8)  prepareCard8()
@@ -92,11 +101,30 @@ function goToCard(n) {
       next.style.transform = ''
     })
   } else {
-    current.classList.remove('active', 'exit-left')
-    current.style.transform = 'translateX(100%)'
+    // ── 뒤로가기 (다중 스텝 점프 포함) ──
+    // 목적지 카드를 제외한 '모든' 카드를 transition 없이 즉시 화면 밖으로 초기화.
+    // exit-left 상태로 잔류하는 카드가 목적지 카드 위에 겹쳐 보이는 버그 방지.
+    const allCards = document.querySelectorAll('.flow-card')
+    allCards.forEach(el => {
+      if (el === next) return              // 목적지 카드는 건드리지 않음
+      el.style.transition = 'none'        // 애니메이션 즉시 비활성화
+      el.classList.remove('active', 'exit-left')
+      el.style.transform = 'translateX(100%)'  // 화면 오른쪽으로 명시 이동
+    })
+    // 목적지 카드 즉시 중앙에 표시
+    next.style.transition = 'none'
     next.classList.remove('exit-left')
     next.classList.add('active')
-    next.style.transform = ''
+    next.style.transform = 'translateX(0)'
+
+    // 2프레임 후 모든 카드의 inline 스타일 제거 → CSS 제어로 복귀
+    // (이후 앞으로 이동 시 애니메이션이 정상 동작)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      allCards.forEach(el => {
+        el.style.transition = ''
+        el.style.transform = ''
+      })
+    }))
   }
 
   state.currentCard = n
@@ -126,11 +154,141 @@ function goBack(cardNum) {
 }
 
 // Card 4 다음으로 — 등록비 유무에 따라 분기
-function goFromCard4() {
-  if (state.hasFee === true) {
-    goToCard(6)   // 납부 여부 확인
+// ── Card 4 유효성 검사 ────────────────────────────────────────────────────────
+function validateCard4() {
+  // 최신 state 반영
+  state.title  = document.getElementById('input-title')?.value.trim()  || state.title
+  state.region = document.getElementById('input-region')?.value.trim() || state.region
+  state.place  = document.getElementById('input-place')?.value.trim()  || state.place
+  state.fee    = parseInt((document.getElementById('input-fee')?.value || '').replace(/,/g,'')) || state.fee
+
+  const errs = []
+
+  // 1. 출장/교육명
+  const titleEl = document.getElementById('input-title')
+  if (!titleEl?.value.trim()) {
+    errs.push({ id: 'input-title', label: '출장 / 교육명' })
+    titleEl?.classList.add('input-error')
   } else {
-    goToCard(8)   // 등록비 없음 → 추가 확인으로 바로
+    titleEl?.classList.remove('input-error')
+  }
+
+  // 2. 출장 기간 (시작일)
+  const startEl = document.getElementById('input-start')
+  if (!startEl?.value) {
+    errs.push({ id: 'start-box', label: '출장 시작일' })
+    document.getElementById('start-box')?.classList.add('input-error')
+  } else {
+    document.getElementById('start-box')?.classList.remove('input-error')
+  }
+
+  // 3. 출장 기간 (종료일)
+  const endEl = document.getElementById('input-end')
+  if (!endEl?.value) {
+    errs.push({ id: 'end-box', label: '출장 종료일' })
+    document.getElementById('end-box')?.classList.add('input-error')
+  } else {
+    document.getElementById('end-box')?.classList.remove('input-error')
+  }
+
+  // 4. 출장 지역 (오프라인만 필수)
+  if (!state.isOnline) {
+    const regionEl = document.getElementById('input-region')
+    if (!regionEl?.value.trim()) {
+      errs.push({ id: 'input-region', label: '출장 지역' })
+      regionEl?.classList.add('input-error')
+    } else {
+      regionEl?.classList.remove('input-error')
+    }
+  }
+
+  // 5. 교육/등록비 선택 여부
+  if (state.hasFee === null) {
+    errs.push({ id: 'field-fee', label: '교육 / 등록비 유무 선택' })
+    document.getElementById('field-fee')?.classList.add('field-error')
+  } else {
+    document.getElementById('field-fee')?.classList.remove('field-error')
+
+    // 6. 등록비 금액 (있어요 선택 시)
+    if (state.hasFee === true) {
+      const feeEl = document.getElementById('input-fee')
+      const feeVal = parseInt((feeEl?.value || '').replace(/,/g,'')) || 0
+      if (feeVal <= 0) {
+        errs.push({ id: 'input-fee', label: '등록비 금액' })
+        feeEl?.classList.add('input-error')
+      } else {
+        feeEl?.classList.remove('input-error')
+      }
+    }
+  }
+
+  return errs
+}
+
+// ── Card 4 에러 배너 렌더 ──────────────────────────────────────────────────────
+function renderCard4Errors(errs) {
+  let banner = document.getElementById('c4-err-banner')
+  if (!banner) {
+    banner = document.createElement('div')
+    banner.id = 'c4-err-banner'
+    banner.className = 'c4-err-banner'
+    // card-footer 바로 앞에 삽입
+    const footer = document.querySelector('#card-4 .card-footer')
+    footer?.parentNode.insertBefore(banner, footer)
+  }
+
+  if (errs.length === 0) {
+    banner.classList.add('hidden')
+    return
+  }
+
+  banner.classList.remove('hidden')
+  banner.innerHTML = `
+    <div class="c4-err-icon">⚠️</div>
+    <div class="c4-err-body">
+      <strong>아래 항목을 채워주세요</strong>
+      <ul class="c4-err-list">
+        ${errs.map(e => `<li>${e.label}</li>`).join('')}
+      </ul>
+    </div>`
+
+  // 첫 번째 오류 필드로 스크롤
+  const firstId = errs[0].id
+  const firstEl = document.getElementById(firstId)
+  if (firstEl) {
+    firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // 포커스 (input인 경우)
+    if (firstEl.tagName === 'INPUT') firstEl.focus()
+  }
+}
+
+// ── Card 4 입력 변경 시 에러 실시간 해제 ──────────────────────────────────────
+function clearCard4Error(id) {
+  document.getElementById(id)?.classList.remove('input-error', 'field-error')
+  const banner = document.getElementById('c4-err-banner')
+  if (banner && !document.querySelector('#card-4 .input-error, #card-4 .field-error')) {
+    banner.classList.add('hidden')
+  }
+}
+
+function goFromCard4() {
+  const errs = validateCard4()
+  if (errs.length > 0) {
+    renderCard4Errors(errs)
+    // CTA 버튼 흔들기
+    const btn = document.getElementById('ctaNext4')
+    btn?.classList.add('shake')
+    setTimeout(() => btn?.classList.remove('shake'), 600)
+    return
+  }
+  // 에러 없음 → 배너 숨기기 + 다음 카드로
+  document.getElementById('c4-err-banner')?.classList.add('hidden')
+  if (state.hasFee === true) {
+    goToCard(6)
+  } else if (state.isOnline) {
+    goToCard(9)
+  } else {
+    goToCard(8)
   }
 }
 
@@ -171,9 +329,8 @@ function getVisibleSteps() {
 // ── 단계 트레일 렌더 ──────────────────────────────────────────────────────────
 function renderTrails() {
   const visibleSteps = getVisibleSteps()
-  const isMobile = window.innerWidth <= 480
 
-  // 현재 단계 정보 (모바일 텍스트용)
+  // 현재 단계 정보 텍스트
   const currentIdx = visibleSteps.findIndex(s => s.card === state.currentCard)
   const currentLabel = currentIdx >= 0 ? visibleSteps[currentIdx].label : ''
   const stepText = currentIdx >= 0
@@ -185,10 +342,8 @@ function renderTrails() {
     const trailEl = document.getElementById(`trail-${card}`)
     if (!trailEl) return
 
-    // 모바일: 첫 아이템으로 단계 텍스트 삽입 (flex item으로 자연스럽게 배치)
-    let html = isMobile && stepText
-      ? `<span class="trail-step-text">${stepText}</span>`
-      : ''
+    // 라벨은 trail 외부(trail-current-info)에 표시 — overflow clipping 방지
+    let html = ''
 
     visibleSteps.forEach(({ card: c, label }, idx) => {
       const clickable = c < state.currentCard
@@ -213,14 +368,22 @@ function renderTrails() {
           ${clickable ? `onclick="goToCard(${c})"` : 'disabled'}
           aria-label="${label}">
           <div class="trail-dot">${icon}</div>
-          <span class="trail-label">${label}</span>
         </button>`
     })
 
     trailEl.innerHTML = html
 
+    // 현재 단계 텍스트를 trail 바깥 형제 요소(trail-current-info)에 표시
+    // → overflow-x:auto 컨테이너 밖이므로 클리핑 없음
+    let infoEl = trailEl.nextElementSibling
+    if (!infoEl || !infoEl.classList.contains('trail-current-info')) {
+      infoEl = document.createElement('div')
+      infoEl.className = 'trail-current-info'
+      trailEl.after(infoEl)
+    }
+    infoEl.textContent = stepText
+
     // 현재 단계 점을 trail 수평 스크롤 내에서 center로 위치
-    // scrollIntoView 대신 trailEl.scrollLeft 직접 제어 (페이지 전체 스크롤 방지)
     const currentDot = trailEl.querySelector('.trail-item.current')
     if (currentDot) {
       const dotOffset = currentDot.offsetLeft
@@ -234,7 +397,7 @@ function renderTrails() {
 // ── CARD 1: 출장 여부 ─────────────────────────────────────────────────────────
 function select1(val) {
   state.tripStatus = val
-  state.isOnline = (val === 'online')
+  state.isOnline = false   // 온라인/오프라인은 Card 4에서 결정
   highlight(val)
   setTimeout(() => goToCard(2), 150)
 }
@@ -265,17 +428,16 @@ function skipToDirectInput() {
 // ── CARD 3: 공문 업로드 ───────────────────────────────────────────────────────
 
 // ── 원형 진행률 업데이트 ────────────────────────────────────────────────────
+const RING_CIRCUMFERENCE = 2 * Math.PI * 60  // r=60 → 376.99
+
 function setParseProgress(pct, label) {
   pct = Math.min(100, Math.max(0, Math.round(pct)))
-  const ring  = document.getElementById('parseProgressRing')
+  const arc   = document.getElementById('ringProgress')
   const pctEl = document.getElementById('parseProgressPct')
   const lblEl = document.getElementById('parseProgressLabel')
-  if (ring) {
-    // conic-gradient: 0도(위)에서 시작, 파란색→연한파랑 그라데이션
-    const deg = pct * 3.6
-    ring.style.background = pct === 0
-      ? 'conic-gradient(from -90deg, #e8edf2 0%, #e8edf2 100%)'
-      : `conic-gradient(from -90deg, #3182f6 0deg, #7ab8ff ${deg}deg, #e8edf2 ${deg}deg)`
+  if (arc) {
+    const offset = RING_CIRCUMFERENCE * (1 - pct / 100)
+    arc.style.strokeDashoffset = offset
   }
   if (pctEl) pctEl.textContent = `${pct}%`
   if (lblEl && label !== undefined) lblEl.textContent = label
@@ -310,15 +472,46 @@ async function processUploadedFile(file) {
   const ext = file.name.toLowerCase().split('.').pop()
   let text = ''
 
-  if (ext === 'pdf') {
-    setParseProgress(5, 'PDF 읽는 중')
-    text = await extractPdfText(file)
-    // 텍스트가 거의 없으면 이미지 기반 PDF → OCR
-    if (text.replace(/\s/g, '').length < 50) {
-      text = await ocrPdfPages(file)
+  try {
+    if (ext === 'pdf') {
+      setParseProgress(3, 'PDF 라이브러리 로딩 중')
+      try {
+        await ensurePdfJs()  // 로드 대기
+      } catch (_) { /* ignore */ }
+      setParseProgress(5, 'PDF 읽는 중')
+      try {
+        text = await extractPdfText(file)
+        console.log('PDF 텍스트 추출 성공, 길이:', text.replace(/\s/g, '').length)
+      } catch (e) {
+        console.warn('PDF 텍스트 추출 실패:', e.message, '→ OCR 시도')
+        text = ''
+      }
+      // 텍스트가 거의 없으면 이미지 기반 PDF → OCR
+      if (text.replace(/\s/g, '').length < 50) {
+        setParseProgress(10, 'OCR 처리 중 (이미지 PDF)')
+        console.log('텍스트 부족 → OCR 시작')
+        try {
+          text = await ocrPdfPages(file)
+          console.log('OCR 결과 길이:', text.replace(/\s/g, '').length)
+        } catch (e) {
+          console.warn('OCR 실패:', e.message)
+          text = ''
+        }
+      }
+    } else if (['jpg','jpeg','png'].includes(ext)) {
+      try {
+        text = await ocrImage(file)
+      } catch (e) {
+        console.warn('이미지 OCR 실패:', e)
+        text = ''
+      }
     }
-  } else if (['jpg','jpeg','png'].includes(ext)) {
-    text = await ocrImage(file)
+  } catch (e) {
+    console.error('파일 처리 오류:', e)
+    setParseProgress(0, '오류 발생')
+    document.getElementById('parseLoading').classList.add('hidden')
+    showUploadError('파일을 읽는 중 오류가 발생했어요. 다른 파일을 시도해주세요.')
+    return
   }
 
   setParseProgress(95, '정보 추출 중')
@@ -336,12 +529,78 @@ async function processUploadedFile(file) {
   updateDocStrip()
 }
 
-// PDF 텍스트 레이어 추출 (페이지별 진행률)
+function showUploadError(msg) {
+  const grid = document.getElementById('resultGrid')
+  const resultEl = document.getElementById('parseResult')
+  if (!grid || !resultEl) return
+  grid.innerHTML = `
+    <div class="result-warn full">
+      <span>⚠️</span>
+      <div><strong>파일을 읽지 못했어요</strong><p>${escapeHtml(msg)}</p></div>
+    </div>`
+  resultEl.classList.remove('hidden')
+  const cta = document.getElementById('ctaNext3')
+  if (cta) { cta.disabled = false; cta.classList.remove('disabled') }
+}
+
+// pdfjs-dist CDN 로드 보장 (미로드 시 동적 재시도)
+let _pdfJsPromise = null
+async function ensurePdfJs() {
+  if (typeof pdfjsLib !== 'undefined') return true
+  if (_pdfJsPromise) return _pdfJsPromise
+  _pdfJsPromise = new Promise(resolve => {
+    // 이미 <script> 태그가 있으면 로드 완료 대기 (최대 10초)
+    const existing = document.querySelector('script[src*="pdfjs-dist"]')
+    if (existing) {
+      const t0 = Date.now()
+      const check = setInterval(() => {
+        if (typeof pdfjsLib !== 'undefined') { clearInterval(check); resolve(true) }
+        else if (Date.now() - t0 > 10000) { clearInterval(check); resolve(false) }
+      }, 200)
+      return
+    }
+    // 스크립트 태그 자체가 없으면 동적으로 삽입
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+      'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
+    ]
+    let idx = 0
+    const tryLoad = () => {
+      if (idx >= urls.length) { resolve(false); return }
+      const s = document.createElement('script')
+      s.src = urls[idx++]
+      s.onload = () => resolve(typeof pdfjsLib !== 'undefined')
+      s.onerror = tryLoad
+      document.head.appendChild(s)
+    }
+    tryLoad()
+    setTimeout(() => resolve(typeof pdfjsLib !== 'undefined'), 15000)
+  })
+  return _pdfJsPromise
+}
+
+// PDF 텍스트 레이어 추출 (페이지별 진행률, 15초 타임아웃)
 async function extractPdfText(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.worker.min.js'
+  const ok = await ensurePdfJs()
+  if (!ok) throw new Error('pdfjs 로드 실패 — 네트워크를 확인해주세요')
+  // 워커 소스 설정
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+  } catch (_) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+  }
   const ab = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: ab }).promise
+
+  const loadingTask = pdfjsLib.getDocument({ data: ab })
+  loadingTask.onPassword = (_, onError) => onError(new Error('암호화된 PDF'))
+
+  // 20초 타임아웃: 무한 대기 방지
+  const pdf = await Promise.race([
+    loadingTask.promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('PDF_TIMEOUT')), 20000))
+  ])
+
   const parts = []
   for (let i = 1; i <= pdf.numPages; i++) {
     setParseProgress(5 + Math.round((i / pdf.numPages) * 75), `${i}/${pdf.numPages} 페이지`)
@@ -354,26 +613,36 @@ async function extractPdfText(file) {
 
 // 이미지 기반 PDF → 각 페이지 렌더 후 OCR
 async function ocrPdfPages(file) {
-  if (typeof pdfjsLib === 'undefined') return ''
+  const ok = await ensurePdfJs()
+  if (!ok) return ''
   pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.worker.min.js'
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
   const ab = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: ab }).promise
+
+  const pdf = await Promise.race([
+    pdfjsLib.getDocument({ data: ab }).promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('PDF_TIMEOUT')), 20000))
+  ])
+
   const parts = []
   const maxPages = Math.min(pdf.numPages, 3)
   for (let i = 1; i <= maxPages; i++) {
-    setParseProgress(5 + Math.round(((i - 1) / maxPages) * 85), `OCR ${i}/${maxPages} 페이지`)
-    const page = await pdf.getPage(i)
-    const viewport = page.getViewport({ scale: 2.0 })
-    const canvas = document.createElement('canvas')
-    canvas.width = viewport.width
-    canvas.height = viewport.height
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'))
-    const pageBase = 5 + Math.round(((i - 1) / maxPages) * 85)
-    const pageEnd  = 5 + Math.round((i / maxPages) * 85)
-    const result = await ocrBlob(blob, pageBase, pageEnd)
-    parts.push(result)
+    setParseProgress(10 + Math.round(((i - 1) / maxPages) * 75), `OCR ${i}/${maxPages} 페이지`)
+    try {
+      const page = await pdf.getPage(i)
+      const viewport = page.getViewport({ scale: 2.0 })
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'))
+      const pageBase = 10 + Math.round(((i - 1) / maxPages) * 75)
+      const pageEnd  = 10 + Math.round((i / maxPages) * 75)
+      const result = await ocrBlob(blob, pageBase, pageEnd)
+      parts.push(result)
+    } catch (pageErr) {
+      console.warn(`페이지 ${i} OCR 실패:`, pageErr)
+    }
   }
   return parts.join('\n')
 }
@@ -383,11 +652,50 @@ async function ocrImage(file) {
   return ocrBlob(file, 5, 90)
 }
 
-// Tesseract OCR (Tesseract logger로 실제 진행률 반영)
+// Tesseract CDN 로드 보장
+let _tessPromise = null
+async function ensureTesseract() {
+  if (typeof Tesseract !== 'undefined') return true
+  if (_tessPromise) return _tessPromise
+  _tessPromise = new Promise(resolve => {
+    const existing = document.querySelector('script[src*="tesseract"]')
+    if (existing) {
+      const t0 = Date.now()
+      const check = setInterval(() => {
+        if (typeof Tesseract !== 'undefined') { clearInterval(check); resolve(true) }
+        else if (Date.now() - t0 > 15000) { clearInterval(check); resolve(false) }
+      }, 200)
+      return
+    }
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
+      'https://unpkg.com/tesseract.js@5/dist/tesseract.min.js',
+    ]
+    let idx = 0
+    const tryLoad = () => {
+      if (idx >= urls.length) { resolve(false); return }
+      const s = document.createElement('script')
+      s.src = urls[idx++]
+      s.onload = () => resolve(typeof Tesseract !== 'undefined')
+      s.onerror = tryLoad
+      document.head.appendChild(s)
+    }
+    tryLoad()
+    setTimeout(() => resolve(typeof Tesseract !== 'undefined'), 20000)
+  })
+  return _tessPromise
+}
+
+// Tesseract OCR (Tesseract logger로 실제 진행률 반영, 90초 타임아웃)
 async function ocrBlob(blob, pctStart = 5, pctEnd = 90) {
-  if (typeof Tesseract === 'undefined') return ''
+  setParseProgress(pctStart, 'OCR 엔진 로딩 중')
+  const ok = await ensureTesseract()
+  if (!ok) {
+    console.warn('Tesseract 로드 실패 — OCR 건너뜀')
+    return ''
+  }
   try {
-    const { data: { text } } = await Tesseract.recognize(blob, 'kor+eng', {
+    const ocrPromise = Tesseract.recognize(blob, 'kor+eng', {
       logger: m => {
         if (m.status === 'recognizing text') {
           const p = pctStart + Math.round(m.progress * (pctEnd - pctStart))
@@ -396,12 +704,21 @@ async function ocrBlob(blob, pctStart = 5, pctEnd = 90) {
           setParseProgress(pctStart, '엔진 로딩 중')
         } else if (m.status === 'initializing api') {
           setParseProgress(pctStart + 5, '초기화 중')
+        } else if (m.status === 'loading language traineddata') {
+          setParseProgress(pctStart + 10, '한국어 데이터 로딩 중')
         }
       }
     })
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('OCR_TIMEOUT')), 90000))
+    const { data: { text } } = await Promise.race([ocrPromise, timeout])
     return text
   } catch (e) {
-    console.warn('OCR 오류:', e)
+    if (e.message === 'OCR_TIMEOUT') {
+      console.warn('OCR 시간 초과 (90초)')
+    } else {
+      console.warn('OCR 오류:', e)
+    }
     return ''
   }
 }
@@ -455,15 +772,25 @@ function parseDocMeta(filename, text) {
   if (m) { setRange(+m[1],+m[2],+m[3],+m[4],+m[5],+m[6]) }
 
   // 패턴2: YYYY.M.D ~ M.D 또는 YYYY.M.D~YYYY.M.D
+  // 일자 뒤에 .(수) 같은 점+요일 괄호가 붙는 공문 형식 지원 (예: 2025. 5. 21.(수) ~ 5. 23.(금))
   if (!startDate) {
-    m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
+    m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
     if (m) {
       const ey = m[4] ? +m[4] : +m[1]
       setRange(+m[1],+m[2],+m[3], ey,+m[5],+m[6])
     }
   }
 
-  // 패턴3: MM.DD(요일) ~ MM.DD(요일) — 연도 없는 경우 올해로 설정
+  // 패턴3: 한글 날짜 — YYYY년 M월 D일 ~ M월 D일
+  if (!startDate) {
+    m = tc.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*~\s*(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
+    if (m) {
+      const ey = m[4] ? +m[4] : +m[1]
+      setRange(+m[1],+m[2],+m[3], ey,+m[5],+m[6])
+    }
+  }
+
+  // 패턴4: MM.DD(요일) ~ MM.DD(요일) — 연도 없는 경우 올해로 설정
   if (!startDate) {
     m = tc.match(/(\d{1,2})\.(\d{1,2})(?:\s*\([^)]{1,3}\))?\s*~\s*(\d{1,2})\.(\d{1,2})/)
     if (m) {
@@ -471,7 +798,21 @@ function parseDocMeta(filename, text) {
     }
   }
 
-  // 패턴4: 단일 일자 — YYYY. M.D 또는 YYYY.M.D (뒤에 ~ 없음)
+  // 패턴5: 일시·기간·개최기간 라벨 근방에서 날짜 탐색
+  if (!startDate) {
+    const labelM = tc.match(/(?:일\s*시|기\s*간|개\s*최\s*기\s*간|개\s*최\s*일\s*시)\s*[：:]\s*(.{5,80})/)
+    if (labelM) {
+      const snip = labelM[1]
+      let sm = snip.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
+      if (sm) { const ey = sm[4] ? +sm[4] : +sm[1]; setRange(+sm[1],+sm[2],+sm[3], ey,+sm[5],+sm[6]) }
+      if (!startDate) {
+        sm = snip.match(/(\d{1,2})[. ]+(\d{1,2})(?:\s*\([가-힣]{1,3}\))?\s*~\s*(\d{1,2})[. ]+(\d{1,2})/)
+        if (sm) setRange(curY,+sm[1],+sm[2], curY,+sm[3],+sm[4])
+      }
+    }
+  }
+
+  // 패턴6: 단일 일자 — YYYY. M.D 또는 YYYY.M.D (뒤에 ~ 없음)
   if (!startDate) {
     m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\s*\([^)]{1,3}\))?(?!\s*[~～])/)
     if (m && +m[1] >= 2020) {
@@ -485,83 +826,148 @@ function parseDocMeta(filename, text) {
   // ── 장소 → 지역 ──
   const REGION_MAP = [
     ['제주특별자치도|제주도|제주시|서귀포', '제주'],
-    ['서울특별시|여의도|여의나루|서울역|수서역', '서울'],
+    // 서울 자치구
     ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
-    ['경기도|인천광역시|수원시|성남시|용인시|고양시|안양시|부천시|평택시|화성시|파주시|김포시', '서울'],
-    ['천안시|아산시|천안아산역', '천안'],
-    ['오송|청주시', '오송'],
-    ['대전광역시|대전시', '대전'],
-    ['동대구|대구광역시|대구시', '동대구'],
-    ['경주시|경주', '경주'],
-    ['울산광역시|울산시', '울산'],
-    ['부산광역시|부산시|해운대|동래|사하|금정', '부산'],
-    ['전주시|전라북도', '전주'],
-    ['순천시|광양시|여수시', '순천'],
-    ['창원시|마산|진해|창원특례시', '창원'],
-    ['진주시', '진주'],
+    // 서울 랜드마크
+    ['서울특별시|여의도|여의나루|서울역|수서역|코엑스|COEX|삼성동|잠실|홍대|명동|광화문|시청|강남역', '서울'],
+    // 경기·인천 (서울 출장 처리)
+    ['경기도|인천광역시|수원시?|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대|자연과학캠퍼스', '서울'],
+    ['천안시?|아산시?|천안아산역', '천안'],
+    ['오송|청주시?', '오송'],
+    ['대전광역시|대전시?|유성구|서구.*대전|대전.*서구', '대전'],
+    ['동대구|대구광역시|대구시?', '동대구'],
+    ['경주시?', '경주'],
+    ['울산광역시|울산시?', '울산'],
+    // 부산 (해운대구에 "대구" 포함되어 반드시 동대구보다 앞에 있어야 함)
+    ['부산광역시|부산시?|해운대|동래|사하|금정', '부산'],
+    ['전주시?|전라북도|전북', '전주'],
+    ['순천시?|광양시?|여수시?', '순천'],
+    ['창원시?|마산|진해|창원특례시', '창원'],
+    ['진주시?', '진주'],
   ]
 
   // 장소 라벨 근방의 텍스트에서 우선 탐색 (발신자 주소 오인 방지)
   let destination = ''
-  const placeSection = tc.match(/(?:장\s*소|개최\s*지|행사\s*장소)\s*[：:]\s*([^.]{2,60})/)
-  const placeText = placeSection ? placeSection[1] : tc
 
-  for (const [keywords, region] of REGION_MAP) {
-    if (new RegExp(keywords).test(placeText)) { destination = region; break }
+  // 형식1: "장소 : XXX" 또는 "개최지 : XXX"
+  const placeColonM = tc.match(/(?:장\s*소|개최\s*지|행사\s*장소|개최\s*장소)\s*[：:]\s*([^.0-9]{2,60})/)
+  // 형식2: "장 소 XXX 숫자." (번호 목록 형식) — 번호 나오기 전까지
+  const placeListM  = tc.match(/장\s*소\s+([가-힣][^0-9]{2,50})(?:\s*\d+\s*[.:]|$)/)
+
+  const placeCandidate = (placeColonM?.[1] || placeListM?.[1] || '').trim()
+
+  if (placeCandidate) {
+    for (const [keywords, region] of REGION_MAP) {
+      if (new RegExp(keywords).test(placeCandidate)) { destination = region; break }
+    }
   }
-  // 장소 라벨 탐색 실패 시 전체 텍스트 스캔 (단, 발신처 주소 제외)
+
+  // 장소 라벨 탐색 실패 시 전체 텍스트 스캔 (발신처 주소 제외)
   if (!destination) {
-    // 발신 주소 ('시행' 이후 텍스트 제거)
-    const bodyText = tc.split(/시\s*행\s*:|발\s*신\s*처\s*:/)[0]
+    const bodyText = tc.split(/시\s*행\s*:|발\s*신\s*처\s*:|수\s*신\s*:/)[0]
     for (const [keywords, region] of REGION_MAP) {
       if (new RegExp(keywords).test(bodyText)) { destination = region; break }
     }
   }
 
-  // ── 등록비 (회원병원 기준 우선) ──
+  // ── 등록비 ──
   let registration = null
-  // 회원병원 금액
-  const memberM = tn.match(/회원병원[:\-：\s]*([\d,]{4,})원?/)
-  if (memberM) {
-    const n = parseInt(memberM[1].replace(/,/g, ''))
-    registration = n < 1000 ? n * 1000 : n
+
+  // 금액 문자열 파싱 헬퍼 (만원 단위 지원: "18만" → 180000, "180,000" → 180000)
+  const parseAmt = s => {
+    if (!s) return null
+    const manM = s.replace(/,/g,'').match(/^(\d+)\s*만$/)
+    if (manM) return parseInt(manM[1]) * 10000
+    const n = parseInt(s.replace(/,/g,''))
+    return (n >= 1000 && n <= 99000000) ? n : null
   }
-  // 사전등록/등록비/교육비 등 키워드 이후 금액
+
+  // 금액 추출 regex: 만원 단위(18만) + 일반 숫자(180,000) 모두 지원
+  const amtPat = /([\d,]+)\s*만\s*원|([\d,]{4,})\s*원/
+
+  // 우선순위1: 회원병원 / 정회원 기준 (학술대회 공문의 "정회원" = 병원 직원 할인가)
+  const memberM = tn.match(/(?:회원병원|정회원)[:\-：\s]*([\d,]+)\s*만?\s*원?/)
+  if (memberM) {
+    const raw = memberM[1]
+    // "정회원 18만원" 형태를 위해 뒤에 "만"이 올 수 있음 → 슬라이딩으로 재확인
+    const snipMember = tn.slice(tn.search(/(?:회원병원|정회원)/))
+    const amtM = snipMember.match(amtPat)
+    if (amtM) {
+      registration = amtM[1]
+        ? parseInt(amtM[1].replace(/,/g,'')) * 10000   // 만원 단위
+        : parseAmt(amtM[2])                             // 일반 숫자
+    } else {
+      const n = parseAmt(raw)
+      if (n) registration = n
+    }
+  }
+
+  // 우선순위2: 사전납입 기준
   if (!registration) {
-    const kwPats = ['사전등록비', '사전등록', '등록비', '참가비', '교육비', '수강료']
+    const snipPre = (() => { const i = tn.indexOf('사전납입'); return i>=0 ? tn.slice(i, i+30) : '' })()
+    if (snipPre) {
+      const amtM = snipPre.match(amtPat)
+      if (amtM) registration = amtM[1] ? parseInt(amtM[1].replace(/,/g,''))*10000 : parseAmt(amtM[2])
+    }
+  }
+
+  // 우선순위3: 교육비·등록비·참가비·참가회비 등 키워드 뒤 금액 (만원 단위 포함)
+  if (!registration) {
+    const kwRegex = /(?:사전\s*등록비|사전\s*등록|참\s*가\s*회\s*비|등록\s*비|참\s*가\s*비|교육\s*비|수강\s*료)\s*[：:\-]?\s*(?:([\d,]+)\s*만\s*원|([\d,]+)\s*원)/
+    const kwM = tc.match(kwRegex)
+    if (kwM) {
+      registration = kwM[1]
+        ? parseInt(kwM[1].replace(/,/g,'')) * 10000
+        : parseAmt(kwM[2])
+    }
+  }
+
+  // 우선순위4: 정규화 텍스트에서 키워드+금액 슬라이딩 검색 (만원 포함)
+  if (!registration) {
+    const kwPats = ['사전등록비','사전등록','참가회비','등록비','참가비','교육비','수강료']
     for (const kw of kwPats) {
-      const ki = tn.indexOf(norm(kw))
+      const ki = tn.indexOf(kw)
       if (ki >= 0) {
-        const snip = tn.slice(ki, ki + norm(kw).length + 40)
-        const m2 = snip.match(/(\d[\d,]{2,})원?/)
-        if (m2) {
-          const n2 = parseInt(m2[1].replace(/,/g, ''))
-          if (n2 >= 1000) { registration = n2; break }
+        const snip = tn.slice(ki, ki + kw.length + 50)
+        const amtM = snip.match(amtPat)
+        if (amtM) {
+          registration = amtM[1]
+            ? parseInt(amtM[1].replace(/,/g,'')) * 10000
+            : parseAmt(amtM[2])
+          if (registration) break
         }
       }
     }
   }
 
-  return { title, periodDisplay, startDate, endDate, nights, days, destination, registration }
+  // ── 온라인 여부 (제목에 "온라인" 명시된 경우만 true, 없으면 false=오프라인)
+  const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300))
+
+  return { title, periodDisplay, startDate, endDate, nights, days, destination, registration, isOnline }
 }
 
 function renderParseResult(filename, meta, hasText) {
   const grid = document.getElementById('resultGrid')
   const resultEl = document.getElementById('parseResult')
 
-  if (!hasText) {
-    grid.innerHTML = `
-      <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
-      <div class="result-warn full">
-        <span>📷</span>
-        <div><strong>스캔 이미지 PDF라 자동 인식이 어려워요</strong><p>다음 단계에서 직접 입력해주세요</p></div>
-      </div>`
-    resultEl.classList.remove('hidden')
-    return
-  }
-
   const fmt = v => v ? `<span>${escapeHtml(String(v))}</span>` : `<span class="empty">확인 안 됨</span>`
   const feeStr = meta.registration ? `${meta.registration.toLocaleString()}원` : ''
+
+  // 파일명/텍스트에서 뭔가 읽혔는지 확인
+  const hasMeta = !!(meta.title || meta.periodDisplay || meta.destination || meta.registration)
+
+  let warnHtml = ''
+  if (!hasText) {
+    // OCR/텍스트 추출 실패 → 파일명 기반 파싱만 됨
+    warnHtml = `
+      <div class="result-warn full">
+        <span>⚠️</span>
+        <div>
+          <strong>내용을 자동으로 읽지 못했어요</strong>
+          <p>PDF가 이미지 형식이거나 보안 설정이 있을 수 있어요.<br>아래 정보가 맞지 않으면 다음 단계에서 직접 수정해주세요.</p>
+        </div>
+      </div>`
+  }
 
   grid.innerHTML = `
     <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
@@ -569,6 +975,7 @@ function renderParseResult(filename, meta, hasText) {
     <div class="result-item"><label>기간</label>${fmt(meta.periodDisplay)}</div>
     <div class="result-item"><label>장소</label>${fmt(meta.destination)}</div>
     <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}</div>
+    ${warnHtml}
   `
   resultEl.classList.remove('hidden')
 }
@@ -585,6 +992,49 @@ function clearUpload() {
 function goFromCard3() {
   prepareCard4WithMeta()
   goToCard(4)
+}
+
+// ── CARD 4: 등록비 자동인식 확인 (예/아니요) ──────────────────────────────────
+function confirmFeeYes() {
+  // '있어요' 자동 선택 + fee 금액 활성화 (input-fee는 이미 자동채워짐)
+  selectFeePresence(true)
+  document.getElementById('c4-fee-q').classList.add('hidden')
+}
+
+function confirmFeeNo() {
+  // 잘못 인식된 것 → 확인 박스 닫고 금액 초기화, 사용자가 직접 선택
+  document.getElementById('c4-fee-q').classList.add('hidden')
+  const feeEl = document.getElementById('input-fee')
+  if (feeEl) feeEl.value = ''
+  state.fee = 0
+}
+
+// ── CARD 4: 온라인 / 오프라인 토글 ───────────────────────────────────────────
+function selectOnlineMode(isOnline) {
+  state.isOnline = isOnline
+  const btnOnline  = document.getElementById('modeBtn-online')
+  const btnOffline = document.getElementById('modeBtn-offline')
+  const hint       = document.getElementById('online-mode-hint')
+
+  // 선택된 버튼: 파란 채움 / 미선택 버튼: 기본 회색
+  if (btnOnline) {
+    btnOnline.classList.toggle('selected', isOnline)
+    btnOnline.classList.toggle('selected-no', !isOnline)
+  }
+  if (btnOffline) {
+    btnOffline.classList.toggle('selected', !isOnline)
+    btnOffline.classList.toggle('selected-no', isOnline)
+  }
+  if (hint) hint.classList.toggle('hidden', !isOnline)
+
+  // 온라인이면 장소·지역 필드 숨김, 오프라인이면 다시 표시
+  const fieldPlace  = document.getElementById('field-place')
+  const fieldRegion = document.getElementById('field-region')
+  if (fieldPlace)  fieldPlace.classList.toggle('hidden', isOnline)
+  if (fieldRegion) fieldRegion.classList.toggle('hidden', isOnline)
+
+  // 교육비 버튼 / 없어요 연동
+  prepareCard4Online()
 }
 
 // ── CARD 4: 온라인 교육 시 "없어요" 숨기고 교육비 자동 설정 ────────────────────
@@ -651,6 +1101,9 @@ function prepareCard4WithMeta() {
     feeQ.classList.add('hidden')
   }
 
+  // 온라인/오프라인 자동 설정 (공문 제목에 "온라인" 있으면 온라인, 없으면 오프라인)
+  selectOnlineMode(meta.isOnline === true)
+
   document.getElementById('c4-confirm-view').classList.remove('hidden')
   document.getElementById('c4-input-view').classList.add('hidden')
 }
@@ -659,6 +1112,8 @@ function showCard4InputMode() {
   document.getElementById('c4-confirm-view').classList.add('hidden')
   document.getElementById('c4-input-view').classList.remove('hidden')
   document.getElementById('c4-fee-q').classList.add('hidden')
+  // 직접 입력 시 기본값: 오프라인
+  selectOnlineMode(false)
 }
 
 function onDateChange() {
@@ -670,6 +1125,10 @@ function onDateChange() {
   // 날짜 박스 UI 업데이트
   updateDateBox('input-start', 'start-placeholder')
   updateDateBox('input-end',   'end-placeholder')
+
+  // 에러 실시간 해제
+  if (start) clearCard4Error('start-box')
+  if (end)   clearCard4Error('end-box')
 
   if (start && end) {
     const ms = new Date(end) - new Date(start)
@@ -865,6 +1324,7 @@ function selectRegion(region) {
 // 교육비 유무 선택
 function selectFeePresence(hasIt) {
   state.hasFee = hasIt
+  clearCard4Error('field-fee')
   state.fee = hasIt ? (state.fee || 0) : 0
 
   const btnYes = document.getElementById('feeBtn-yes')
@@ -932,7 +1392,7 @@ function select6NotPaidMethod(method) {
 
 function confirmCard6NotPaid() {
   state.receiptType = null
-  goToCard(8)
+  state.isOnline ? goToCard(9) : goToCard(8)
 }
 
 function resetCard6() {
@@ -967,11 +1427,11 @@ function select7PayMethod(method) {
   }
 }
 
-// 2단계: 최종 영수증 종류 확정 → card 8로
+// 2단계: 최종 영수증 종류 확정 → card 8 (또는 온라인이면 card 9)로
 function select7(val) {
   state.receiptType = val
   updateDocStrip()
-  setTimeout(() => goToCard(8), 150)
+  setTimeout(() => state.isOnline ? goToCard(9) : goToCard(8), 150)
 }
 
 // ── CARD 8: 추가 확인 준비 ───────────────────────────────────────────────────
@@ -998,8 +1458,9 @@ function prepareCard8() {
   const isDayTrip = (state.nights || 0) === 0
 
   // 8시간 이하 당일 출장이면 직급·서울12시·숙소·식사 질문 숨김
+  // 제주 출장이면 KTX를 타지 않으므로 직급(특실 여부) 질문 불필요
   // 당일 출장(nights=0)이면 숙소 질문도 숨김
-  document.getElementById('field-rank').classList.toggle('hidden', isShort)
+  document.getElementById('field-rank').classList.toggle('hidden', isShort || state.isJeju)
   document.getElementById('field-daytrip').classList.toggle('hidden', isShort || !state.isSeoul)
   document.getElementById('field-lodging').classList.toggle('hidden', isShort || isDayTrip)
   const showMeal = !isShort && (state.nights || 0) >= 2
@@ -1038,7 +1499,7 @@ function setYN(field, val) {
   if (field === 'isShortDayTrip') {
     const isShort   = val === true
     const isDayTrip = (state.nights || 0) === 0
-    document.getElementById('field-rank').classList.toggle('hidden', isShort)
+    document.getElementById('field-rank').classList.toggle('hidden', isShort || state.isJeju)
     document.getElementById('field-daytrip').classList.toggle('hidden', isShort || !state.isSeoul)
     document.getElementById('field-lodging').classList.toggle('hidden', isShort || isDayTrip)
     const showMeal = !isShort && (state.nights || 0) >= 2
@@ -1311,6 +1772,17 @@ function renderTripFormPreview() {
       ${state.hasShuttle === true ? `<tr>
         <td class="tf-td tf-td-post">공항 셔틀버스&nbsp;&nbsp;사후정산 <span class="tf-post-badge">법인카드 결제 후 매출전표 제출</span></td>
       </tr>` : ''}`
+  } else if (state.fareOverride !== null) {
+    fareTotal = state.fareOverride
+    const half = fareTotal / 2
+    fareRows = `
+      <tr>
+        <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
+        <td class="tf-td">왕복 교통비 (수동 입력)&nbsp;&nbsp;@ ${half.toLocaleString()} × 2회 × 1명 = ₩ ${fareTotal.toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td class="tf-td" style="color:#8b95a1;font-size:12px">수정 패널에서 직접 입력한 금액</td>
+      </tr>`
   } else {
     const fare = getFare(state.region || state.place)
     if (fare) {
@@ -1358,7 +1830,8 @@ function renderTripFormPreview() {
     // 숙박비 (제주 포함 동일 기준)
     if (state.lodgingProvided) totalAmt += seoulBonus * LODGING_RATE
     else totalAmt += baseNights * LODGING_RATE
-    totalAmt += fareTotal
+    // 교통비: fareOverride 있으면 우선
+    totalAmt += (state.fareOverride !== null && !isJeju) ? state.fareOverride : fareTotal
     if (state.fee > 0 && (state.feeStatus === 'paid' || state.feeStatus === 'not-paid')) {
       totalAmt += state.fee
     }
@@ -1400,9 +1873,61 @@ function renderTripFormPreview() {
     ? tokgiItems.map(t => `• ${t}`).join('<br>')
     : '—'
 
+  // ── 수정 패널 ──
+  const editPanel = state.formEditMode ? `
+    <div class="tf-edit-panel">
+      <div class="tf-edit-title">✏️ 항목 수정</div>
+      <div class="tf-edit-grid">
+        <div class="tf-edit-field">
+          <label class="tf-edit-label">일수</label>
+          <div class="tf-edit-input-wrap">
+            <input class="tf-edit-input" type="number" min="1" max="30" id="edit-days"
+              value="${state.days || 1}" oninput="onTripFormEdit()" />
+            <span class="tf-edit-unit">일</span>
+          </div>
+        </div>
+        <div class="tf-edit-field">
+          <label class="tf-edit-label">숙박</label>
+          <div class="tf-edit-input-wrap">
+            <input class="tf-edit-input" type="number" min="0" max="30" id="edit-nights"
+              value="${state.nights || 0}" oninput="onTripFormEdit()" />
+            <span class="tf-edit-unit">박</span>
+          </div>
+        </div>
+        <div class="tf-edit-field">
+          <label class="tf-edit-label">교통비 (왕복)</label>
+          <div class="tf-edit-input-wrap">
+            <input class="tf-edit-input" type="number" min="0" step="100" id="edit-fare"
+              value="${state.fareOverride !== null ? state.fareOverride : (fareTotal || '')}"
+              placeholder="자동"
+              oninput="onTripFormEdit()" />
+            <span class="tf-edit-unit">원</span>
+          </div>
+        </div>
+        <div class="tf-edit-field">
+          <label class="tf-edit-label">등록비</label>
+          <div class="tf-edit-input-wrap">
+            <input class="tf-edit-input" type="number" min="0" step="1000" id="edit-fee"
+              value="${state.fee || ''}"
+              placeholder="없음"
+              oninput="onTripFormEdit()" />
+            <span class="tf-edit-unit">원</span>
+          </div>
+        </div>
+      </div>
+      <button class="tf-edit-reset" onclick="resetTripFormEdit()">자동 계산으로 되돌리기</button>
+    </div>` : ''
+
   el.innerHTML = `
-    <div class="trip-form-section-label">📋 출장신청서 작성 참고</div>
+    <div class="trip-form-section-label">
+      📋 출장신청서 작성 참고
+      <button class="tf-edit-toggle ${state.formEditMode ? 'active' : ''}" onclick="toggleFormEdit()">
+        ${state.formEditMode ? '✔ 수정 완료' : '✏ 수정'}
+      </button>
+    </div>
     <p class="trip-form-section-note">S-Portal 전자결재 작성 시 아래 내용을 참고하세요 · 성명·결재선은 직접 입력</p>
+
+    ${editPanel}
 
     <div class="tf-box">
       <div class="tf-title">출 장 신 청 서</div>
@@ -1450,6 +1975,58 @@ function renderTripFormPreview() {
     </div>`
 }
 
+// ── 출장신청서 수정 패널 토글 ──────────────────────────────────────────────────
+function toggleFormEdit() {
+  state.formEditMode = !state.formEditMode
+  renderTripFormPreview()
+}
+
+// ── 수정 패널 값 변경 → state 업데이트 → 재계산 ──────────────────────────────
+function onTripFormEdit() {
+  const daysEl  = document.getElementById('edit-days')
+  const nightsEl = document.getElementById('edit-nights')
+  const fareEl  = document.getElementById('edit-fare')
+  const feeEl   = document.getElementById('edit-fee')
+
+  if (daysEl)   state.days   = Math.max(1, parseInt(daysEl.value)  || 1)
+  if (nightsEl) state.nights = Math.max(0, parseInt(nightsEl.value) || 0)
+
+  if (fareEl) {
+    const v = fareEl.value.trim()
+    state.fareOverride = v === '' ? null : Math.max(0, parseInt(v) || 0)
+  }
+  if (feeEl) {
+    const v = feeEl.value.trim()
+    state.fee = v === '' ? 0 : Math.max(0, parseInt(v) || 0)
+  }
+
+  // 재계산 — innerHTML 재생성 (편집 중 focus 유지를 위해 active element id 기억)
+  const focusId = document.activeElement?.id
+  renderTripFormPreview()
+  if (focusId) {
+    const el = document.getElementById(focusId)
+    if (el) {
+      el.focus()
+      // 커서를 끝으로 이동
+      const len = el.value?.length || 0
+      el.setSelectionRange(len, len)
+    }
+  }
+}
+
+// ── 자동 계산으로 리셋 ─────────────────────────────────────────────────────────
+function resetTripFormEdit() {
+  // fareOverride 해제, days/nights/fee는 parsedMeta 또는 원래 상태로 복원
+  state.fareOverride = null
+  // days, nights는 공문 파싱 결과로 복원
+  if (state.parsedMeta) {
+    if (state.parsedMeta.days)   state.days   = state.parsedMeta.days
+    if (state.parsedMeta.nights !== undefined) state.nights = state.parsedMeta.nights
+    if (state.parsedMeta.registration) state.fee = state.parsedMeta.registration
+  }
+  renderTripFormPreview()
+}
+
 // ── CARD 10: 출장신청서 미리보기 ─────────────────────────────────────────────
 function prepareCard10() {
   const deptEl = document.getElementById('input-dept')
@@ -1471,7 +2048,7 @@ const RECEIPT_LABELS = {
   'card-receipt': '신용카드 매출전표',
   'tax-invoice':  '세금계산서',
   'cash-receipt': '현금영수증',
-  'transfer':     '계좌이체내역서 + 학회 수료·이수증',
+  'transfer':     '송금증(계좌이체내역서) + 이수증',
 }
 
 function prepareCard11() {
@@ -1488,11 +2065,11 @@ function prepareCard11() {
   if (state.feeStatus === 'paid' && state.receiptType) {
     const rLabel = RECEIPT_LABELS[state.receiptType] || '영수증'
     const rDesc  = state.receiptType === 'transfer'
-      ? '계좌이체내역서·카드영수증·세금계산서·이수증 등 — 세법상 비용으로 인정받기 위한 적격증빙 수취 여부 확인'
-      : '계좌이체내역서·카드영수증·세금계산서·이수증 등 — 세법상 비용으로 인정받기 위한 적격증빙 수취 여부 확인'
+      ? '송금증(계좌이체내역서)·이수증 등 대체 증빙 — 세법상 비용 인정을 위한 적격증빙 수취 여부 확인'
+      : '카드 매출전표·세금계산서·현금영수증 등 — 세법상 비용으로 인정받기 위한 적격증빙 수취 여부 확인'
     items.push({ icon: '🧾', title: rLabel, desc: rDesc })
   } else if (state.feeStatus === 'not-paid') {
-    items.push({ icon: '🧾', title: '교육비 / 등록비 영수증', desc: '계좌이체내역서·카드영수증·세금계산서·이수증 등 — 세법상 비용으로 인정받기 위한 적격증빙 수취 여부 확인', pending: true })
+    items.push({ icon: '🧾', title: '교육비 / 등록비 영수증', desc: '카드 매출전표·세금계산서·현금영수증·송금증(계좌이체내역서) 등 — 적격증빙 수취 여부 확인', pending: true })
   }
 
   if (state.isJeju) {
@@ -1539,7 +2116,7 @@ const RECEIPT_CHIP_LABELS = {
   'card-receipt': '💳 신용카드전표',
   'tax-invoice':  '🧾 세금계산서',
   'cash-receipt': '🏧 현금영수증',
-  'transfer':     '🏦 계좌이체+이수증',
+  'transfer':     '🏦 송금증(계좌이체)+이수증',
 }
 
 function updateDocStrip() {
@@ -1662,6 +2239,104 @@ function restartFlow() {
   card1.classList.add('active')
   card1.style.transform = ''
   updateProgress()
+}
+
+// ── 자동 테스트 (콘솔에서 runTests() 호출) ────────────────────────────────────
+const TEST_DOCS = [
+  { label: '학술사업 공문 (88,000원 / 서울 / 2025-12-11)',  url: '/test-docs/학술사업_공문.pdf' },
+  { label: '삼일아카데미 (510,000원 / 08.08~09)',           url: '/test-docs/삼일아카데미_교육.pdf' },
+  { label: '세무조정 공문 (등록비 없음 / 서울 / 5.15~16)',  url: '/test-docs/세무조정_공문.pdf' },
+]
+
+async function runTests() {
+  console.clear()
+  console.log('%c🧪 공문 파싱 자동 테스트', 'font-size:16px;font-weight:bold;color:#3182f6')
+  console.log('─'.repeat(60))
+
+  // 기존 테스트 오버레이 제거
+  document.getElementById('testOverlay')?.remove()
+
+  // 결과 오버레이 생성
+  const overlay = document.createElement('div')
+  overlay.id = 'testOverlay'
+  overlay.style.cssText = `
+    position:fixed; top:16px; right:16px; z-index:9999;
+    background:#fff; border:1.5px solid #e0e9f4; border-radius:16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.12); padding:20px 24px;
+    min-width:360px; max-width:480px; font-family:inherit;
+  `
+  overlay.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <strong style="font-size:14px;color:#191f28">🧪 공문 파싱 테스트</strong>
+      <button onclick="document.getElementById('testOverlay').remove()"
+        style="border:none;background:none;font-size:18px;cursor:pointer;color:#8b95a1;padding:0">×</button>
+    </div>
+    <div id="testResults"></div>
+  `
+  document.body.appendChild(overlay)
+  const resultsEl = document.getElementById('testResults')
+
+  const addRow = (label, status, details) => {
+    const icon = status === 'ok' ? '✅' : status === 'warn' ? '⚠️' : '❌'
+    const row = document.createElement('div')
+    row.style.cssText = 'padding:10px 0;border-bottom:1px solid #f2f4f6;font-size:13px'
+    row.innerHTML = `
+      <div style="font-weight:600;color:#191f28;margin-bottom:4px">${icon} ${escapeHtml(label)}</div>
+      <div style="color:#6b7684;line-height:1.6">${details}</div>
+    `
+    resultsEl.appendChild(row)
+  }
+
+  for (const doc of TEST_DOCS) {
+    const loadingRow = document.createElement('div')
+    loadingRow.style.cssText = 'padding:10px 0;border-bottom:1px solid #f2f4f6;font-size:13px;color:#8b95a1'
+    loadingRow.textContent = `⏳ ${doc.label} 처리 중...`
+    resultsEl.appendChild(loadingRow)
+
+    try {
+      // PDF fetch
+      const resp = await fetch(doc.url)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const ab = await resp.arrayBuffer()
+      const file = new File([ab], doc.url.split('/').pop(), { type: 'application/pdf' })
+
+      // 텍스트 추출
+      let text = ''
+      try { text = await extractPdfText(file) } catch(e) { console.warn(e) }
+      if (text.replace(/\s/g,'').length < 50) {
+        try { text = await ocrPdfPages(file) } catch(e) {}
+      }
+
+      // 파싱
+      const meta = parseDocMeta(file.name, text)
+      console.log(`[${doc.label}]`, meta)
+
+      // 결과 표시
+      const checks = []
+      if (meta.title)        checks.push(`📋 제목: ${meta.title.slice(0,30)}`)
+      if (meta.periodDisplay) checks.push(`📅 기간: ${meta.periodDisplay}`)
+      if (meta.destination)   checks.push(`📍 지역: ${meta.destination}`)
+      if (meta.registration)  checks.push(`💳 등록비: ${meta.registration.toLocaleString()}원`)
+      if (!meta.registration) checks.push(`💳 등록비: 없음`)
+
+      const status = (meta.title || meta.periodDisplay) ? 'ok' : 'warn'
+      loadingRow.remove()
+      addRow(doc.label, status, checks.join('<br>'))
+
+    } catch(e) {
+      loadingRow.remove()
+      addRow(doc.label, 'error', `오류: ${e.message}`)
+      console.error(doc.label, e)
+    }
+  }
+
+  // 완료 메시지
+  const done = document.createElement('div')
+  done.style.cssText = 'padding-top:12px;font-size:12px;color:#8b95a1;text-align:center'
+  done.textContent = '콘솔(F12)에서 상세 결과 확인 가능'
+  resultsEl.appendChild(done)
+
+  console.log('%c✅ 테스트 완료', 'font-weight:bold;color:#00a661')
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

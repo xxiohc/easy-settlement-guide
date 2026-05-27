@@ -1,5 +1,14 @@
-.DS_Store
+# 개발 서버
 node_modules/
-.claude/
+.DS_Store
+
+# 구버전 파일 (루트 레벨)
 /app.js
 /styles.css
+
+# 테스트 자료 (민감 문서)
+test-docs/
+
+# 에디터
+.vscode/
+*.swp

@@ -210,11 +210,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 /* ── 단계 인디케이터 트레일 ── */
 .step-trail {
   display: flex;
-  align-items: flex-start;
+  align-items: center;   /* 모든 dot을 수평 중심선에 정렬 */
   gap: 4px;
-  padding: 56px 20px 0;
-  width: 100%;           /* 카드 전체 너비 사용 */
-  max-width: 100%;       /* max-width 제한 없음 */
+  padding: 50px 20px 6px; /* trail-item에 6px padding 추가됨 → 상하 각 6px 감소 */
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
   position: relative;
@@ -227,12 +227,12 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 0;
   cursor: pointer;
   flex-shrink: 0;
   border: none;
   background: none;
-  padding: 0;
+  padding: 6px 0;   /* dot이 content 에지에서 6px 떨어지게 → ::after(-4px) 클리핑 방지 */
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -240,7 +240,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .trail-connector {
   flex: 1;
   height: 2px;
-  margin-top: 12px; /* 아이콘 중심 맞춤 */
+  margin-top: 0;    /* flex center 정렬 — margin-top 제거 */
   border-radius: 1px;
   background: var(--line);
   min-width: 12px;
@@ -297,28 +297,24 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   z-index: -1;
 }
 
-/* 라벨 */
-.trail-label {
-  font-size: 10px;
-  font-weight: 500;
+/* 현재 단계 텍스트 — trail 바깥 형제 요소 (overflow clipping 없음) */
+.trail-current-info {
+  padding: 4px 20px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
   letter-spacing: -0.02em;
   white-space: nowrap;
-  transition: color 0.2s;
-  line-height: 1;
-}
-
-.trail-item.future .trail-label { color: #c9cdd2; }
-.trail-item.done .trail-label   { color: #3182f6; }
-.trail-item.current .trail-label {
-  color: #1b64da;
-  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 20px;  /* 텍스트 없을 때도 레이아웃 안정 */
 }
 
 /* 현재 단계 배경 하이라이트 */
 .step-trail::before {
   content: '';
   position: absolute;
-  inset: 46px 0 -8px;
+  inset: 0;
   background: linear-gradient(180deg, rgba(49,130,246,0.04) 0%, transparent 100%);
   pointer-events: none;
   border-radius: 12px;
@@ -333,30 +329,19 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   .header-title { font-size: 13px; }
   .header-copy  { display: none; }
 
-  /* 트레일: 라벨 숨기고 점만 표시 */
+  /* 트레일: 점만 표시 */
   .step-trail {
-    padding-top: 14px;
-    padding-left: 16px;
-    padding-right: 16px;
+    padding: 8px 16px 4px;  /* trail-item에 6px padding 추가됨 */
     gap: 3px;
-    align-items: center;  /* 라벨 없으니 center 정렬 */
+    align-items: center;
   }
-  .trail-label { display: none; }           /* 레이블 숨김 */
   .trail-dot   { width: 22px; height: 22px; font-size: 10px; }
   .trail-connector { min-width: 8px; margin-top: 0; }
 
-  /* 현재 단계 텍스트 — 트레일 내 첫 flex item으로 삽입 */
-  .trail-step-text {
-    display: inline-flex;        /* flex item으로 동작 */
-    align-items: center;
-    flex-shrink: 0;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--primary);
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-    margin-right: 8px;
-    padding-bottom: 10px;        /* 점들과 수직 중심 맞춤 */
+  /* 모바일: trail-current-info 패딩 조정 */
+  .trail-current-info {
+    padding: 2px 16px 8px;
+    font-size: 10.5px;
   }
 }
 
@@ -380,12 +365,21 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   /* PC: card-icon 숨김 — 높이 확보 */
   .card-icon { display: none; }
 
-  /* PC: step-trail도 넓게 */
+  /* PC: step-trail 넓게 */
   .step-trail {
-    padding: 20px 48px 0;
+    padding: 14px 48px 6px;  /* trail-item 6px padding 포함 */
     max-width: 860px;
     margin: 0 auto;
     width: 100%;
+  }
+
+  /* PC: trail-current-info 넓게 */
+  .trail-current-info {
+    padding: 4px 48px 12px;
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+    font-size: 12px;
   }
 
   /* PC: Card 4 장소/지역 2열 배치 */
@@ -600,24 +594,20 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   gap: 16px;
 }
 
-.parse-progress-ring {
+.parse-ring-container {
   position: relative;
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  background: conic-gradient(from -90deg, #3182f6 0%, #3182f6 0%, #e8edf2 0%);
-  transition: background 0.25s ease;
-  /* 토스 스타일 그림자 */
-  box-shadow: 0 8px 32px rgba(49, 130, 246, 0.18);
+  width: 160px;
+  height: 160px;
 }
 
-/* 안쪽 흰 원 */
-.parse-progress-ring::before {
-  content: '';
-  position: absolute;
-  top: 14px; left: 14px; right: 14px; bottom: 14px;
-  background: #fff;
-  border-radius: 50%;
+.parse-ring-svg {
+  width: 160px;
+  height: 160px;
+  display: block;
+}
+
+#ringProgress {
+  transition: stroke-dashoffset 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .parse-progress-inner {
@@ -627,12 +617,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 1;
-  gap: 3px;
+  gap: 4px;
 }
 
 .parse-progress-pct {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
   color: #3182f6;
   letter-spacing: -0.04em;
@@ -640,10 +629,9 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 
 .parse-progress-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: #8b95a1;
-  letter-spacing: 0;
   line-height: 1;
 }
 
@@ -716,11 +704,16 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 /* ── 카드 하단 CTA ── */
 .card-footer {
-  padding: 16px 24px 32px;
+  padding: 12px 24px 32px;
   background: #fff;
   max-width: 560px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* 에러 배너와 footer 사이 간격 */
+.c4-err-banner + .card-footer {
+  padding-top: 10px;
 }
 
 /* PC: footer max-width card-body에 맞추고 여백 압축 */
@@ -837,6 +830,68 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   border-color: var(--primary) !important;
   color: var(--ink) !important;
 }
+
+/* ── Card 4 유효성 검사 에러 스타일 ── */
+.input-error {
+  border-color: #ef4444 !important;
+  background: #fff5f5 !important;
+  animation: errorPulse 0.3s ease;
+}
+.date-input-box.input-error {
+  border: 1.5px solid #ef4444 !important;
+  background: #fff5f5 !important;
+}
+.field-error .fee-toggle-group {
+  border: 1.5px solid #ef4444;
+  border-radius: 12px;
+  padding: 4px;
+  background: #fff5f5;
+}
+
+@keyframes errorPulse {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-4px); }
+  75%  { transform: translateX(4px); }
+  100% { transform: translateX(0); }
+}
+
+/* 에러 배너 */
+.c4-err-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 24px 0;
+  padding: 12px 16px;
+  background: #fff1f2;
+  border: 1.5px solid #fecdd3;
+  border-radius: 12px;
+}
+.c4-err-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.c4-err-body { flex: 1; }
+.c4-err-body strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #991b1b;
+  margin-bottom: 4px;
+}
+.c4-err-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  color: #dc2626;
+  line-height: 1.7;
+}
+
+/* CTA 버튼 흔들기 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+.shake { animation: shake 0.5s ease; }
 
 /* 기간 행 */
 .period-input-row {
@@ -1360,7 +1415,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   background: var(--primary-soft);
 }
 
-.fee-toggle-btn.selected-yes {
+.fee-toggle-btn.selected-yes,
+.fee-toggle-btn.selected {
   background: linear-gradient(135deg, #3182f6 0%, #6ea8fe 100%);
   border-color: transparent;
   color: #fff;
@@ -1458,10 +1514,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   box-sizing: border-box;
 }
 
-.trail-item.upcoming .trail-label {
-  color: #3182f6;
-  font-weight: 600;
-}
 
 .trail-connector.upcoming {
   background: linear-gradient(90deg, #dbeeff 0%, #bfdbfe 100%);
@@ -1667,13 +1719,20 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 .confirm-fee-q {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 12px;
   padding: 16px;
   background: #fffbea;
   border: 1.5px solid #fde68a;
   border-radius: 14px;
   margin-bottom: 16px;
+}
+
+/* 아이콘 + 텍스트 가로 행 */
+.fee-q-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .fee-q-icon {
@@ -1694,6 +1753,37 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   font-size: 13px;
   color: #b45309;
 }
+
+/* 예/아니요 버튼 행 */
+.fee-confirm-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.fee-confirm-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: 1.5px solid;
+  transition: background 0.15s, transform 0.1s;
+}
+.fee-confirm-btn:active { transform: scale(0.97); }
+
+.fee-confirm-yes {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+.fee-confirm-yes:hover { background: #fde68a; }
+
+.fee-confirm-no {
+  background: #f5f6f8;
+  color: #6b7684;
+  border-color: #e0e4ea;
+}
+.fee-confirm-no:hover { background: #edf0f3; }
 
 .info-fields-wrap {
   display: flex;
@@ -2460,11 +2550,100 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 /* ── 출장신청서 미리보기 (Card 10) ── */
 .trip-form-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 13px;
   font-weight: 700;
   color: var(--ink);
   margin-bottom: 4px;
 }
+
+/* 수정 토글 버튼 */
+.tf-edit-toggle {
+  margin-left: auto;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #d1d5db;
+  background: #f5f6f8;
+  color: #4e5968;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.tf-edit-toggle:hover { background: #e8edf5; border-color: #b0b8c4; }
+.tf-edit-toggle.active { background: #dbeeff; color: #1b64da; border-color: #93c5fd; }
+
+/* 수정 패널 */
+.tf-edit-panel {
+  background: #f0f6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 14px 16px 12px;
+  margin-bottom: 12px;
+}
+.tf-edit-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1d4ed8;
+  margin-bottom: 10px;
+}
+.tf-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tf-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tf-edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4e5968;
+}
+.tf-edit-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1.5px solid #93c5fd;
+  border-radius: 8px;
+  padding: 0 8px;
+}
+.tf-edit-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 6px 0;
+  background: transparent;
+  min-width: 0;
+  -moz-appearance: textfield;
+}
+.tf-edit-input::-webkit-outer-spin-button,
+.tf-edit-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.tf-edit-unit {
+  font-size: 11.5px;
+  color: #6b7684;
+  white-space: nowrap;
+}
+.tf-edit-reset {
+  font-size: 11.5px;
+  color: #6b7684;
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.tf-edit-reset:hover { background: #f5f6f8; }
 
 .trip-form-section-note {
   font-size: 11.5px;
