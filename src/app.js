@@ -333,9 +333,12 @@ function renderTrails() {
   // 현재 단계 정보 텍스트
   const currentIdx = visibleSteps.findIndex(s => s.card === state.currentCard)
   const currentLabel = currentIdx >= 0 ? visibleSteps[currentIdx].label : ''
+  // 모바일: "3 / 9단계  정보 확인" (텍스트만)
+  // 데스크톱: "3 / 9단계 · 정보 확인"
   const stepText = currentIdx >= 0
     ? `${currentIdx + 1} / ${visibleSteps.length}단계 · ${currentLabel}`
     : ''
+  const isMobile = window.innerWidth <= 480
 
   STEPS.forEach(({ card }) => {
     if (card === 11) return  // 완료 화면은 trail 없음
@@ -381,7 +384,13 @@ function renderTrails() {
       infoEl.className = 'trail-current-info'
       trailEl.after(infoEl)
     }
-    infoEl.textContent = stepText
+    // 모바일: 배지 형태 HTML, 데스크톱: 텍스트
+    if (isMobile && stepText) {
+      const [stepNum, labelPart] = stepText.split(' · ')
+      infoEl.innerHTML = `<span class="trail-mob-badge">${stepNum}</span><span class="trail-mob-label">${labelPart || ''}</span>`
+    } else {
+      infoEl.textContent = stepText
+    }
 
     // 현재 단계 점을 trail 수평 스크롤 내에서 center로 위치
     const currentDot = trailEl.querySelector('.trail-item.current')

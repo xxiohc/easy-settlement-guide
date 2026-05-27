@@ -329,19 +329,54 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   .header-title { font-size: 13px; }
   .header-copy  { display: none; }
 
-  /* 트레일: 점만 표시 */
+  /* 모바일: 도트 트레일 숨김 — 너무 cramped하고 백버튼과 충돌 */
   .step-trail {
-    padding: 8px 16px 4px;  /* trail-item에 6px padding 추가됨 */
-    gap: 3px;
-    align-items: center;
+    display: none;
   }
-  .trail-dot   { width: 22px; height: 22px; font-size: 10px; }
-  .trail-connector { min-width: 8px; margin-top: 0; }
 
-  /* 모바일: trail-current-info 패딩 조정 */
+  /* 모바일: trail-current-info → 백버튼 포함 한 줄 내비 바 */
   .trail-current-info {
-    padding: 2px 16px 8px;
-    font-size: 10.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 16px 0 56px;   /* 왼쪽 56px: 백버튼(40px) + 여백 */
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    border-bottom: 1px solid #f2f4f6;
+    background: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 모바일 백버튼: trail-current-info와 같은 높이 줄에 절대 위치 */
+  .back-btn {
+    top: 4px;   /* trail-current-info 높이 48px의 중앙 = (48-40)/2 = 4px */
+    left: 8px;
+  }
+
+  /* 모바일 내비 배지 */
+  .trail-mob-badge {
+    flex-shrink: 0;
+    background: var(--primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .trail-mob-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
