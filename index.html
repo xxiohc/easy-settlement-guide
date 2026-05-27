@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>교육·출장 정산 가이드</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="header-brand" onclick="restartFlow()" title="처음으로">
+          <img src="./smc-logo.png" alt="SMC 로고" class="header-logo" />
+          <div class="header-text">
+            <span class="header-sub">Samsung Medical Center · 재무관리파트</span>
+            <div class="header-title-row">
+              <span class="header-title">교육·출장 정산 가이드</span>
+              <span class="header-copy">© jiseokchoi</span>
+            </div>
+          </div>
+        </div>
+        <div class="header-right">
+          <span class="header-progress-text" id="headerProgressText"></span>
+        </div>
+      </div>
+    </header>
+
+    <main class="flow-stage">
+      <div class="flow-progress-bar">
+        <div class="flow-progress-fill" id="progressFill"></div>
+      </div>
+
+      <div class="card-viewport" id="cardViewport">
+
+        <!-- ══════════════════════════════════════
+             CARD 1: 출장 여부
+        ══════════════════════════════════════ -->
+        <section class="flow-card active" id="card-1" data-step="1">
+          <button class="back-btn hidden" aria-label="뒤로"></button>
+          <div class="step-trail" id="trail-1"></div>
+
+          <div class="card-body">
+            <div class="card-icon">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect width="56" height="56" rx="18" fill="#EEF6FF"/>
+                <path d="M18 36V22a2 2 0 012-2h16a2 2 0 012 2v14" stroke="#3182f6" stroke-width="2" stroke-linecap="round"/>
+                <path d="M14 36h28" stroke="#3182f6" stroke-width="2" stroke-linecap="round"/>
+                <rect x="24" y="26" width="8" height="10" rx="1" stroke="#3182f6" stroke-width="1.5"/>
+              </svg>
+            </div>
+            <h1 class="card-question">어떤 교육인가요?</h1>
+            <p class="card-desc">정산 또는 출장 준비에 필요한 것을 안내해드릴게요</p>
+            <div class="choice-list">
+              <button class="choice-btn" data-choice="done" onclick="select1('done')">
+                <span class="choice-icon">✅</span>
+                <div><strong>출장 교육 — 다녀왔어요</strong><span>정산 서류를 준비할게요</span></div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button class="choice-btn" data-choice="planned" onclick="select1('planned')">
+                <span class="choice-icon">📅</span>
+                <div><strong>출장 교육 — 갈 예정이에요</strong><span>출장 준비에 필요한 것을 알려드릴게요</span></div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button class="choice-btn" data-choice="online" onclick="select1('online')">
+                <span class="choice-icon">💻</span>
+                <div><strong>온라인 교육이에요</strong><span>숙박·일당 없이 교육비만 처리해요</span></div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 2: 공문 여부
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-2" data-step="2">
+          <button class="back-btn" onclick="goBack(2)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-2"></div>
+
+          <div class="card-body">
+            <div class="card-icon">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect width="56" height="56" rx="18" fill="#EEF6FF"/>
+                <rect x="16" y="14" width="24" height="30" rx="3" stroke="#3182f6" stroke-width="2"/>
+                <path d="M21 21h14M21 26h14M21 31h10" stroke="#3182f6" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h1 class="card-question" id="card2-q">출장 관련 공문이 있나요?</h1>
+            <p class="card-desc">공문(행사 안내문, 초청장 등)이 있으면 정보를 자동으로 불러올 수 있어요
+              <br><span class="card-tip">💡 PDF 파일이면 가장 정확하게 읽어요</span>
+            </p>
+            <div class="choice-list">
+              <button class="choice-btn" data-choice="has-doc" onclick="select2('yes')">
+                <span class="choice-icon">📄</span>
+                <div><strong>네, 있어요</strong><span>업로드하면 자동으로 분석해드려요</span></div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button class="choice-btn" data-choice="no-doc" onclick="select2('no')">
+                <span class="choice-icon">✏️</span>
+                <div><strong>없어요, 직접 입력할게요</strong><span>정보를 직접 입력하면 돼요</span></div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 3: 공문 업로드
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-3" data-step="3">
+          <button class="back-btn" onclick="goBack(3)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-3"></div>
+
+          <div class="card-body">
+            <div class="card-icon">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect width="56" height="56" rx="18" fill="#EEF6FF"/>
+                <path d="M28 36V22M22 28l6-6 6 6" stroke="#3182f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M19 38h18" stroke="#3182f6" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h1 class="card-question">공문을 업로드해주세요</h1>
+            <p class="card-desc">PDF를 올리면 출장 정보를 자동으로 불러올게요</p>
+
+            <div class="upload-zone" id="uploadZone"
+              onclick="document.getElementById('fileInput').click()"
+              ondragover="onDragOver(event)"
+              ondragleave="onDragLeave(event)"
+              ondrop="onDrop(event)">
+              <div class="upload-zone-inner" id="uploadZoneInner">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                  <path d="M10.7 21.3S6.7 21.3 6.7 17.3c0-3.6 2.7-5.3 5.3-5.3 0-4 3.2-6.7 6.7-6.7 3.5 0 6.7 2.7 6.7 6.7 2.7 0 4 1.8 4 4 0 2.2-2.1 4-5.3 4" stroke="#8b95a1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19.3 22.7L16 19.3l-3.3 3.4M16 19.3V28" stroke="#8b95a1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <p class="upload-label">클릭하거나 파일을 여기로 드래그하세요</p>
+                <p class="upload-hint">PDF, JPG, PNG 모두 가능 · 이미지는 자동 OCR 처리</p>
+              </div>
+              <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="handleFileUpload(event)"/>
+            </div>
+
+            <!-- 공문 없는 경우 바로 직접 입력으로 -->
+            <button class="no-doc-skip-btn" onclick="skipToDirectInput()">
+              공문이 없나요? → 직접 입력하기
+            </button>
+
+            <div class="parse-loading hidden" id="parseLoading">
+              <div class="parse-progress-wrap">
+                <div class="parse-progress-ring" id="parseProgressRing">
+                  <div class="parse-progress-inner">
+                    <span class="parse-progress-pct" id="parseProgressPct">0%</span>
+                    <span class="parse-progress-label" id="parseProgressLabel">분석 중</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="parse-result hidden" id="parseResult">
+              <div class="result-header">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#00a661" stroke-width="1.3"/><path d="M5 8l2.5 2.5 4-4.5" stroke="#00a661" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>공문에서 불러온 정보</span>
+                <button class="result-edit-btn" onclick="clearUpload()">다시 선택</button>
+              </div>
+              <div class="result-grid" id="resultGrid"></div>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <button class="cta-btn disabled" id="ctaNext3" onclick="goFromCard3()" disabled>다음으로</button>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 4: 출장 정보 확인
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-4" data-step="4">
+          <button class="back-btn" onclick="goBack(4)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-4"></div>
+
+          <div class="card-body">
+            <!-- 공문 자동인식 시: 확인 뷰 -->
+            <div id="c4-confirm-view">
+              <h1 class="card-question" id="c4-period-msg">출장 정보를 확인해주세요</h1>
+              <p class="card-desc" id="c4-place-msg">아래 내용이 맞는지 확인하고 수정할 수 있어요</p>
+
+              <div class="confirm-summary" id="c4-summary">
+                <!-- JS로 채워짐 -->
+              </div>
+
+              <!-- 교육비 확인 질문 -->
+              <div class="confirm-fee-q" id="c4-fee-q">
+                <div class="fee-q-icon">💡</div>
+                <div class="fee-q-text">
+                  <strong id="c4-fee-label">교육비 / 등록비가 있는 것 같아요</strong>
+                  <span id="c4-fee-sub">금액이 맞나요?</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 공문 없이 직접 입력 시: 폼 뷰 -->
+            <div id="c4-input-view" class="hidden">
+              <h1 class="card-question">출장 정보를 입력해주세요</h1>
+              <p class="card-desc">공문이나 일정표를 참고해서 작성해주세요</p>
+            </div>
+
+            <!-- 공통 입력 필드 -->
+            <div class="info-fields-wrap">
+
+              <!-- 출장 / 교육명 -->
+              <div class="info-field">
+                <label class="info-label" for="input-title">출장 / 교육명</label>
+                <input class="info-input" type="text" id="input-title" placeholder="예: 의료기관 교육담당자 역량강화 연수" />
+              </div>
+
+              <!-- 출장 기간 (넓은 날짜 입력) -->
+              <div class="info-field">
+                <label class="info-label">출장 기간</label>
+                <div class="date-range-wrap">
+                  <div class="date-input-box" onclick="openDatePicker('input-start')">
+                    <svg class="date-cal-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="#8b95a1" stroke-width="1.3"/>
+                      <path d="M1.5 6.5h13" stroke="#8b95a1" stroke-width="1.3"/>
+                      <path d="M5 1.5v2M11 1.5v2" stroke="#8b95a1" stroke-width="1.3" stroke-linecap="round"/>
+                      <rect x="4" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
+                      <rect x="7" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
+                      <rect x="10" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
+                    </svg>
+                    <span class="date-placeholder" id="start-placeholder">시작</span>
+                    <input class="date-native" type="date" id="input-start" onchange="onDateChange()" />
+                  </div>
+                  <span class="date-range-sep">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M9 4l3 3-3 3" stroke="#c9cdd2" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                  <div class="date-input-box" onclick="openDatePicker('input-end')">
+                    <svg class="date-cal-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="#8b95a1" stroke-width="1.3"/>
+                      <path d="M1.5 6.5h13" stroke="#8b95a1" stroke-width="1.3"/>
+                      <path d="M5 1.5v2M11 1.5v2" stroke="#8b95a1" stroke-width="1.3" stroke-linecap="round"/>
+                      <rect x="4" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
+                      <rect x="7" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
+                      <rect x="10" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
+                    </svg>
+                    <span class="date-placeholder" id="end-placeholder">종료</span>
+                    <input class="date-native" type="date" id="input-end" onchange="onDateChange()" />
+                  </div>
+                </div>
+                <div class="duration-tag hidden" id="duration-tag"></div>
+              </div>
+
+              <!-- 출장 장소 (구체적 장소 + 카카오 장소 검색) -->
+              <div class="info-field">
+                <label class="info-label" for="input-place">출장 장소</label>
+                <div class="place-input-wrap">
+                  <input class="info-input" type="text" id="input-place"
+                    placeholder="예: 신촌 세브란스병원"
+                    oninput="onPlaceInput()"
+                    autocomplete="off" />
+                  <div class="place-suggest hidden" id="placeSuggest"></div>
+                </div>
+                <p class="info-subhint">🔍 글자를 입력하면 장소 검색이 돼요</p>
+              </div>
+
+              <!-- 출장 지역 (도시·지역) -->
+              <div class="info-field">
+                <label class="info-label" for="input-region">출장 지역</label>
+                <div class="place-input-wrap">
+                  <input class="info-input" type="text" id="input-region"
+                    placeholder="예: 서울, 제주, 대전…"
+                    oninput="onRegionInput()" />
+                  <div class="place-suggest hidden" id="regionSuggest"></div>
+                </div>
+                <p class="info-hint hidden" id="jeju-hint">✈️ 제주 출장은 항공료·공항셔틀 영수증이 별도로 필요해요</p>
+              </div>
+
+              <!-- 교육비 / 등록비 유무 -->
+              <div class="info-field fee-field" id="field-fee">
+                <label class="info-label">교육 / 등록비</label>
+                <p class="fee-toggle-desc">교육비 또는 등록비가 있나요?</p>
+                <div class="fee-toggle-group">
+                  <button class="fee-toggle-btn" id="feeBtn-yes" onclick="selectFeePresence(true)">
+                    💳 있어요
+                  </button>
+                  <button class="fee-toggle-btn" id="feeBtn-no" onclick="selectFeePresence(false)">
+                    🆓 없어요
+                  </button>
+                </div>
+
+                <!-- 있어요 선택 시 금액 입력 + 기준 안내 -->
+                <div class="fee-amount-wrap hidden" id="feeAmountWrap">
+
+                  <!-- 금액 입력 -->
+                  <p class="fee-input-label">금액을 입력해주세요</p>
+                  <div class="fee-row">
+                    <input class="info-input fee-input" type="text" inputmode="numeric" id="input-fee"
+                      placeholder="0" oninput="formatFeeInput(this)" />
+                    <span class="fee-unit">원</span>
+                  </div>
+                  <p class="info-subhint">사전납입 · 회원병원 기준 금액으로 입력해주세요</p>
+
+                  <!-- 등록비 지원 기준 안내 -->
+                  <div class="inline-fee-rule">
+                    <div class="inline-fee-rule-title">
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#d97706" stroke-width="1.2"/><path d="M6.5 4v3.5M6.5 9.5v.3" stroke="#d97706" stroke-width="1.2" stroke-linecap="round"/></svg>
+                      아래 기준 금액만 비용처리 가능해요
+                    </div>
+                    <div class="inline-fee-rule-list">
+                      <div class="inline-fee-rule-item">
+                        <span class="inline-fee-rule-dot"></span>
+                        <div><strong>사전납입 기준</strong><span>행사 전 미리 납부 시 적용되는 할인 금액</span></div>
+                      </div>
+                      <div class="inline-fee-rule-item">
+                        <span class="inline-fee-rule-dot"></span>
+                        <div><strong>회원병원 기준</strong><span>병원 단체 회원으로 등록된 경우의 금액</span></div>
+                      </div>
+                    </div>
+                    <!-- 공문 인식 시 금액 비교 표 -->
+                    <div class="fee-compare hidden" id="feeCompare">
+                      <div class="fee-compare-header">공문에서 인식된 금액</div>
+                      <div class="fee-compare-body" id="feeCompareBody"></div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- 없어요 선택 시 안내 -->
+                <div class="fee-none-msg hidden" id="feeNoneMsg">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#00a661" stroke-width="1.2"/><path d="M4.5 7l2 2 3.5-3.5" stroke="#00a661" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  등록비 관련 영수증 제출이 필요 없어요
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <button class="cta-btn" id="ctaNext4" onclick="goFromCard4()">다음으로</button>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 5: 등록비 기준 안내
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-5" data-step="5">
+          <button class="back-btn" onclick="goBack(5)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-5"></div>
+
+          <div class="card-body">
+            <div class="card-icon">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect width="56" height="56" rx="18" fill="#FFF9EC"/>
+                <circle cx="28" cy="26" r="10" stroke="#f59e0b" stroke-width="2"/>
+                <path d="M28 22v5M28 30v1" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h1 class="card-question">등록비 처리 기준을<br>먼저 확인해주세요</h1>
+            <p class="card-desc">삼성서울병원은 아래 기준 금액만 비용처리 돼요</p>
+
+            <div class="notice-card">
+              <div class="notice-rule">
+                <div class="notice-rule-dot"></div>
+                <div>
+                  <strong>사전납입 기준</strong>
+                  <span>행사 전 미리 납부했을 때 적용되는 할인 금액</span>
+                </div>
+              </div>
+              <div class="notice-rule">
+                <div class="notice-rule-dot"></div>
+                <div>
+                  <strong>회원병원 기준</strong>
+                  <span>병원 단체 회원으로 등록된 경우의 할인 금액</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 공문 인식 시: 금액 비교 표 -->
+            <div class="fee-compare hidden" id="feeCompare">
+              <div class="fee-compare-header">공문에서 인식된 금액</div>
+              <div class="fee-compare-body" id="feeCompareBody">
+                <!-- JS로 채워짐 -->
+              </div>
+            </div>
+
+            <div class="notice-warn">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#d97706" stroke-width="1.2"/><path d="M7 4.5v3M7 9.5v.5" stroke="#d97706" stroke-width="1.2" stroke-linecap="round"/></svg>
+              <span>이 기준보다 높은 금액으로 납부하셨더라도, 비용처리는 위 기준 금액까지만 가능해요</span>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <button class="cta-btn" onclick="goToCard(6)">알겠어요, 다음으로</button>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 6: 등록비 납부 여부
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-6" data-step="6">
+          <button class="back-btn" onclick="goBack(6)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-6"></div>
+
+          <div class="card-body">
+            <div class="card-icon">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect width="56" height="56" rx="18" fill="#EEF6FF"/>
+                <rect x="14" y="20" width="28" height="18" rx="3" stroke="#3182f6" stroke-width="2"/>
+                <path d="M14 26h28" stroke="#3182f6" stroke-width="2"/>
+                <circle cx="21" cy="33" r="2" fill="#3182f6"/>
+              </svg>
+            </div>
+            <h1 class="card-question">교육비 / 등록비를<br>납부하셨나요?</h1>
+            <p class="card-desc">납부 여부에 따라 제출 서류가 달라져요</p>
+            <div class="choice-list">
+              <button class="choice-btn" data-choice="paid" onclick="select6('paid')">
+                <span class="choice-icon">💳</span>
+                <div><strong>네, 납부했어요</strong><span>영수증 종류를 확인할게요</span></div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button class="choice-btn" data-choice="not-paid" onclick="select6('not-paid')">
+                <span class="choice-icon">⏳</span>
+                <div><strong>아직 납부 전이에요</strong><span>현장 납부 예정이거나 아직 안했어요</span></div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <!-- 납부 예정 안내 패널 (아직 납부 전 선택 시) -->
+            <div class="c7-sub hidden" id="c6-not-paid-sub">
+              <p class="c7-sub-title">납부 예정 방식을 선택하세요</p>
+              <div class="choice-list">
+                <button class="choice-btn" id="c6-btn-card" onclick="select6NotPaidMethod('card')">
+                  <span class="choice-icon">💳</span>
+                  <div><strong>카드 결제 예정이에요</strong></div>
+                  <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <button class="choice-btn" id="c6-btn-bank" onclick="select6NotPaidMethod('bank')">
+                  <span class="choice-icon">🏦</span>
+                  <div><strong>계좌 이체 예정이에요</strong></div>
+                  <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+
+              <!-- 카드 결제 안내 -->
+              <div class="c7-sub hidden" id="c6-card-note">
+                <div class="c7-note-box">
+                  💳 반드시 <strong>법인카드</strong>로 결제하세요<br>
+                  <span style="font-size:13px;color:#6b7684;">결제 후 카드 매출전표(영수증)를 반드시 제출하세요</span>
+                </div>
+                <button class="cta-btn" onclick="confirmCard6NotPaid()">다음으로</button>
+              </div>
+
+              <!-- 계좌 이체 안내 -->
+              <div class="c7-sub hidden" id="c6-bank-note">
+                <div class="c7-note-box">
+                  <ul style="margin:0;padding-left:0;list-style:none;">
+                    <li style="margin-bottom:10px;">🧾 회사 사업자번호 <strong>608-82-14527</strong>로 <strong>현금영수증</strong>을 수취하세요</li>
+                    <li>📋 또는 <strong>세금계산서</strong>를 수취하세요<br>
+                      <span style="font-size:12px;color:#6b7684;">반드시 세금계산서 수취하는 이메일을 정확하게 작성하고, 확인하세요</span>
+                    </li>
+                  </ul>
+                </div>
+                <div class="c7-note-box" style="margin-top:8px;background:#f8f9fa;border:1px dashed #d1d5db;">
+                  <div style="font-size:12px;font-weight:600;color:#6b7684;margin-bottom:6px;">📎 위 두 가지 모두 어려울 경우 · 대체 증빙</div>
+                  <span style="color:#374151;font-size:13px;">송금증 및 학회 이수증, 수료증 등을 준비해주세요</span>
+                </div>
+                <button class="cta-btn" onclick="confirmCard6NotPaid()">다음으로</button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 7: 납부 형태 선택
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-7" data-step="7">
+          <button class="back-btn" onclick="goBack(7)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-7"></div>
+
+          <div class="card-body">
+            <div class="card-icon">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect width="56" height="56" rx="18" fill="#EEF6FF"/>
+                <rect x="14" y="18" width="28" height="20" rx="3" stroke="#3182f6" stroke-width="2"/>
+                <path d="M20 26h16M20 30h10" stroke="#3182f6" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h1 class="card-question">어떤 방식으로<br>납부하셨나요?</h1>
+            <p class="card-desc">납부 방식에 따라 제출 영수증이 달라져요</p>
+
+            <!-- 1단계: 카드 / 계좌이체 선택 -->
+            <div class="choice-list" id="c7MainChoices">
+              <button class="choice-btn" id="c7-btn-card" onclick="select7PayMethod('card')">
+                <span class="choice-icon">💳</span>
+                <div>
+                  <strong>카드 결제</strong>
+                </div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button class="choice-btn" id="c7-btn-bank" onclick="select7PayMethod('bank')">
+                <span class="choice-icon">🏦</span>
+                <div>
+                  <strong>계좌 이체</strong>
+                  <span>등록비를 계좌이체로 납부</span>
+                </div>
+                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <!-- 카드 결제 선택 시: 안내 + 다음 버튼 -->
+            <div class="c7-sub hidden" id="c7CardNote">
+              <div class="c7-note-box">
+                💳 법인카드로 결제하신 거죠?<br>
+                카드 매출전표(영수증)가 필요해요
+              </div>
+              <button class="cta-btn" onclick="select7('card-receipt')">다음으로</button>
+            </div>
+
+            <!-- 계좌 이체 선택 시: 증빙 종류 선택 -->
+            <div class="c7-sub hidden" id="c7BankOpts">
+              <p class="c7-sub-title">어떤 증빙을 받으셨나요?</p>
+              <div class="choice-list">
+                <button class="choice-btn" onclick="select7('cash-receipt')">
+                  <span class="choice-icon">🧾</span>
+                  <div>
+                    <strong>현금영수증 수취</strong>
+                    <span>사업자등록번호로 발급된 현금영수증</span>
+                  </div>
+                  <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <button class="choice-btn" onclick="select7('tax-invoice')">
+                  <span class="choice-icon">📋</span>
+                  <div>
+                    <strong>세금계산서 수취</strong>
+                    <span>전자 또는 종이 세금계산서</span>
+                  </div>
+                  <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <button class="choice-btn choice-btn-alt" onclick="select7('transfer')">
+                  <span class="choice-icon">📎</span>
+                  <div>
+                    <strong>위 2가지 모두 어려운 경우</strong>
+                    <span class="alt-tag">대체 증빙</span>
+                  </div>
+                  <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+
+              <!-- 참고사항 -->
+              <div class="c7-reference">
+                <div class="c7-reference-title">📌 참고사항</div>
+                <p class="c7-reference-body">
+                  영수증, 입금표, 송금증, 거래명세서 등을 통해 지급 사실을 입증하면 회계상 비용인정
+                </p>
+                <ul class="c7-reference-list">
+                  <li>비영리법인, 국가기관, 지방자치단체, 금융기관, 외국법인 등 일부 사업자에 대해서는 대통령령으로 정한 예외적 사업자로서 적격증빙 수취 의무에서 제외될 수 있음</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 8: 출장비 추가 확인
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-8" data-step="8">
+          <button class="back-btn" onclick="goBack(8)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-8"></div>
+
+          <div class="card-body">
+            <h1 class="card-question">출장비 계산을 위해<br>몇 가지만 더 물어볼게요</h1>
+            <p class="card-desc">조건에 따라 교통비·숙박비·일당이 달라져요</p>
+
+            <!-- 8시간 이하 당일 출장 예외 (항상 첫 번째 질문) -->
+            <div class="extra-field" id="field-shortdaytrip">
+              <div class="extra-question">
+                <strong>교육시간과 이동시간 합계가 8시간 이하인 당일 출장인가요?</strong>
+                <span>해당하면 일당은 없고, 식사비 1만원 이내만 법인카드로 지원돼요</span>
+              </div>
+              <div class="yn-group">
+                <button class="yn-btn" onclick="setYN('isShortDayTrip', true)">예, 8시간 이하예요</button>
+                <button class="yn-btn" onclick="setYN('isShortDayTrip', false)">아니요, 그 이상이에요</button>
+              </div>
+            </div>
+
+            <!-- 직급 (항상 표시) -->
+            <div class="extra-field" id="field-rank">
+              <div class="extra-question">
+                <strong>직급이 MS(책임) 이상이신가요?</strong>
+                <span>MS 이상이면 KTX 특실 요금이 적용돼요</span>
+              </div>
+              <div class="yn-group">
+                <button class="yn-btn" onclick="setYN('isMS', true)">예, MS 이상이에요</button>
+                <button class="yn-btn" onclick="setYN('isMS', false)">아니요, 그 미만이에요</button>
+              </div>
+            </div>
+
+            <!-- 서울 출장: 12시 이전 시작 여부 (비서울 출장은 숨김) -->
+            <div class="extra-field hidden" id="field-daytrip">
+              <div class="extra-question">
+                <strong>서울이 출장지역이고 출장관련 시작시간이 12시 이전인가요?</strong>
+                <span>해당 시 전날 출발이 필요하여 일당과 숙박비가 추가돼요</span>
+              </div>
+              <div class="yn-group">
+                <button class="yn-btn" onclick="setYN('before12', true)">네, 12시 이전이에요</button>
+                <button class="yn-btn" onclick="setYN('before12', false)">아니요, 12시 이후예요</button>
+              </div>
+              <!-- before12 안내는 Card 9 예상금액 화면에서 표시 -->
+            </div>
+
+            <!-- field-before12: field-daytrip으로 통합됨 — 항상 숨김 -->
+            <div class="extra-field hidden" id="field-before12"></div>
+
+            <!-- 숙소 제공 여부 (숙박할 때) -->
+            <div class="extra-field hidden" id="field-lodging">
+              <div class="extra-question">
+                <strong>숙소가 별도로 제공되나요?</strong>
+                <span>학회나 행사 측에서 숙소를 제공하면 숙박비 지급이 없어요</span>
+              </div>
+              <div class="yn-group">
+                <button class="yn-btn" onclick="setYN('lodgingProvided', true)">예, 제공돼요</button>
+                <button class="yn-btn" onclick="setYN('lodgingProvided', false)">아니요, 직접 잡아요</button>
+              </div>
+            </div>
+
+            <!-- 식사 지원 여부 (2박3일 이상) -->
+            <div class="extra-field hidden" id="field-meal">
+              <div class="extra-question">
+                <strong>식사가 제공되나요?</strong>
+                <span>학회에서 식사를 제공하면 중간날 일당은 25%(8,750원)만 지급돼요. 단, 출장 시작 및 종료일의 일당은 100% 지급</span>
+              </div>
+              <div class="yn-group">
+                <button class="yn-btn" onclick="setYN('mealProvided', true)">예, 식사 지원돼요</button>
+                <button class="yn-btn" onclick="setYN('mealProvided', false)">아니요, 개별 식사해요</button>
+              </div>
+            </div>
+
+            <!-- 제주: 항공 안내 (Y/N 없음 - 제주는 항공 필수) -->
+            <div class="extra-field hidden" id="field-plane">
+              <div class="extra-notice jeju-notice">
+                <span class="jeju-notice-icon">✈️</span>
+                <div>
+                  <strong>제주 출장 — 항공료 영수증 필수</strong>
+                  <span>법인카드로 결제 후 신용카드 매출전표를 반드시 제출해야 해요</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 제주: 셔틀버스 -->
+            <div class="extra-field hidden" id="field-shuttle">
+              <div class="extra-question">
+                <strong>공항 셔틀버스를 이용하셨나요?</strong>
+                <span>이용 시 법인카드 결제 후 영수증 제출이 필요해요</span>
+              </div>
+              <div class="yn-group">
+                <button class="yn-btn" onclick="setYN('hasShuttle', true)">예, 이용했어요</button>
+                <button class="yn-btn" onclick="setYN('hasShuttle', false)">아니요</button>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="card-footer">
+            <button class="cta-btn" onclick="goToCard(9)">예상 금액 확인하기</button>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 9: 예상 정산 금액
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-9" data-step="9">
+          <button class="back-btn" onclick="goBack(9)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-9"></div>
+
+          <div class="card-body">
+            <h1 class="card-question">예상 정산 금액이에요</h1>
+            <p class="card-desc" id="estimate-desc" style="display:none"></p>
+
+            <div class="amount-total-card">
+              <span class="amount-total-label">예상 정산 총액</span>
+              <span class="amount-total-num" id="totalAmount">-</span>
+            </div>
+
+            <div class="amount-breakdown" id="amountBreakdown"></div>
+
+            <!-- 서울 12시 이전 추가 안내 (서울 출장이고 before12 미체크 시) -->
+            <div class="seoul-before12-hint hidden" id="seoulBefore12Hint">
+              ℹ️ 서울 출장 시 시작시간이 12시 이전이면 하루 일당(35,000원)과 숙박비(100,000원)가 추가돼요
+            </div>
+
+            <div class="amount-note">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#8b95a1" stroke-width="1.2"/><path d="M7 4.5v3M7 9.5v.5" stroke="#8b95a1" stroke-width="1.2" stroke-linecap="round"/></svg>
+              <p>실제 정산은 결재 후 확정되며, 실비 항목(항공·셔틀)은 영수증 금액으로 반영돼요</p>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <button class="cta-btn" id="card9-next-btn" onclick="state.isOnline ? goToCard(11) : goToCard(10)">출장신청서 작성하기</button>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 10: 출장신청서 미리보기
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-10" data-step="10">
+          <button class="back-btn" onclick="goBack(10)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="step-trail" id="trail-10"></div>
+
+          <div class="card-body">
+            <h1 class="card-question">출장신청서를<br>미리 작성해볼게요</h1>
+            <p class="card-desc">S-Portal 전자결재 작성 시 참고하세요</p>
+
+            <!-- 소속 / 성명 입력 -->
+            <div class="info-fields-wrap" style="margin-bottom:16px">
+              <div class="info-field">
+                <label class="info-label" for="input-dept">소 속</label>
+                <input class="info-input" type="text" id="input-dept"
+                  placeholder="소속 입력"
+                  list="dept-list"
+                  oninput="onPersonInput()" />
+                <datalist id="dept-list">
+                  <option value="재무관리파트">
+                  <option value="경영기획팀">
+                  <option value="인사팀">
+                  <option value="구매팀">
+                  <option value="총무팀">
+                  <option value="정보전략팀">
+                  <option value="간호부">
+                  <option value="진료협력팀">
+                </datalist>
+              </div>
+              <div class="info-field">
+                <label class="info-label" for="input-name">성 명</label>
+                <input class="info-input" type="text" id="input-name"
+                  placeholder="본인 이름 입력"
+                  oninput="onPersonInput()" />
+              </div>
+            </div>
+
+            <!-- 출장신청서 미리보기 (입력 시 실시간 반영) -->
+            <div id="tripFormWrap"></div>
+          </div>
+
+          <div class="card-footer">
+            <button class="cta-btn" onclick="goToCard(11)">구비서류 확인하기</button>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 11: 구비서류 + 완료
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-11" data-step="11">
+          <button class="back-btn" onclick="goBack(11)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <!-- trail 없음: 완료 화면 -->
+
+          <div class="card-body">
+            <div class="complete-icon">
+              <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                <circle cx="32" cy="32" r="30" fill="#EEF6FF"/>
+                <path d="M20 32l8 8 16-16" stroke="#3182f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h1 class="card-question">정산 처리 방법이에요</h1>
+            <p class="card-desc">아래 순서대로 전표 처리자에게 제출하세요</p>
+
+            <!-- 구비서류 체크리스트 -->
+            <div class="final-checklist" id="finalChecklist"></div>
+
+            <!-- 세금계산서 수령 시 긴급 안내 -->
+            <div class="tax-invoice-warn hidden" id="taxInvoiceWarn">
+              <div class="tax-invoice-warn-title">⚠️ 세금계산서 제출 주의</div>
+              <div class="tax-invoice-warn-body">
+                세금계산서 <strong>작성일자가 속하는 월 내에 반드시 비용처리</strong>가 완료되어야 해요.<br>
+                늦게 제출하면 해당 월 처리가 불가능하니, <strong>받는 즉시</strong> 전표 처리자에게 제출하세요.
+              </div>
+            </div>
+
+            <!-- 전표 처리 안내 -->
+            <div class="voucher-guide" id="voucherGuide">
+              <div class="voucher-guide-header">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="#3182f6" stroke-width="1.2"/><path d="M4 7h6M4 4.5h6M4 9.5h3.5" stroke="#3182f6" stroke-width="1" stroke-linecap="round"/></svg>
+                전표 처리 안내
+              </div>
+              <div id="voucherItems"></div>
+            </div>
+
+            <div class="card-actions">
+              <button class="action-btn action-btn-primary" onclick="restartFlow()">처음부터 다시 시작</button>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /card-viewport -->
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="./src/app.js"></script>
+  </body>
+</html>
