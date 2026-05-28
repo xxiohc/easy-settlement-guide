@@ -60,7 +60,7 @@ const FARE_TABLE = [
   { keywords: ['부산', '해운대'], label: '부산',     bus: 19600 },
   { keywords: ['대구'],          label: '동대구역',  ktxNormal: 76000,  ktxFirst: 106000 },
   { keywords: ['울산'],          label: '울산',      bus: 29000 },
-  { keywords: ['경주'],          label: '경주',      bus: 38000 },
+  { keywords: ['경주'],          label: '신경주역',   ktxNormal: 34200,  ktxFirst: 48200  },
   { keywords: ['전주'],          label: '전주',      bus: 46000 },
   { keywords: ['제주'],          label: '제주',      jeju: true },
 ]
@@ -741,17 +741,28 @@ function parseDocMeta(filename, text) {
 
   // ── 제목 ──
   let title = ''
-  // 공문 레이블(제목/건명/연수명 등) 뒤 텍스트
-  const titleM = tc.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:]\s*([^.]{4,80})/)
-  if (titleM) {
-    title = titleM[1].trim().replace(/\s+/g, ' ')
-    // 목록기호 혼입 제거: 끝에 붙은 " 나" " 다" 등 (가~하 한글 자음 목록 기호)
+  // 원본 text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
+  const titleLineM = text.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣][^\n]{3,79})/)
+  if (titleLineM) {
+    title = titleLineM[1].trim().replace(/\s+/g, ' ')
+    // 목록 기호 혼입 제거 (끝에 붙은 " 나." " 다." 등)
     title = title.replace(/\s+[가나다라마바사아자차카타파하]\s*\.?\s*$/, '').trim()
   }
-  // 파일명에서 추출
+  // 공백 정규화 버전(tc)에서 재시도 — 개행이 없는 PDF OCR 결과에도 대응
+  if (!title) {
+    const titleM = tc.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。]?\s+([가-힣].{3,79})/)
+    if (titleM) {
+      title = titleM[1].trim().replace(/\s+/g, ' ')
+      // 본문 항목 구분자(숫자. / 가.나.다. / 수신 / 붙임) 이후 잘라냄
+      title = title.replace(/\s*(?:\d+\s*\.|[가나다라마바사아자차카타파하]\s*\.|수\s*신|경\s*유|붙\s*임).*$/, '').trim()
+    }
+  }
+  // 파일명에서 추출 (숫자+언더스코어로만 구성된 파일명은 제외)
   if (!title) {
     const fnBase = filename.replace(/\.[^.]+$/, '').replace(/[_\-]/g, ' ').trim()
-    if (fnBase.length > 4 && fnBase.length < 80) title = fnBase
+    // 파일명에 한글이 있고 너무 짧거나 길지 않으면 사용
+    if (fnBase.length > 4 && fnBase.length < 80 && /[가-힣]/.test(fnBase)) title = fnBase
+    else if (fnBase.length > 4 && fnBase.length < 80 && !/^\d/.test(fnBase)) title = fnBase
   }
   // 본문 첫 의미있는 줄에서 추출
   if (!title) {
@@ -773,17 +784,44 @@ function parseDocMeta(filename, text) {
     endDate   = `${ey}-${pad(em)}-${pad(ed)}`
     nights = Math.max(0, Math.round((new Date(endDate) - new Date(startDate)) / 86400000))
     days = nights + 1
-    periodDisplay = `${sm}월 ${sd}일 ~ ${em}월 ${ed}일`
+    periodDisplay = nights > 0 ? `${sm}월 ${sd}일 ~ ${em}월 ${ed}일` : `${sm}월 ${sd}일`
+  }
+  const setSingle = (sy, sm, sd) => {
+    startDate = `${sy}-${pad(sm)}-${pad(sd)}`
+    endDate   = startDate
+    nights = 0; days = 1
+    periodDisplay = `${+sm}월 ${+sd}일`
+  }
+
+  // 패턴0: 차수 목록 "1차:" / "○ 1차" 뒤 날짜 — 복수 차시 공문에서 1차 우선 추출
+  {
+    const firstM = tc.match(/1\s*차\s*[：:,、]\s*(\d{4}[. ]+\d{1,2}[. ]+\d{1,2}(?:\.?\s*\([가-힣]{1,3}\))?)/)
+    if (firstM) {
+      const dm = firstM[1].match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})/)
+      if (dm) {
+        // 2차가 있으면 범위로 설정
+        const secondM = tc.match(/2\s*차\s*[：:,、]\s*(\d{4}[. ]+\d{1,2}[. ]+\d{1,2})/)
+        if (secondM) {
+          const dm2 = secondM[1].match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})/)
+          if (dm2) setRange(+dm[1],+dm[2],+dm[3], +dm2[1],+dm2[2],+dm2[3])
+          else setSingle(+dm[1],+dm[2],+dm[3])
+        } else {
+          setSingle(+dm[1],+dm[2],+dm[3])
+        }
+      }
+    }
   }
 
   // 패턴1: YYYY-MM-DD ~ YYYY-MM-DD
-  let m = tc.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*~\s*(\d{4})-(\d{1,2})-(\d{1,2})/)
-  if (m) { setRange(+m[1],+m[2],+m[3],+m[4],+m[5],+m[6]) }
+  if (!startDate) {
+    const m = tc.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*~\s*(\d{4})-(\d{1,2})-(\d{1,2})/)
+    if (m) setRange(+m[1],+m[2],+m[3],+m[4],+m[5],+m[6])
+  }
 
   // 패턴2: YYYY.M.D ~ M.D 또는 YYYY.M.D~YYYY.M.D
   // 일자 뒤에 .(수) 같은 점+요일 괄호가 붙는 공문 형식 지원 (예: 2025. 5. 21.(수) ~ 5. 23.(금))
   if (!startDate) {
-    m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
+    const m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
     if (m) {
       const ey = m[4] ? +m[4] : +m[1]
       setRange(+m[1],+m[2],+m[3], ey,+m[5],+m[6])
@@ -792,7 +830,7 @@ function parseDocMeta(filename, text) {
 
   // 패턴3: 한글 날짜 — YYYY년 M월 D일 ~ M월 D일
   if (!startDate) {
-    m = tc.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*~\s*(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
+    const m = tc.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*~\s*(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
     if (m) {
       const ey = m[4] ? +m[4] : +m[1]
       setRange(+m[1],+m[2],+m[3], ey,+m[5],+m[6])
@@ -801,10 +839,8 @@ function parseDocMeta(filename, text) {
 
   // 패턴4: MM.DD(요일) ~ MM.DD(요일) — 연도 없는 경우 올해로 설정
   if (!startDate) {
-    m = tc.match(/(\d{1,2})\.(\d{1,2})(?:\s*\([^)]{1,3}\))?\s*~\s*(\d{1,2})\.(\d{1,2})/)
-    if (m) {
-      setRange(curY,+m[1],+m[2], curY,+m[3],+m[4])
-    }
+    const m = tc.match(/(\d{1,2})\.(\d{1,2})(?:\s*\([^)]{1,3}\))?\s*~\s*(\d{1,2})\.(\d{1,2})/)
+    if (m) setRange(curY,+m[1],+m[2], curY,+m[3],+m[4])
   }
 
   // 패턴5: 일시·기간·개최기간 라벨 근방에서 날짜 탐색
@@ -821,15 +857,29 @@ function parseDocMeta(filename, text) {
     }
   }
 
-  // 패턴6: 단일 일자 — YYYY. M.D 또는 YYYY.M.D (뒤에 ~ 없음)
+  // 패턴6: "교육일시" 테이블 컬럼에서 ISO 날짜 — 납부 안내서·신청 명단 형식
+  // 시행일자보다 먼저 체크해서 올바른 교육일 추출
   if (!startDate) {
-    m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\s*\([^)]{1,3}\))?(?!\s*[~～])/)
-    if (m && +m[1] >= 2020) {
-      startDate = `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`
-      endDate   = startDate
-      nights = 0; days = 1
-      periodDisplay = `${+m[2]}월 ${+m[3]}일`
+    const eduDateM = tc.match(/교\s*육\s*일\s*시\s+(\d{4}-\d{2}-\d{2})/)
+    if (eduDateM) {
+      const [y,mo,d] = eduDateM[1].split('-').map(Number)
+      setSingle(y, mo, d)
     }
+  }
+
+  // 패턴7: 단일 ISO 날짜 — YYYY-MM-DD (시행일자 제외)
+  if (!startDate) {
+    // 시행일자·접수일자 등 행정 처리일 제외를 위해 해당 패턴 마스킹 후 탐색
+    const tcNoAdmin = tc.replace(/(?:시행|접수|발행|발급|작성)\s*일\s*자?\s*\d{4}-\d{2}-\d{2}/g, '')
+                       .replace(/\(\s*시행일자\s*\d{4}-\d{2}-\d{2}\s*\)/g, '')
+    const m = tcNoAdmin.match(/(\d{4})-(\d{2})-(\d{2})(?!\s*[\-~～]\s*\d{4}-\d{2}-\d{2})/)
+    if (m && +m[1] >= 2020) setSingle(+m[1],+m[2],+m[3])
+  }
+
+  // 패턴8: 단일 일자 — YYYY. M.D 또는 YYYY.M.D (뒤에 ~ 없음)
+  if (!startDate) {
+    const m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\s*\([^)]{1,3}\))?(?!\s*[~～])/)
+    if (m && +m[1] >= 2020) setSingle(+m[1],+m[2],+m[3])
   }
 
   // ── 장소 → 지역 ──
@@ -837,46 +887,67 @@ function parseDocMeta(filename, text) {
     ['제주특별자치도|제주도|제주시|서귀포', '제주'],
     // 서울 자치구
     ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
+    // 서울 주요 병원 (병원명으로 장소 특정되는 경우)
+    ['삼성서울병원|세브란스병원|신촌세브란스|강남세브란스|서울대학교병원|서울아산병원|서울성모병원|가톨릭대.*서울|한양대.*서울|이화.*서울|고대.*서울|고려대.*서울|건국대.*병원|경희대.*서울|중앙대.*서울|인하대.*서울', '서울'],
     // 서울 랜드마크
     ['서울특별시|여의도|여의나루|서울역|수서역|코엑스|COEX|삼성동|잠실|홍대|명동|광화문|시청|강남역', '서울'],
-    // 경기·인천 (서울 출장 처리)
-    ['경기도|인천광역시|수원시?|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대|자연과학캠퍼스', '서울'],
+    // 경기·인천 (서울 출장 처리) — 성균관대는 자연과학캠퍼스(수원)와 인문캠(서울) 구분 필요, 삼성창원병원 제외
+    ['경기도|인천광역시|수원시?|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|자연과학캠퍼스|성균관대학교\s*(?!삼성창원|창원)', '서울'],
     ['천안시?|아산시?|천안아산역', '천안'],
     ['오송|청주시?', '오송'],
-    ['대전광역시|대전시?|유성구|서구.*대전|대전.*서구', '대전'],
+    ['대전광역시|대전시?|을지대.*대전|유성구|서구.*대전|대전.*서구', '대전'],
     ['동대구|대구광역시|대구시?', '동대구'],
-    ['경주시?', '경주'],
+    ['경주시?|신경주', '경주'],
     ['울산광역시|울산시?', '울산'],
     // 부산 (해운대구에 "대구" 포함되어 반드시 동대구보다 앞에 있어야 함)
-    ['부산광역시|부산시?|해운대|동래|사하|금정', '부산'],
+    ['부산광역시|부산시?|부산교육원|해운대|동래|사하|금정', '부산'],
     ['전주시?|전라북도|전북', '전주'],
     ['순천시?|광양시?|여수시?', '순천'],
-    ['창원시?|마산|진해|창원특례시', '창원'],
+    ['창원시?|마산|진해|창원특례시|삼성창원병원|성균관대.*창원|경상국립대.*창원', '창원'],
     ['진주시?', '진주'],
   ]
 
-  // 장소 라벨 근방의 텍스트에서 우선 탐색 (발신자 주소 오인 방지)
+  // 장소 → 지역 탐색 (발신자 주소 오인 방지 강화)
   let destination = ''
+
+  const matchRegion = (text) => {
+    if (!text) return ''
+    for (const [keywords, region] of REGION_MAP) {
+      if (new RegExp(keywords, 'i').test(text)) return region
+    }
+    return ''
+  }
 
   // 형식1: "장소 : XXX" 또는 "개최지 : XXX"
   const placeColonM = tc.match(/(?:장\s*소|개최\s*지|행사\s*장소|개최\s*장소)\s*[：:]\s*([^.0-9]{2,60})/)
+  if (placeColonM) destination = matchRegion(placeColonM[1])
+
   // 형식2: "장 소 XXX 숫자." (번호 목록 형식) — 번호 나오기 전까지
-  const placeListM  = tc.match(/장\s*소\s+([가-힣][^0-9]{2,50})(?:\s*\d+\s*[.:]|$)/)
-
-  const placeCandidate = (placeColonM?.[1] || placeListM?.[1] || '').trim()
-
-  if (placeCandidate) {
-    for (const [keywords, region] of REGION_MAP) {
-      if (new RegExp(keywords).test(placeCandidate)) { destination = region; break }
-    }
+  if (!destination) {
+    const placeListM = tc.match(/장\s*소\s+([가-힣][^0-9]{2,50})(?:\s*\d+\s*[.:]|$)/)
+    if (placeListM) destination = matchRegion(placeListM[1])
   }
 
-  // 장소 라벨 탐색 실패 시 전체 텍스트 스캔 (발신처 주소 제외)
+  // 형식3: "1차: 날짜, 장소" 목록 형식 (강의 협조 요청 등)
   if (!destination) {
-    const bodyText = tc.split(/시\s*행\s*:|발\s*신\s*처\s*:|수\s*신\s*:/)[0]
-    for (const [keywords, region] of REGION_MAP) {
-      if (new RegExp(keywords).test(bodyText)) { destination = region; break }
-    }
+    const firstPlaceM = tc.match(/1\s*차\s*[：:,、].*?,\s*([가-힣].{3,40})/)
+    if (firstPlaceM) destination = matchRegion(firstPlaceM[1])
+  }
+
+  // 형식4: "교육장소" 키워드 이후 텍스트에서 REGION_MAP 직접 검색 (테이블 형식)
+  if (!destination) {
+    const eduIdx = tc.indexOf('교육장소')
+    if (eduIdx >= 0) destination = matchRegion(tc.slice(eduIdx, eduIdx + 120))
+  }
+
+  // 장소 라벨 탐색 실패 시 본문 스캔 — 발신처 주소(우편번호 기준) 이전만 탐색
+  if (!destination) {
+    // "우 XXXXX" 우편번호, 전화번호, 팩스번호, 시행 이후 제외
+    const bodyText = tc.split(/우\s*\d{3}[-\d]*\s*[가-힣]|전화\s*번호|팩스\s*번호/)[0]
+    // 수신자 정보(병원명 등)가 포함된 앞부분은 제외하고 본문 핵심만 검색
+    // "수신" 이후 첫 가-힣로 시작하는 의미 있는 본문부터 탐색
+    const bodyCore = bodyText.replace(/^.*?(?=\d+\.\s)/s, '')  // "1. 귀 기관..." 이후부터
+    destination = matchRegion(bodyCore) || matchRegion(bodyText)
   }
 
   // ── 등록비 ──
@@ -891,39 +962,47 @@ function parseDocMeta(filename, text) {
     return (n >= 1000 && n <= 99000000) ? n : null
   }
 
+  // 대괄호 안 숫자 추출 전처리: [25,000] → 25,000
+  const tcFee = tc.replace(/\[(\d[\d,]*)\]/g, '$1')
+  const tnFee = tn.replace(/\[(\d[\d,]*)\]/g, '$1')
+
   // 금액 추출 regex: 만원 단위(18만) + 일반 숫자(180,000) 모두 지원
   const amtPat = /([\d,]+)\s*만\s*원|([\d,]{4,})\s*원/
 
   // 우선순위1: 회원병원 / 정회원 기준 (학술대회 공문의 "정회원" = 병원 직원 할인가)
-  const memberM = tn.match(/(?:회원병원|정회원)[:\-：\s]*([\d,]+)\s*만?\s*원?/)
+  const memberM = tnFee.match(/(?:회원병원|정회원)[:\-：\s]*([\d,]+)\s*만?\s*원?/)
   if (memberM) {
-    const raw = memberM[1]
-    // "정회원 18만원" 형태를 위해 뒤에 "만"이 올 수 있음 → 슬라이딩으로 재확인
-    const snipMember = tn.slice(tn.search(/(?:회원병원|정회원)/))
+    const snipMember = tnFee.slice(tnFee.search(/(?:회원병원|정회원)/))
     const amtM = snipMember.match(amtPat)
     if (amtM) {
       registration = amtM[1]
-        ? parseInt(amtM[1].replace(/,/g,'')) * 10000   // 만원 단위
-        : parseAmt(amtM[2])                             // 일반 숫자
+        ? parseInt(amtM[1].replace(/,/g,'')) * 10000
+        : parseAmt(amtM[2])
     } else {
-      const n = parseAmt(raw)
-      if (n) registration = n
+      registration = parseAmt(memberM[1])
     }
   }
 
   // 우선순위2: 사전납입 기준
   if (!registration) {
-    const snipPre = (() => { const i = tn.indexOf('사전납입'); return i>=0 ? tn.slice(i, i+30) : '' })()
-    if (snipPre) {
-      const amtM = snipPre.match(amtPat)
+    const i = tnFee.indexOf('사전납입')
+    if (i >= 0) {
+      const amtM = tnFee.slice(i, i+30).match(amtPat)
       if (amtM) registration = amtM[1] ? parseInt(amtM[1].replace(/,/g,''))*10000 : parseAmt(amtM[2])
     }
   }
 
-  // 우선순위3: 교육비·등록비·참가비·참가회비 등 키워드 뒤 금액 (만원 단위 포함)
+  // 우선순위3: "금 XXX원" 형식 — 납부 안내서, 고지서 (예: "금 25,000 원 / 1 명")
+  // ※ \b는 한글 앞뒤에서 동작하지 않으므로 사용하지 않음
+  if (!registration) {
+    const kinM = tcFee.match(/금\s+([\d,]+)\s*원(?:\s|\/|$)/)
+    if (kinM) registration = parseAmt(kinM[1])
+  }
+
+  // 우선순위4: 교육비·등록비·참가비·참가회비 등 키워드 뒤 금액 (만원 단위 포함)
   if (!registration) {
     const kwRegex = /(?:사전\s*등록비|사전\s*등록|참\s*가\s*회\s*비|등록\s*비|참\s*가\s*비|교육\s*비|수강\s*료)\s*[：:\-]?\s*(?:([\d,]+)\s*만\s*원|([\d,]+)\s*원)/
-    const kwM = tc.match(kwRegex)
+    const kwM = tcFee.match(kwRegex)
     if (kwM) {
       registration = kwM[1]
         ? parseInt(kwM[1].replace(/,/g,'')) * 10000
@@ -931,13 +1010,13 @@ function parseDocMeta(filename, text) {
     }
   }
 
-  // 우선순위4: 정규화 텍스트에서 키워드+금액 슬라이딩 검색 (만원 포함)
+  // 우선순위5: 정규화 텍스트에서 키워드+금액 슬라이딩 검색 (만원 포함)
   if (!registration) {
     const kwPats = ['사전등록비','사전등록','참가회비','등록비','참가비','교육비','수강료']
     for (const kw of kwPats) {
-      const ki = tn.indexOf(kw)
+      const ki = tnFee.indexOf(kw)
       if (ki >= 0) {
-        const snip = tn.slice(ki, ki + kw.length + 50)
+        const snip = tnFee.slice(ki, ki + kw.length + 50)
         const amtM = snip.match(amtPat)
         if (amtM) {
           registration = amtM[1]
