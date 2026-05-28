@@ -742,7 +742,7 @@ function parseDocMeta(filename, text) {
   // ── 제목 ──
   let title = ''
   // 원본 text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
-  const titleLineM = text.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣][^\n]{3,79})/)
+  const titleLineM = text.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣\d][^\n]{3,79})/)
   if (titleLineM) {
     title = titleLineM[1].trim().replace(/\s+/g, ' ')
     // 목록 기호 혼입 제거 (끝에 붙은 " 나." " 다." 등)
@@ -750,7 +750,7 @@ function parseDocMeta(filename, text) {
   }
   // 공백 정규화 버전(tc)에서 재시도 — 개행이 없는 PDF OCR 결과에도 대응
   if (!title) {
-    const titleM = tc.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。]?\s+([가-힣].{3,79})/)
+    const titleM = tc.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。]?\s+([가-힣\d].{3,79})/)
     if (titleM) {
       title = titleM[1].trim().replace(/\s+/g, ' ')
       // 본문 항목 구분자(숫자. / 가.나.다. / 수신 / 붙임) 이후 잘라냄
@@ -843,9 +843,9 @@ function parseDocMeta(filename, text) {
     if (m) setRange(curY,+m[1],+m[2], curY,+m[3],+m[4])
   }
 
-  // 패턴5: 일시·기간·개최기간 라벨 근방에서 날짜 탐색
+  // 패턴5: 일시·기간·개최기간 라벨 근방에서 날짜 탐색 (대괄호 형식 "[일 시]" 포함)
   if (!startDate) {
-    const labelM = tc.match(/(?:일\s*시|기\s*간|개\s*최\s*기\s*간|개\s*최\s*일\s*시)\s*[：:]\s*(.{5,80})/)
+    const labelM = tc.match(/(?:\[\s*)?(?:일\s*시|기\s*간|개\s*최\s*기\s*간|개\s*최\s*일\s*시)(?:\s*\])?\s*[：:\s]\s*(.{5,80})/)
     if (labelM) {
       const snip = labelM[1]
       let sm = snip.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
@@ -884,7 +884,7 @@ function parseDocMeta(filename, text) {
 
   // ── 장소 → 지역 ──
   const REGION_MAP = [
-    ['제주특별자치도|제주도|제주시|서귀포', '제주'],
+    ['제주특별자치도|제주도|제주시|서귀포|제주', '제주'],
     // 서울 자치구
     ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
     // 서울 주요 병원 (병원명으로 장소 특정되는 경우)
@@ -1000,8 +1000,9 @@ function parseDocMeta(filename, text) {
   }
 
   // 우선순위4: 교육비·등록비·참가비·참가회비 등 키워드 뒤 금액 (만원 단위 포함)
+  // "1인당", "1인" 같은 중간 수식어 허용 (예: 참가회비 1인당 450,000원)
   if (!registration) {
-    const kwRegex = /(?:사전\s*등록비|사전\s*등록|참\s*가\s*회\s*비|등록\s*비|참\s*가\s*비|교육\s*비|수강\s*료)\s*[：:\-]?\s*(?:([\d,]+)\s*만\s*원|([\d,]+)\s*원)/
+    const kwRegex = /(?:사전\s*등록비|사전\s*등록|참\s*가\s*회\s*비|등록\s*비|참\s*가\s*비|교육\s*비|수강\s*료)\s*[：:\-]?\s*(?:1\s*인\s*당\s*)?(?:([\d,]+)\s*만\s*원|([\d,]+)\s*원)/
     const kwM = tcFee.match(kwRegex)
     if (kwM) {
       registration = kwM[1]
