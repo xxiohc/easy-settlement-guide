@@ -820,6 +820,17 @@ function parseDocMeta(filename, text) {
     if (m) setRange(+m[1],+m[2],+m[3],+m[4],+m[5],+m[6])
   }
 
+  // 패턴1.5: 공백제거 텍스트(tn)에서 날짜 범위 탐색
+  // pdfjs 폰트 이슈로 tc에서 숫자 사이 공백이 끼어 패턴2가 실패할 때 대비
+  // 형식: YYYY.M.D비숫자*~비숫자*(YYYY.)M.D
+  if (!startDate) {
+    const m = tn.match(/(\d{4})\.(\d{1,2})\.(\d{1,2})[^\d~]*~[^\d]*(?:(\d{4})\.)?(\d{1,2})\.(\d{1,2})/)
+    if (m && +m[1] >= 2020) {
+      const ey = m[4] ? +m[4] : +m[1]
+      setRange(+m[1], +m[2], +m[3], ey, +m[5], +m[6])
+    }
+  }
+
   // 패턴2: YYYY.M.D ~ M.D 또는 YYYY.M.D~YYYY.M.D
   // 일자 뒤에 .(수) 같은 점+요일 괄호가 붙는 공문 형식 지원 (예: 2025. 5. 21.(수) ~ 5. 23.(금))
   if (!startDate) {
