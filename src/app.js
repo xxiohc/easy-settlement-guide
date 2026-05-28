@@ -735,14 +735,16 @@ async function ocrBlob(blob, pctStart = 5, pctEnd = 90) {
 function parseDocMeta(filename, text) {
   const norm = s => s.replace(/\s+/g, '')
   const col  = s => s.replace(/\s+/g, ' ').trim()
-  const tc   = col(text)
-  const tn   = norm(text)
+  // 전각/이형 문자 정규화: ～〜→~ (PDF 추출 시 range 표시자가 달라질 수 있음)
+  const normalized = text.replace(/[～〜]/g, '~')
+  const tc   = col(normalized)
+  const tn   = norm(normalized)
   const curY = new Date().getFullYear()
 
   // ── 제목 ──
   let title = ''
-  // 원본 text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
-  const titleLineM = text.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣\d][^\n]{3,79})/)
+  // normalized text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
+  const titleLineM = normalized.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣\d][^\n]{3,79})/)
   if (titleLineM) {
     title = titleLineM[1].trim().replace(/\s+/g, ' ')
     // 목록 기호 혼입 제거 (끝에 붙은 " 나." " 다." 등)
@@ -767,7 +769,7 @@ function parseDocMeta(filename, text) {
   // 본문 첫 의미있는 줄에서 추출
   if (!title) {
     const kwRe = /교육|출장|세미나|연수|워크숍|학술대회|심포지엄|컨퍼런스|포럼|훈련|안내|개최/
-    for (const line of text.split('\n')) {
+    for (const line of normalized.split('\n')) {
       const l = line.trim()
       if (l.length > 5 && l.length < 80 && kwRe.test(l)) {
         title = l; break
