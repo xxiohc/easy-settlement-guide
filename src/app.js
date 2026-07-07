@@ -1,6 +1,6 @@
 // ── 카카오 장소 검색 API 키 ────────────────────────────────────────────────────
 // developers.kakao.com → 내 애플리케이션 → REST API 키
-const KAKAO_API_KEY = '995bceb54093798d160d753693a9c98e'
+const KAKAO_API_KEY = (typeof window !== 'undefined' && window.KAKAO_API_KEY) || ''
 
 // ── 단계 정의 ────────────────────────────────────────────────────────────────
 const STEPS = [

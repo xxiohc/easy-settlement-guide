@@ -2,6 +2,9 @@
 node_modules/
 .DS_Store
 
+# API 키 (GitHub에 올리지 않음 — Vercel 환경변수로 주입)
+src/config.js
+
 # 구버전 파일 (루트 레벨)
 /app.js
 /styles.css

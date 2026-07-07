@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "python3 -m http.server 8012 --bind 127.0.0.1",
-    "preview": "python3 -m http.server 8012 --bind 127.0.0.1"
+    "build": "echo \"window.KAKAO_API_KEY='${KAKAO_API_KEY}'\" > src/config.js",
+    "dev": "npx serve -l 3000 --no-clipboard"
   }
 }
