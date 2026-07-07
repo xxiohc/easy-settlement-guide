@@ -12,3 +12,4 @@ test-docs/
 # 에디터
 .vscode/
 *.swp
+.vercel

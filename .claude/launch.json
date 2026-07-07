@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "expense-guide",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-l", "8013", "--no-clipboard"],
+      "port": 8013
+    }
+  ]
+}
