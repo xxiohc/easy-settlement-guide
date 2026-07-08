@@ -118,6 +118,22 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   white-space: nowrap;
 }
 
+.admin-mode-link {
+  font-size: 11px;
+  color: #c9cdd2;
+  text-decoration: none;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.admin-mode-link:hover {
+  color: #8b95a1;
+  background: #f2f4f6;
+}
+
 @media (max-width: 640px) {
   .header-right { display: none; }
 }
