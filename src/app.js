@@ -50,8 +50,8 @@ const state = {
   formEditMode: false,  // 출장신청서 수정 패널 열림 여부
 }
 
-// ── KTX / 버스 운임표 (마산역 출발 왕복) ─────────────────────────────────────
-const FARE_TABLE = [
+// ── KTX / 버스 운임표 (마산역 출발 왕복) — data/rates.json 에서 로드됨 ────────
+let FARE_TABLE = [
   { keywords: ['서울'],          label: '서울역',    ktxNormal: 106600, ktxFirst: 149600 },
   { keywords: ['수서'],          label: '수서역',    ktxNormal: 102000, ktxFirst: 143000 },
   { keywords: ['천안', '아산'],  label: '천안아산역', ktxNormal: 90000,  ktxFirst: 126000 },
@@ -65,9 +65,21 @@ const FARE_TABLE = [
   { keywords: ['제주'],          label: '제주',      jeju: true },
 ]
 
-const DAILY_RATE     = 35000
-const DAILY_RATE_25P = 8750   // 25% (숙소·식사 제공 중간날)
-const LODGING_RATE   = 100000
+let DAILY_RATE     = 35000
+let DAILY_RATE_25P = 8750   // 25% (숙소·식사 제공 중간날)
+let LODGING_RATE   = 100000
+
+async function loadRates() {
+  try {
+    const r = await fetch('./data/rates.json?t=' + Date.now())
+    if (!r.ok) return
+    const d = await r.json()
+    if (Array.isArray(d.fareTable) && d.fareTable.length) FARE_TABLE = d.fareTable
+    if (d.dailyRate)    DAILY_RATE     = d.dailyRate
+    if (d.dailyRate25p) DAILY_RATE_25P = d.dailyRate25p
+    if (d.lodgingRate)  LODGING_RATE   = d.lodgingRate
+  } catch {}
+}
 
 // ── 카드 내비게이션 ───────────────────────────────────────────────────────────
 function goToCard(n) {
@@ -2442,7 +2454,8 @@ async function runTests() {
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadRates()
   updateProgress()
 
   // 장소 검색 드롭다운 외부 클릭 시 닫기

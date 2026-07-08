@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>관리자 — 교육·출장 정산 가이드</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+    <style>
+      /* ── 비밀번호 게이트 ── */
+      .gate-overlay {
+        position: fixed; inset: 0; background: rgba(0,0,0,.45);
+        display: flex; align-items: center; justify-content: center; z-index: 999;
+      }
+      .gate-overlay.hidden { display: none; }
+      .gate-card {
+        background: #fff; border-radius: 16px; padding: 40px 36px;
+        width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+        display: flex; flex-direction: column; gap: 16px;
+      }
+      .gate-title { font-size: 18px; font-weight: 700; color: #191f28; margin-bottom: 4px; }
+      .gate-sub   { font-size: 13px; color: #8b95a1; margin-bottom: 4px; }
+      .gate-input {
+        border: 1.5px solid #e5e8ec; border-radius: 10px;
+        padding: 12px 14px; font-size: 15px; width: 100%; outline: none;
+        transition: border-color .15s;
+      }
+      .gate-input:focus { border-color: #3182f6; }
+      .gate-btn {
+        background: #191f28; color: #fff; border: none; border-radius: 10px;
+        padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer;
+        transition: background .15s;
+      }
+      .gate-btn:hover { background: #333d4b; }
+      .gate-error { font-size: 13px; color: #e53e3e; text-align: center; }
+      .gate-error.hidden { display: none; }
+
+      /* ── 관리자 레이아웃 ── */
+      .admin-wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 80px; }
+      .admin-section {
+        background: #fff; border-radius: 16px;
+        border: 1px solid #edf0f3; padding: 28px; margin-bottom: 20px;
+      }
+      .admin-section-title {
+        font-size: 15px; font-weight: 700; color: #191f28;
+        margin-bottom: 20px; padding-bottom: 14px;
+        border-bottom: 1px solid #f2f4f6;
+      }
+
+      /* ── 요금표 테이블 ── */
+      .fare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .fare-table th {
+        background: #f7f8fa; color: #6b7684; font-weight: 600;
+        padding: 10px 12px; text-align: center; border-bottom: 1px solid #edf0f3;
+      }
+      .fare-table th:first-child { text-align: left; }
+      .fare-table td { padding: 8px 12px; border-bottom: 1px solid #f2f4f6; }
+      .fare-table tr:last-child td { border-bottom: none; }
+      .fare-table tr:hover td { background: #f7f8fa; }
+      .fare-label-cell { font-weight: 600; color: #191f28; }
+      .fare-tag {
+        display: inline-block; font-size: 10px; font-weight: 600;
+        padding: 2px 7px; border-radius: 20px; margin-left: 6px;
+        vertical-align: middle;
+      }
+      .fare-tag.ktx { background: #eff6ff; color: #3182f6; }
+      .fare-tag.bus { background: #f0fdf4; color: #16a34a; }
+      .fare-tag.jeju { background: #fef3c7; color: #d97706; }
+      .fare-input {
+        border: 1.5px solid #e5e8ec; border-radius: 8px;
+        padding: 7px 10px; font-size: 13px; width: 110px;
+        text-align: right; outline: none; transition: border-color .15s;
+      }
+      .fare-input:focus { border-color: #3182f6; }
+      .fare-input:disabled { background: #f7f8fa; color: #adb5bd; cursor: not-allowed; }
+      .fare-unit { font-size: 12px; color: #8b95a1; margin-left: 4px; }
+
+      /* ── 일당/숙박비 ── */
+      .rate-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+      .rate-item label { display: block; font-size: 12px; font-weight: 600; color: #6b7684; margin-bottom: 8px; }
+      .rate-item-input {
+        border: 1.5px solid #e5e8ec; border-radius: 10px;
+        padding: 11px 14px; font-size: 15px; font-weight: 600; width: 100%;
+        outline: none; text-align: right; transition: border-color .15s;
+      }
+      .rate-item-input:focus { border-color: #3182f6; }
+      .rate-item-note { font-size: 11px; color: #adb5bd; margin-top: 6px; }
+
+      /* ── GitHub 저장 섹션 ── */
+      .github-field { display: flex; gap: 10px; align-items: center; }
+      .github-input {
+        flex: 1; border: 1.5px solid #e5e8ec; border-radius: 10px;
+        padding: 11px 14px; font-size: 13px; outline: none;
+        font-family: monospace; transition: border-color .15s;
+      }
+      .github-input:focus { border-color: #3182f6; }
+      .github-note { font-size: 12px; color: #8b95a1; margin-top: 8px; line-height: 1.6; }
+      .github-note a { color: #3182f6; text-decoration: none; }
+
+      /* ── 저장 버튼 ── */
+      .save-bar {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        background: #fff; border-top: 1px solid #f2f4f6;
+        padding: 16px 24px; display: flex; align-items: center;
+        justify-content: space-between; gap: 12px; z-index: 100;
+      }
+      .save-status { font-size: 13px; color: #8b95a1; }
+      .save-status.ok   { color: #16a34a; }
+      .save-status.err  { color: #e53e3e; }
+      .save-status.ing  { color: #3182f6; }
+      .btn-save {
+        background: #3182f6; color: #fff; border: none; border-radius: 10px;
+        padding: 12px 28px; font-size: 14px; font-weight: 700;
+        cursor: pointer; transition: background .15s;
+      }
+      .btn-save:hover { background: #2563eb; }
+      .btn-save:disabled { background: #adb5bd; cursor: not-allowed; }
+      .btn-reset {
+        background: none; border: 1.5px solid #e5e8ec; border-radius: 10px;
+        padding: 11px 18px; font-size: 13px; font-weight: 600; color: #6b7684;
+        cursor: pointer; transition: all .15s;
+      }
+      .btn-reset:hover { border-color: #adb5bd; color: #191f28; }
+
+      /* ── 로그아웃 ── */
+      .logout-btn {
+        font-size: 12px; color: #adb5bd; background: none; border: none;
+        cursor: pointer; padding: 4px 8px; border-radius: 6px;
+        transition: color .15s;
+      }
+      .logout-btn:hover { color: #6b7684; }
+
+      @media (max-width: 640px) {
+        .rate-grid { grid-template-columns: 1fr; }
+        .admin-wrap { padding: 16px 12px 100px; }
+        .admin-section { padding: 20px 16px; }
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- 비밀번호 게이트 -->
+    <div class="gate-overlay" id="gateOverlay">
+      <div class="gate-card">
+        <div>
+          <div class="gate-title">관리자 로그인</div>
+          <div class="gate-sub">교육·출장 정산 가이드 · 재무관리파트</div>
+        </div>
+        <input type="password" class="gate-input" id="gateInput"
+               placeholder="비밀번호를 입력하세요"
+               onkeydown="if(event.key==='Enter') checkPassword()" />
+        <button class="gate-btn" onclick="checkPassword()">확인</button>
+        <div class="gate-error hidden" id="gateError">비밀번호가 맞지 않습니다.</div>
+      </div>
+    </div>
+
+    <!-- 관리자 화면 (로그인 후 표시) -->
+    <div id="adminMain" class="hidden">
+
+      <header class="app-header">
+        <div class="header-inner">
+          <div class="header-brand">
+            <img src="./smc-logo.png" alt="SMC 로고" class="header-logo" />
+            <div class="header-text">
+              <span class="header-sub">Samsung Medical Center · 재무관리파트</span>
+              <div class="header-title-row">
+                <span class="header-title">관리자 — 요금 설정</span>
+                <span class="header-copy">© jiseokchoi</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <a href="./index.html" style="font-size:13px;color:#6b7684;text-decoration:none">← 직원 화면</a>
+            <button class="logout-btn" onclick="logout()">로그아웃</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="admin-wrap">
+
+        <!-- 구간별 요금표 -->
+        <div class="admin-section">
+          <div class="admin-section-title">구간별 요금표 (마산역 출발 왕복)</div>
+          <div style="overflow-x:auto">
+            <table class="fare-table" id="fareEditorTable">
+              <thead>
+                <tr>
+                  <th>목적지</th>
+                  <th>교통수단</th>
+                  <th>KTX 일반실</th>
+                  <th>KTX 특실</th>
+                  <th>시외버스</th>
+                </tr>
+              </thead>
+              <tbody id="fareEditorBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 일당 / 숙박비 -->
+        <div class="admin-section">
+          <div class="admin-section-title">일당 / 숙박비</div>
+          <div class="rate-grid">
+            <div class="rate-item">
+              <label>일당 (1일)</label>
+              <input type="number" class="rate-item-input" id="inputDailyRate" step="1000" />
+              <div class="rate-item-note">원 / 일</div>
+            </div>
+            <div class="rate-item">
+              <label>일당 25% (숙소·식사 제공)</label>
+              <input type="number" class="rate-item-input" id="inputDailyRate25p" step="100" />
+              <div class="rate-item-note">일당 × 25% · 자동 계산 권장</div>
+            </div>
+            <div class="rate-item">
+              <label>숙박비 (1박)</label>
+              <input type="number" class="rate-item-input" id="inputLodgingRate" step="5000" />
+              <div class="rate-item-note">원 / 박</div>
+            </div>
+          </div>
+          <div style="margin-top:14px">
+            <label style="font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="autoCalc25p" onchange="toggleAuto25p()" />
+              <span style="font-size:12px;color:#6b7684">일당 25% 자동 계산 (일당 × 0.25)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- GitHub 저장 설정 -->
+        <div class="admin-section">
+          <div class="admin-section-title">저장 방식 — GitHub 연동</div>
+          <div class="github-field">
+            <input type="password" class="github-input" id="githubToken"
+                   placeholder="GitHub Personal Access Token (ghp_...)" />
+            <button onclick="saveToken()" style="white-space:nowrap;background:#f7f8fa;border:1.5px solid #e5e8ec;border-radius:10px;padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;color:#191f28">저장</button>
+          </div>
+          <div class="github-note">
+            저장 시 <code>data/rates.json</code>을 GitHub에 커밋 → Vercel 자동 재배포 (~30초) → 전 직원 즉시 적용<br>
+            토큰은 이 브라우저 세션에만 보관됩니다 (브라우저 종료 시 삭제).
+            <a href="https://github.com/settings/tokens/new?scopes=repo&description=smc-expense-admin" target="_blank">
+              토큰 발급 →
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 하단 저장 바 -->
+      <div class="save-bar">
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn-reset" onclick="resetDefaults()">기본값으로 초기화</button>
+          <span class="save-status" id="saveStatus"></span>
+        </div>
+        <button class="btn-save" id="btnSave" onclick="saveAll()">저장 및 배포</button>
+      </div>
+
+    </div>
+
+    <script src="./src/config.js"></script>
+    <script src="./src/admin.js"></script>
+  </body>
+</html>
