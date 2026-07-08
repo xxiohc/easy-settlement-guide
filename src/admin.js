@@ -55,7 +55,7 @@ function logout() {
 // ── 초기화 ───────────────────────────────────────────────────────────────────
 async function initAdmin() {
   // 저장된 토큰 복원
-  const savedToken = sessionStorage.getItem('smc_admin_token')
+  const savedToken = localStorage.getItem('smc_admin_token')
   if (savedToken) document.getElementById('githubToken').value = savedToken
 
   // 현재 rates.json 로드
@@ -162,7 +162,7 @@ function toggleAuto25p() {
 function saveToken() {
   const tok = document.getElementById('githubToken').value.trim()
   if (tok) {
-    sessionStorage.setItem('smc_admin_token', tok)
+    localStorage.setItem('smc_admin_token', tok)
     setStatus('토큰이 세션에 저장되었습니다.', 'ok')
   }
 }
