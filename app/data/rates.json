@@ -1,0 +1,94 @@
+{
+  "fareTable": [
+    {
+      "keywords": [
+        "서울"
+      ],
+      "label": "서울역",
+      "ktxNormal": 106600,
+      "ktxFirst": 149600
+    },
+    {
+      "keywords": [
+        "수서"
+      ],
+      "label": "수서역",
+      "ktxNormal": 102000,
+      "ktxFirst": 143000
+    },
+    {
+      "keywords": [
+        "천안",
+        "아산"
+      ],
+      "label": "천안아산역",
+      "ktxNormal": 90000,
+      "ktxFirst": 126000
+    },
+    {
+      "keywords": [
+        "오송"
+      ],
+      "label": "오송역",
+      "ktxNormal": 84000,
+      "ktxFirst": 118000
+    },
+    {
+      "keywords": [
+        "대전"
+      ],
+      "label": "대전역",
+      "ktxNormal": 68000,
+      "ktxFirst": 95000
+    },
+    {
+      "keywords": [
+        "부산",
+        "해운대"
+      ],
+      "label": "부산",
+      "bus": 19600
+    },
+    {
+      "keywords": [
+        "대구"
+      ],
+      "label": "동대구역",
+      "ktxNormal": 76000,
+      "ktxFirst": 106000
+    },
+    {
+      "keywords": [
+        "울산"
+      ],
+      "label": "울산",
+      "bus": 29000
+    },
+    {
+      "keywords": [
+        "경주"
+      ],
+      "label": "신경주역",
+      "ktxNormal": 34200,
+      "ktxFirst": 48200
+    },
+    {
+      "keywords": [
+        "전주"
+      ],
+      "label": "전주",
+      "bus": 46000
+    },
+    {
+      "keywords": [
+        "제주"
+      ],
+      "label": "제주",
+      "jeju": true
+    }
+  ],
+  "dailyRate": 35000,
+  "dailyRate25p": 8750,
+  "lodgingRate": 100000,
+  "updatedAt": "2026-07-08"
+}
