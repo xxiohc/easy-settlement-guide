@@ -1,6 +1,6 @@
 // ── 관리자 설정 ──────────────────────────────────────────────────────────────
 // 비밀번호를 변경하려면 아래 값을 수정하세요 (GitHub에 올라가므로 단순 잠금용)
-const ADMIN_PASSWORD = 'smc재무2025'
+const ADMIN_PASSWORD = 'zjfjqtus1@'
 
 const GITHUB_OWNER = 'xxiohc'
 const GITHUB_REPO  = 'easy-settlement-guide'
