@@ -71,6 +71,24 @@ async function initAdmin() {
   renderRateInputs()
 }
 
+// ── 숫자 포맷 헬퍼 ───────────────────────────────────────────────────────────
+const fmt  = n => Number(n).toLocaleString('ko-KR')
+const unFmt = s => +String(s).replace(/,/g, '')
+
+function attachCommaInput(el, onChange) {
+  el.addEventListener('input', () => {
+    const raw = el.value.replace(/,/g, '').replace(/[^\d]/g, '')
+    const num = raw ? +raw : 0
+    const pos = el.selectionStart
+    const prevLen = el.value.length
+    el.value = fmt(num)
+    const newLen = el.value.length
+    el.setSelectionRange(pos + (newLen - prevLen), pos + (newLen - prevLen))
+    onChange(num)
+  })
+  el.addEventListener('focus', () => el.select())
+}
+
 // ── 요금표 렌더링 ─────────────────────────────────────────────────────────────
 function renderFareTable() {
   const tbody = document.getElementById('fareEditorBody')
@@ -82,9 +100,13 @@ function renderFareTable() {
     const isJeju = !!row.jeju
 
     let modeTag
-    if (isKtx)  modeTag = '<span class="fare-tag ktx">KTX</span>'
+    if (isKtx)       modeTag = '<span class="fare-tag ktx">KTX</span>'
     else if (isBus)  modeTag = '<span class="fare-tag bus">버스</span>'
     else if (isJeju) modeTag = '<span class="fare-tag jeju">제주</span>'
+
+    const fareInput = (field, val) =>
+      `<input type="text" inputmode="numeric" class="fare-input"
+              data-i="${i}" data-f="${field}" value="${fmt(val)}" />`
 
     tbody.innerHTML += `
       <tr>
@@ -93,68 +115,64 @@ function renderFareTable() {
           ${isKtx ? 'KTX' : isBus ? '시외버스' : '항공'}
         </td>
         <td style="text-align:center">
-          ${isKtx ? `
-            <input type="number" class="fare-input" data-i="${i}" data-f="ktxNormal"
-                   value="${row.ktxNormal}" step="100" onchange="updateFare(this)" />
-            <span class="fare-unit">원</span>
-          ` : '<span style="color:#e5e8ec">—</span>'}
-        </td>
-        <td style="text-align:center">
-          ${isKtx ? `
-            <input type="number" class="fare-input" data-i="${i}" data-f="ktxFirst"
-                   value="${row.ktxFirst}" step="100" onchange="updateFare(this)" />
-            <span class="fare-unit">원</span>
-          ` : '<span style="color:#e5e8ec">—</span>'}
-        </td>
-        <td style="text-align:center">
-          ${isBus ? `
-            <input type="number" class="fare-input" data-i="${i}" data-f="bus"
-                   value="${row.bus}" step="100" onchange="updateFare(this)" />
-            <span class="fare-unit">원</span>
-          ` : isJeju
-            ? '<span style="font-size:12px;color:#d97706">실비 정산</span>'
+          ${isKtx
+            ? `${fareInput('ktxNormal', row.ktxNormal)}<span class="fare-unit">원</span>`
             : '<span style="color:#e5e8ec">—</span>'}
+        </td>
+        <td style="text-align:center">
+          ${isKtx
+            ? `${fareInput('ktxFirst', row.ktxFirst)}<span class="fare-unit">원</span>`
+            : '<span style="color:#e5e8ec">—</span>'}
+        </td>
+        <td style="text-align:center">
+          ${isBus
+            ? `${fareInput('bus', row.bus)}<span class="fare-unit">원</span>`
+            : isJeju
+              ? '<span style="font-size:12px;color:#d97706">실비 정산</span>'
+              : '<span style="color:#e5e8ec">—</span>'}
         </td>
       </tr>`
   })
-}
 
-function updateFare(el) {
-  const i = +el.dataset.i
-  const f = el.dataset.f
-  currentRates.fareTable[i][f] = +el.value
+  // 이벤트 부착
+  tbody.querySelectorAll('.fare-input').forEach(el => {
+    const i = +el.dataset.i
+    const f = el.dataset.f
+    attachCommaInput(el, num => { currentRates.fareTable[i][f] = num })
+    el.addEventListener('focus', () => el.select())
+  })
 }
 
 // ── 일당/숙박비 렌더링 ────────────────────────────────────────────────────────
 function renderRateInputs() {
-  document.getElementById('inputDailyRate').value    = currentRates.dailyRate
-  document.getElementById('inputDailyRate25p').value = currentRates.dailyRate25p
-  document.getElementById('inputLodgingRate').value  = currentRates.lodgingRate
+  const daily   = document.getElementById('inputDailyRate')
+  const daily25 = document.getElementById('inputDailyRate25p')
+  const lodging = document.getElementById('inputLodgingRate')
 
-  document.getElementById('inputDailyRate').addEventListener('input', e => {
-    currentRates.dailyRate = +e.target.value
+  daily.value   = fmt(currentRates.dailyRate)
+  daily25.value = fmt(currentRates.dailyRate25p)
+  lodging.value = fmt(currentRates.lodgingRate)
+
+  attachCommaInput(daily, num => {
+    currentRates.dailyRate = num
     if (document.getElementById('autoCalc25p').checked) {
-      const v = Math.round(currentRates.dailyRate * 0.25 / 100) * 100
+      const v = Math.round(num * 0.25 / 100) * 100
       currentRates.dailyRate25p = v
-      document.getElementById('inputDailyRate25p').value = v
+      daily25.value = fmt(v)
     }
   })
-  document.getElementById('inputDailyRate25p').addEventListener('input', e => {
-    currentRates.dailyRate25p = +e.target.value
-  })
-  document.getElementById('inputLodgingRate').addEventListener('input', e => {
-    currentRates.lodgingRate = +e.target.value
-  })
+  attachCommaInput(daily25, num => { currentRates.dailyRate25p = num })
+  attachCommaInput(lodging, num => { currentRates.lodgingRate  = num })
 }
 
 function toggleAuto25p() {
-  const auto = document.getElementById('autoCalc25p').checked
-  const input25p = document.getElementById('inputDailyRate25p')
-  input25p.disabled = auto
+  const auto    = document.getElementById('autoCalc25p').checked
+  const daily25 = document.getElementById('inputDailyRate25p')
+  daily25.disabled = auto
   if (auto) {
     const v = Math.round(currentRates.dailyRate * 0.25 / 100) * 100
     currentRates.dailyRate25p = v
-    input25p.value = v
+    daily25.value = fmt(v)
   }
 }
 
