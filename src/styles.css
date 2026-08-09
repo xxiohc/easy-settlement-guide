@@ -25,6 +25,11 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: subpixel-antialiased;
   -moz-osx-font-smoothing: auto;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+}
+@media (max-resolution: 1dppx) {
+  body { font-weight: 500; }
 }
 @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
   body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
