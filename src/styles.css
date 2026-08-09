@@ -11,7 +11,7 @@
   --good: #00a661;
   --shadow-sm: 0 2px 8px rgba(25, 31, 40, 0.06);
   --shadow-md: 0 8px 24px rgba(25, 31, 40, 0.09);
-  font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,8 +25,7 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: subpixel-antialiased;
   -moz-osx-font-smoothing: auto;
-  font-optical-sizing: auto;
-  text-rendering: optimizeLegibility;
+  font-synthesis: none;
 }
 @media (max-resolution: 1dppx) {
   body { font-weight: 500; }
