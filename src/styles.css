@@ -58,7 +58,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   align-items: center;
   justify-content: space-between;
   height: 80px;
-  padding: 0 32px;
+  padding: 0 24px;
 }
 
 .header-brand {
