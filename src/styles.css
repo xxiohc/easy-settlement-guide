@@ -125,6 +125,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 
 .header-progress-text {
+  font-variant-numeric: tabular-nums;
   font-size: 13px;
   color: #8b95a1;
   font-weight: 500;
@@ -207,6 +208,9 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   pointer-events: none;
   overflow-x: hidden;   /* 가로 오버플로 명시적 숨김 */
   overflow-y: auto;
+  /* 스크롤바 자리를 항상 비워 둔다. 회사 윈도우 PC(고전 스크롤바)에서 카드마다
+     스크롤 유무가 달라 내용이 7.5px씩 좌우로 흔들리던 문제. 맥(오버레이)은 영향 없음. */
+  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
 }
 

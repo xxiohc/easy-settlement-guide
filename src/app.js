@@ -1149,6 +1149,9 @@ function selectOnlineMode(isOnline) {
 
   // 교육비 버튼 / 없어요 연동
   prepareCard4Online()
+
+  // 온라인 여부로 단계 수가 바뀐다 — 헤더 진행률·진행바까지 같이 갱신한다
+  updateProgress()
 }
 
 // ── CARD 4: 온라인 교육 시 "없어요" 숨기고 교육비 자동 설정 ────────────────────
@@ -1463,8 +1466,8 @@ function selectFeePresence(hasIt) {
     state.feeStatus = null
   }
 
-  // 트레일 다시 렌더 (5·6번 upcoming 표시)
-  renderTrails()
+  // 등록비 유무로 단계 수가 바뀐다 — 트레일·헤더 진행률·진행바를 함께 갱신한다
+  updateProgress()
   updateDocStrip()
 }
 
