@@ -1,0 +1,1091 @@
+{
+  "origin": "마산",
+  "basis": "KTX 운임표 (202609기준).xls — 구간 중복 시 최고운임 적용",
+  "rule": "직통 우선 → 직통 없으면 환승 최소 → 같으면 최저운임. 환승할인 미반영.",
+  "classes": {
+    "normal": "일반실 운임",
+    "first": "특실 운임+요금 계 (표에 특실이 없는 구간은 null)"
+  },
+  "updatedAt": "2026-09-24",
+  "pairCount": 992,
+  "stationCount": 78,
+  "fares": [
+    {
+      "station": "밀양",
+      "direct": 7500,
+      "oneWay": 7500,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "밀양"
+      ],
+      "oneWayFirst": 10900,
+      "roundTrip": 15000,
+      "roundTripFirst": 21800
+    },
+    {
+      "station": "진영",
+      "direct": 7500,
+      "oneWay": 7500,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "진영"
+      ],
+      "oneWayFirst": 10900,
+      "roundTrip": 15000,
+      "roundTripFirst": 21800
+    },
+    {
+      "station": "진주",
+      "direct": 7500,
+      "oneWay": 7500,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "진주"
+      ],
+      "oneWayFirst": 10900,
+      "roundTrip": 15000,
+      "roundTripFirst": 21800
+    },
+    {
+      "station": "창원",
+      "direct": 7500,
+      "oneWay": 7500,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "창원"
+      ],
+      "oneWayFirst": 10900,
+      "roundTrip": 15000,
+      "roundTripFirst": 21800
+    },
+    {
+      "station": "창원중앙",
+      "direct": 7500,
+      "oneWay": 7500,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "창원중앙"
+      ],
+      "oneWayFirst": 10900,
+      "roundTrip": 15000,
+      "roundTripFirst": 21800
+    },
+    {
+      "station": "경산",
+      "direct": 9500,
+      "oneWay": 9500,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "경산"
+      ],
+      "oneWayFirst": 13800,
+      "roundTrip": 19000,
+      "roundTripFirst": 27600
+    },
+    {
+      "station": "동대구",
+      "direct": 10700,
+      "oneWay": 10700,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "동대구"
+      ],
+      "oneWayFirst": 15500,
+      "roundTrip": 21400,
+      "roundTripFirst": 31000
+    },
+    {
+      "station": "서대구",
+      "direct": 11400,
+      "oneWay": 11400,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "서대구"
+      ],
+      "oneWayFirst": 16500,
+      "roundTrip": 22800,
+      "roundTripFirst": 33000
+    },
+    {
+      "station": "구포",
+      "direct": null,
+      "oneWay": 15000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "밀양",
+        "구포"
+      ],
+      "oneWayFirst": 21800,
+      "roundTrip": 30000,
+      "roundTripFirst": 43600
+    },
+    {
+      "station": "물금",
+      "direct": null,
+      "oneWay": 15000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "밀양",
+        "물금"
+      ],
+      "oneWayFirst": 21800,
+      "roundTrip": 30000,
+      "roundTripFirst": 43600
+    },
+    {
+      "station": "부산",
+      "direct": null,
+      "oneWay": 15000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "밀양",
+        "부산"
+      ],
+      "oneWayFirst": 21800,
+      "roundTrip": 30000,
+      "roundTripFirst": 43600
+    },
+    {
+      "station": "김천구미",
+      "direct": 17100,
+      "oneWay": 17100,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "김천구미"
+      ],
+      "oneWayFirst": 24800,
+      "roundTrip": 34200,
+      "roundTripFirst": 49600
+    },
+    {
+      "station": "경주",
+      "direct": null,
+      "oneWay": 18200,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "동대구",
+        "경주"
+      ],
+      "oneWayFirst": 26400,
+      "roundTrip": 36400,
+      "roundTripFirst": 52800
+    },
+    {
+      "station": "울산",
+      "direct": null,
+      "oneWay": 20200,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "동대구",
+        "울산"
+      ],
+      "oneWayFirst": 29300,
+      "roundTrip": 40400,
+      "roundTripFirst": 58600
+    },
+    {
+      "station": "포항",
+      "direct": null,
+      "oneWay": 20800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "동대구",
+        "포항"
+      ],
+      "oneWayFirst": 30100,
+      "roundTrip": 41600,
+      "roundTripFirst": 60200
+    },
+    {
+      "station": "대전",
+      "direct": 27400,
+      "oneWay": 27400,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "대전"
+      ],
+      "oneWayFirst": 39700,
+      "roundTrip": 54800,
+      "roundTripFirst": 79400
+    },
+    {
+      "station": "영덕",
+      "direct": null,
+      "oneWay": 29200,
+      "transfers": 2,
+      "path": [
+        "마산",
+        "동대구",
+        "경주",
+        "영덕"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 58400,
+      "roundTripFirst": null
+    },
+    {
+      "station": "오송",
+      "direct": 32100,
+      "oneWay": 32100,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "오송"
+      ],
+      "oneWayFirst": 46500,
+      "roundTrip": 64200,
+      "roundTripFirst": 93000
+    },
+    {
+      "station": "울진",
+      "direct": null,
+      "oneWay": 35500,
+      "transfers": 2,
+      "path": [
+        "마산",
+        "동대구",
+        "포항",
+        "울진"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 71000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "천안아산",
+      "direct": 36100,
+      "oneWay": 36100,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "천안아산"
+      ],
+      "oneWayFirst": 52300,
+      "roundTrip": 72200,
+      "roundTripFirst": 104600
+    },
+    {
+      "station": "수원",
+      "direct": null,
+      "oneWay": 38800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "김천구미",
+        "수원"
+      ],
+      "oneWayFirst": 56300,
+      "roundTrip": 77600,
+      "roundTripFirst": 112600
+    },
+    {
+      "station": "계룡",
+      "direct": null,
+      "oneWay": 39600,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "계룡"
+      ],
+      "oneWayFirst": 57400,
+      "roundTrip": 79200,
+      "roundTripFirst": 114800
+    },
+    {
+      "station": "공주",
+      "direct": null,
+      "oneWay": 39600,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "공주"
+      ],
+      "oneWayFirst": 57400,
+      "roundTrip": 79200,
+      "roundTripFirst": 114800
+    },
+    {
+      "station": "서대전",
+      "direct": null,
+      "oneWay": 39600,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "서대전"
+      ],
+      "oneWayFirst": 57400,
+      "roundTrip": 79200,
+      "roundTripFirst": 114800
+    },
+    {
+      "station": "평택지제",
+      "direct": 39600,
+      "oneWay": 39600,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "평택지제"
+      ],
+      "oneWayFirst": 57400,
+      "roundTrip": 79200,
+      "roundTripFirst": 114800
+    },
+    {
+      "station": "논산",
+      "direct": null,
+      "oneWay": 41000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "논산"
+      ],
+      "oneWayFirst": 59400,
+      "roundTrip": 82000,
+      "roundTripFirst": 118800
+    },
+    {
+      "station": "영등포",
+      "direct": null,
+      "oneWay": 41700,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "김천구미",
+        "영등포"
+      ],
+      "oneWayFirst": 60500,
+      "roundTrip": 83400,
+      "roundTripFirst": 121000
+    },
+    {
+      "station": "동탄",
+      "direct": 42600,
+      "oneWay": 42600,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "동탄"
+      ],
+      "oneWayFirst": 61800,
+      "roundTrip": 85200,
+      "roundTripFirst": 123600
+    },
+    {
+      "station": "삼척",
+      "direct": null,
+      "oneWay": 43500,
+      "transfers": 2,
+      "path": [
+        "마산",
+        "동대구",
+        "포항",
+        "삼척"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 87000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "익산",
+      "direct": null,
+      "oneWay": 44900,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "익산"
+      ],
+      "oneWayFirst": 65100,
+      "roundTrip": 89800,
+      "roundTripFirst": 130200
+    },
+    {
+      "station": "김제",
+      "direct": null,
+      "oneWay": 46400,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "김제"
+      ],
+      "oneWayFirst": 67200,
+      "roundTrip": 92800,
+      "roundTripFirst": 134400
+    },
+    {
+      "station": "광명",
+      "direct": 46500,
+      "oneWay": 46500,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "광명"
+      ],
+      "oneWayFirst": 67400,
+      "roundTrip": 93000,
+      "roundTripFirst": 134800
+    },
+    {
+      "station": "수서",
+      "direct": 47200,
+      "oneWay": 47200,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "수서"
+      ],
+      "oneWayFirst": 68400,
+      "roundTrip": 94400,
+      "roundTripFirst": 136800
+    },
+    {
+      "station": "전주",
+      "direct": null,
+      "oneWay": 47200,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "전주"
+      ],
+      "oneWayFirst": 68400,
+      "roundTrip": 94400,
+      "roundTripFirst": 136800
+    },
+    {
+      "station": "서울",
+      "direct": 48600,
+      "oneWay": 48600,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "서울"
+      ],
+      "oneWayFirst": 70500,
+      "roundTrip": 97200,
+      "roundTripFirst": 141000
+    },
+    {
+      "station": "용산",
+      "direct": null,
+      "oneWay": 48600,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "천안아산",
+        "용산"
+      ],
+      "oneWayFirst": 70400,
+      "roundTrip": 97200,
+      "roundTripFirst": 140800
+    },
+    {
+      "station": "행신",
+      "direct": 50000,
+      "oneWay": 50000,
+      "transfers": 0,
+      "path": [
+        "마산",
+        "행신"
+      ],
+      "oneWayFirst": 72500,
+      "roundTrip": 100000,
+      "roundTripFirst": 145000
+    },
+    {
+      "station": "정읍",
+      "direct": null,
+      "oneWay": 50800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "정읍"
+      ],
+      "oneWayFirst": 73600,
+      "roundTrip": 101600,
+      "roundTripFirst": 147200
+    },
+    {
+      "station": "장성",
+      "direct": null,
+      "oneWay": 51800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "장성"
+      ],
+      "oneWayFirst": 75100,
+      "roundTrip": 103600,
+      "roundTripFirst": 150200
+    },
+    {
+      "station": "남원",
+      "direct": null,
+      "oneWay": 52100,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "남원"
+      ],
+      "oneWayFirst": 75500,
+      "roundTrip": 104200,
+      "roundTripFirst": 151000
+    },
+    {
+      "station": "곡성",
+      "direct": null,
+      "oneWay": 53700,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "곡성"
+      ],
+      "oneWayFirst": 77800,
+      "roundTrip": 107400,
+      "roundTripFirst": 155600
+    },
+    {
+      "station": "구례구",
+      "direct": null,
+      "oneWay": 55600,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "구례구"
+      ],
+      "oneWayFirst": 80600,
+      "roundTrip": 111200,
+      "roundTripFirst": 161200
+    },
+    {
+      "station": "함평",
+      "direct": null,
+      "oneWay": 56300,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "함평"
+      ],
+      "oneWayFirst": 81600,
+      "roundTrip": 112600,
+      "roundTripFirst": 163200
+    },
+    {
+      "station": "덕소",
+      "direct": null,
+      "oneWay": 57000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "덕소"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 114000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "상봉",
+      "direct": null,
+      "oneWay": 57000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "상봉"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 114000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "양평",
+      "direct": null,
+      "oneWay": 57000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "양평"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 114000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "청량리",
+      "direct": null,
+      "oneWay": 57000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "청량리"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 114000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "광주송정",
+      "direct": null,
+      "oneWay": 57800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "광주송정"
+      ],
+      "oneWayFirst": 83800,
+      "roundTrip": 115600,
+      "roundTripFirst": 167600
+    },
+    {
+      "station": "순천",
+      "direct": null,
+      "oneWay": 58000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "순천"
+      ],
+      "oneWayFirst": 84100,
+      "roundTrip": 116000,
+      "roundTripFirst": 168200
+    },
+    {
+      "station": "서원주",
+      "direct": null,
+      "oneWay": 59200,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "서원주"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 118400,
+      "roundTripFirst": null
+    },
+    {
+      "station": "나주",
+      "direct": null,
+      "oneWay": 59300,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "나주"
+      ],
+      "oneWayFirst": 85900,
+      "roundTrip": 118600,
+      "roundTripFirst": 171800
+    },
+    {
+      "station": "만종",
+      "direct": null,
+      "oneWay": 60000,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "만종"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 120000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "여천",
+      "direct": null,
+      "oneWay": 60300,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "여천"
+      ],
+      "oneWayFirst": 87400,
+      "roundTrip": 120600,
+      "roundTripFirst": 174800
+    },
+    {
+      "station": "원주",
+      "direct": null,
+      "oneWay": 60400,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "원주"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 120800,
+      "roundTripFirst": null
+    },
+    {
+      "station": "여수엑스포",
+      "direct": null,
+      "oneWay": 61200,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "여수엑스포"
+      ],
+      "oneWayFirst": 88700,
+      "roundTrip": 122400,
+      "roundTripFirst": 177400
+    },
+    {
+      "station": "횡성",
+      "direct": null,
+      "oneWay": 62500,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "횡성"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 125000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "목포",
+      "direct": null,
+      "oneWay": 63800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "오송",
+        "목포"
+      ],
+      "oneWayFirst": 92500,
+      "roundTrip": 127600,
+      "roundTripFirst": 185000
+    },
+    {
+      "station": "둔내",
+      "direct": null,
+      "oneWay": 65400,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "둔내"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 130800,
+      "roundTripFirst": null
+    },
+    {
+      "station": "제천",
+      "direct": null,
+      "oneWay": 65600,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "제천"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 131200,
+      "roundTripFirst": null
+    },
+    {
+      "station": "평창",
+      "direct": null,
+      "oneWay": 68300,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "평창"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 136600,
+      "roundTripFirst": null
+    },
+    {
+      "station": "단양",
+      "direct": null,
+      "oneWay": 68800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "단양"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 137600,
+      "roundTripFirst": null
+    },
+    {
+      "station": "진부",
+      "direct": null,
+      "oneWay": 70500,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "진부"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 141000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "풍기",
+      "direct": null,
+      "oneWay": 71800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "풍기"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 143600,
+      "roundTripFirst": null
+    },
+    {
+      "station": "영주",
+      "direct": null,
+      "oneWay": 73600,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "영주"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 147200,
+      "roundTripFirst": null
+    },
+    {
+      "station": "강릉",
+      "direct": null,
+      "oneWay": 76200,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "강릉"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 152400,
+      "roundTripFirst": null
+    },
+    {
+      "station": "정동진",
+      "direct": null,
+      "oneWay": 76900,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "정동진"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 153800,
+      "roundTripFirst": null
+    },
+    {
+      "station": "안동",
+      "direct": null,
+      "oneWay": 77900,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "안동"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 155800,
+      "roundTripFirst": null
+    },
+    {
+      "station": "묵호",
+      "direct": null,
+      "oneWay": 79300,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "묵호"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 158600,
+      "roundTripFirst": null
+    },
+    {
+      "station": "동해",
+      "direct": null,
+      "oneWay": 79900,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "동해"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 159800,
+      "roundTripFirst": null
+    },
+    {
+      "station": "의성",
+      "direct": null,
+      "oneWay": 81500,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "의성"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 163000,
+      "roundTripFirst": null
+    },
+    {
+      "station": "영천",
+      "direct": null,
+      "oneWay": 88800,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "영천"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 177600,
+      "roundTripFirst": null
+    },
+    {
+      "station": "북울산",
+      "direct": null,
+      "oneWay": 97700,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "북울산"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 195400,
+      "roundTripFirst": null
+    },
+    {
+      "station": "태화강",
+      "direct": null,
+      "oneWay": 99100,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "태화강"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 198200,
+      "roundTripFirst": null
+    },
+    {
+      "station": "남창",
+      "direct": null,
+      "oneWay": 100700,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "남창"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 201400,
+      "roundTripFirst": null
+    },
+    {
+      "station": "기장",
+      "direct": null,
+      "oneWay": 103100,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "기장"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 206200,
+      "roundTripFirst": null
+    },
+    {
+      "station": "신해운대",
+      "direct": null,
+      "oneWay": 104100,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "신해운대"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 208200,
+      "roundTripFirst": null
+    },
+    {
+      "station": "센텀",
+      "direct": null,
+      "oneWay": 104700,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "센텀"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 209400,
+      "roundTripFirst": null
+    },
+    {
+      "station": "부전",
+      "direct": null,
+      "oneWay": 105700,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "서울",
+        "부전"
+      ],
+      "oneWayFirst": null,
+      "roundTrip": 211400,
+      "roundTripFirst": null
+    }
+  ]
+}

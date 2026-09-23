@@ -16,3 +16,6 @@ test-docs/
 .vscode/
 *.swp
 .vercel
+
+# 파이썬 생성 파일
+__pycache__/

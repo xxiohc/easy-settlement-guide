@@ -50,19 +50,24 @@ const state = {
   formEditMode: false,  // 출장신청서 수정 패널 열림 여부
 }
 
-// ── KTX / 버스 운임표 (마산역 출발 왕복) — data/rates.json 에서 로드됨 ────────
+// ── KTX / 버스 운임표 (마산역 출발 왕복) ──────────────────────────────────────
+// 금액·경로는 tools/build_fares.py 가 data/source 의 KORAIL 운임표에서 생성한다.
+// 직접 고치지 말 것 — 고치면 다음 생성 때 되돌아간다. 실제 값은 data/rates.json
+// 에서 덮어쓰며, 아래 배열은 로드 실패 시 쓰는 같은 값의 사본이다.
 let FARE_TABLE = [
-  { keywords: ['서울'],          label: '서울역',    ktxNormal: 106600, ktxFirst: 149600 },
-  { keywords: ['수서'],          label: '수서역',    ktxNormal: 102000, ktxFirst: 143000 },
-  { keywords: ['천안', '아산'],  label: '천안아산역', ktxNormal: 90000,  ktxFirst: 126000 },
-  { keywords: ['오송'],          label: '오송역',    ktxNormal: 84000,  ktxFirst: 118000 },
-  { keywords: ['대전'],          label: '대전역',    ktxNormal: 68000,  ktxFirst: 95000  },
-  { keywords: ['부산', '해운대'], label: '부산',     bus: 19600 },
-  { keywords: ['대구'],          label: '동대구역',  ktxNormal: 76000,  ktxFirst: 106000 },
-  { keywords: ['울산'],          label: '울산',      bus: 29000 },
-  { keywords: ['경주'],          label: '신경주역',   ktxNormal: 34200,  ktxFirst: 48200  },
-  { keywords: ['전주'],          label: '전주',      bus: 46000 },
-  { keywords: ['제주'],          label: '제주',      jeju: true },
+// <fare-table:auto>
+  { keywords: ['서울'], label: '서울역', station: '서울', ktxNormal: 97200, ktxFirst: 141000, oneWayNormal: 48600, oneWayFirst: 70500, transfers: 0, path: ['마산', '서울'] },
+  { keywords: ['수서'], label: '수서역', station: '수서', ktxNormal: 94400, ktxFirst: 136800, oneWayNormal: 47200, oneWayFirst: 68400, transfers: 0, path: ['마산', '수서'] },
+  { keywords: ['천안', '아산'], label: '천안아산역', station: '천안아산', ktxNormal: 72200, ktxFirst: 104600, oneWayNormal: 36100, oneWayFirst: 52300, transfers: 0, path: ['마산', '천안아산'] },
+  { keywords: ['오송'], label: '오송역', station: '오송', ktxNormal: 64200, ktxFirst: 93000, oneWayNormal: 32100, oneWayFirst: 46500, transfers: 0, path: ['마산', '오송'] },
+  { keywords: ['대전'], label: '대전역', station: '대전', ktxNormal: 54800, ktxFirst: 79400, oneWayNormal: 27400, oneWayFirst: 39700, transfers: 0, path: ['마산', '대전'] },
+  { keywords: ['부산', '해운대'], label: '부산', bus: 19600 },
+  { keywords: ['대구'], label: '동대구역', station: '동대구', ktxNormal: 21400, ktxFirst: 31000, oneWayNormal: 10700, oneWayFirst: 15500, transfers: 0, path: ['마산', '동대구'] },
+  { keywords: ['울산'], label: '울산', bus: 29000 },
+  { keywords: ['경주'], label: '경주역', station: '경주', ktxNormal: 36400, ktxFirst: 52800, oneWayNormal: 18200, oneWayFirst: 26400, transfers: 1, path: ['마산', '동대구', '경주'] },
+  { keywords: ['전주'], label: '전주', bus: 46000 },
+  { keywords: ['제주'], label: '제주', jeju: true },
+// </fare-table:auto>
 ]
 
 let DAILY_RATE     = 35000
@@ -1682,7 +1687,11 @@ function prepareCard9() {
   } else if (fare) {
     const useFirst = state.isMS && fare.ktxFirst
     const fareAmt = useFirst ? fare.ktxFirst : (fare.ktxNormal ?? fare.bus ?? 0)
-    const routeNote = `왕복 기준 · 마산역 → ${fare.label}`
+    const route = fareRouteText(fare)
+    const oneWay = fareAmt / 2
+    const routeNote = route
+      ? `마산역 → ${fare.label} · ${route} · 편도 ${oneWay.toLocaleString()}원 × 2회`
+      : `왕복 기준 · 마산역 → ${fare.label}`
     const fareLabel = fare.bus
       ? `시외버스 (${fare.label})`
       : `KTX ${useFirst ? '특실' : '일반실'} (${fare.label})`
@@ -1802,6 +1811,14 @@ function getFare(place) {
   return null
 }
 
+// 운임 행 → "직통" / "동대구 환승 1회" 같은 경로 한 줄. 버스·항공 행은 빈 문자열.
+function fareRouteText(fare) {
+  if (!fare || !Array.isArray(fare.path) || fare.path.length < 2) return ''
+  if (!fare.transfers) return '직통'
+  const via = fare.path.slice(1, -1).join('·')
+  return `${via} 환승 ${fare.transfers}회`
+}
+
 // ── 출장신청서 미리보기 ────────────────────────────────────────────────────────
 function renderTripFormPreview() {
   const el = document.getElementById('tripFormWrap')
@@ -1908,14 +1925,17 @@ function renderTripFormPreview() {
       const half      = fareAmt / 2
       const modeLabel = fare.bus ? '시외버스' : `KTX(${useFirst ? '특실' : '일반'})`
       const dest      = fare.label
+      const route     = fareRouteText(fare)
+      const viaGo     = fare.transfers ? ` [${fare.path.slice(1, -1).join(' → ')} 환승]` : ''
+      const viaBack   = fare.transfers ? ` [${fare.path.slice(1, -1).reverse().join(' → ')} 환승]` : ''
       fareTotal = fareAmt
       fareRows = `
         <tr>
           <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
-          <td class="tf-td">마산 → ${dest}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+          <td class="tf-td">마산 → ${dest}${viaGo}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
         </tr>
         <tr>
-          <td class="tf-td">${dest} → 마산&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+          <td class="tf-td">${dest} → 마산${viaBack}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
         </tr>`
     } else if (state.region || state.place) {
       fareRows = `<tr>
