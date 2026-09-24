@@ -112,3 +112,51 @@ test('귀가편은 종료시각 이후 편으로 잡는다', () => {
   assert.ok(p.ret && p.ret.leg)
   assert.ok(p.ret.leg.dep >= 17 * 60 + p.best.access)
 })
+
+// ── 정산서 교통비 연동 ───────────────────────────────────────────────────────
+// 역산이 수서역을 고르는데 정산서에는 서울역 운임이 적히면 가장 큰 사고다.
+// settlementFare 가 화면 안내와 같은 역·같은 금액을 내는지 고정한다.
+const RATES = rd('rates.json')
+const regionFare = kw => RATES.fareTable.find(r => r.keywords.some(k => kw.includes(k)))
+
+test('정산 교통비는 역산이 고른 역의 운임을 쓴다 (삼성서울병원 → 수서)', () => {
+  const f = R.settlementFare(planFor('삼성서울병원'))
+  assert.ok(f)
+  assert.equal(f.station, '수서')
+  assert.equal(f.oneWay, 47200)
+  assert.equal(f.roundTrip, 94400)
+  assert.equal(f.roundTrip, f.oneWay * 2)
+  // 지역 운임표만 보던 기존 방식은 '서울'로 잡혀 97,200원이 나왔다 — 2,800원 과다.
+  assert.equal(regionFare('서울').ktxNormal, 97200)
+  assert.ok(f.roundTrip < regionFare('서울').ktxNormal)
+})
+
+test('정산 교통비는 서울역 건에서 서울역 운임 그대로다 (서울지방국세청)', () => {
+  const f = R.settlementFare(planFor('서울지방국세청'))
+  assert.ok(f)
+  assert.equal(f.station, '서울')
+  assert.equal(f.roundTrip, 97200)
+  assert.equal(f.roundTrip, regionFare('서울').ktxNormal)
+  assert.equal(f.transfers, 0)
+})
+
+test('특실(의료원장 동행) 지정 시 특실 운임으로 정산된다', () => {
+  const f = R.settlementFare(planFor('서울지방국세청', 14 * 60, { isMS: true }))
+  assert.equal(f.grade, '특실')
+  assert.equal(f.roundTrip, 141000)
+})
+
+test('환승편이 잡히면 경유역이 정산 경로에 남는다', () => {
+  const f = R.settlementFare(planFor('삼성서울병원'))
+  if (f.transfers > 0) assert.ok(f.via.length > 0, '환승인데 경유역이 비어 있다')
+})
+
+test('역산이 실패하면 정산 교통비는 null이다 (기존 운임표로 되돌아간다)', () => {
+  assert.equal(R.settlementFare(null), null)
+  assert.equal(R.settlementFare({ ok: false, reason: 'no-train' }), null)
+})
+
+test('rates.json 동대구 왕복은 76,000원이 아니라 21,400원이다', () => {
+  assert.equal(regionFare('대구').ktxNormal, 21400)
+  assert.equal(regionFare('대구').oneWayNormal, 10700)
+})

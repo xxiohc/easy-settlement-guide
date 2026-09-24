@@ -1737,13 +1737,23 @@ function prepareCard9() {
   const breakdown = []
   let total = 0
 
-  // 1. 교통비 (지역 기준으로 운임 조회)
+  // 1. 교통비 — 역산으로 도착역이 정해지면 그 역 운임을 쓴다.
+  // (예: 삼성서울병원은 서울역이 아니라 수서역이 나오므로 금액도 수서역 기준이어야 한다)
   const fare = getFare(state.region || state.place)
+  const rf   = isJeju ? null : routeFare()
   if (isJeju) {
     breakdown.push({ label: '항공료 (제주)', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
     if (state.hasShuttle === true) {
       breakdown.push({ label: '공항 셔틀버스', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
     }
+  } else if (rf) {
+    const kind = rf.transfers ? `${rf.via.join('·')} 환승 ${rf.transfers}회` : '직통'
+    breakdown.push({
+      label: `KTX ${rf.grade} (${rf.station}역)`,
+      amount: rf.roundTrip,
+      note: `마산역 ${fmtTime(rf.dep)} 출발 · ${kind} · 편도 ${rf.oneWay.toLocaleString()}원 × 2회`,
+    })
+    total += rf.roundTrip
   } else if (fare) {
     const useFirst = state.isMS && fare.ktxFirst
     const fareAmt = useFirst ? fare.ktxFirst : (fare.ktxNormal ?? fare.bus ?? 0)
@@ -1952,6 +1962,12 @@ function manualPickHtml() {
   </div>`
 }
 
+// 도착역·이동시간을 바꾸면 안내 패널뿐 아니라 예상금액 교통비도 같이 바뀌어야 한다.
+function refreshAmountAndRoute() {
+  if (typeof prepareCard9 === 'function' && document.getElementById('amountBreakdown')) prepareCard9()
+  else renderRoutePanel()
+}
+
 function applyAccessOverride() {
   const st = document.getElementById('routeFixStation')?.value
   const raw = document.getElementById('routeFixMin')?.value
@@ -1960,13 +1976,53 @@ function applyAccessOverride() {
   if (!raw || !Number.isFinite(min) || min < 0) return
   state.accessOverride = { ...state.accessOverride, [st]: Math.round(min) }
   state.pinStation = st
-  renderRoutePanel()
+  refreshAmountAndRoute()
 }
 
 function clearAccessOverride() {
   state.accessOverride = {}
   state.pinStation = null
-  renderRoutePanel()
+  refreshAmountAndRoute()
+}
+
+// 역산 계산만 떼어낸 함수. 화면 안내(renderRoutePanel)와 정산 교통비가 서로 다른 역을
+// 가리키지 않도록, 두 곳이 모두 이 함수 하나를 부른다.
+function computeRoutePlan() {
+  if (state.isOnline) return { skip: 'online' }
+  if (state.isJeju)   return { skip: 'jeju' }
+  const busFare = getFare(state.region || state.place)
+  if (busFare && busFare.bus) return { skip: 'bus', busFare }
+  if (!KtxRoute.ready) return { skip: 'data' }
+
+  const startMin = toMinutes(state.startTime)
+  if (startMin == null) return { skip: 'notime' }
+  const dow  = tripDow()
+  const dest = routeDestination()
+
+  // 좌표를 모르는 기관(앱에 등재도 안 됐고 장소 검색도 안 한 경우)은
+  // 도착역과 역→목적지 이동시간을 직접 받아 같은 역산을 돌린다.
+  if (!dest) {
+    const pin  = state.pinStation
+    const mins = pin ? state.accessOverride[pin] : null
+    if (!pin || !Number.isFinite(mins)) return { skip: 'needmanual' }
+    return { manual: true, dest: null, dow, plan: planFromStation({
+      station: pin, accessMin: mins, startMin, dow,
+      isMS: state.isMS === true, endMin: toMinutes(state.endTime),
+    }) }
+  }
+  return { manual: false, dest, dow, plan: planTrip({
+    lat: dest.lat, lon: dest.lon, startMin, dow,
+    isMS: state.isMS === true, endMin: toMinutes(state.endTime),
+    destRow: dest.row || null, access: state.accessOverride, only: state.pinStation,
+  }) }
+}
+
+// 정산 교통비에 그대로 넣을 금액·경로. 역산이 성립할 때만 값을 주고, 안 되면 null을
+// 돌려 기존 지역 운임표(getFare)로 되돌아간다.
+function routeFare() {
+  const r = computeRoutePlan()
+  if (!r || r.skip) return null
+  return settlementFare(r.plan)
 }
 
 function renderRoutePanel() {
@@ -1980,48 +2036,25 @@ function renderRoutePanel() {
     el.className = 'route-panel'
     el.innerHTML = html
   }
-  if (state.isOnline) return hide('')
-  if (state.isJeju)  return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
 
-  const fare = getFare(state.region || state.place)
-  if (fare && fare.bus) {
-    return hide(`🚌 ${escapeHtml(fare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. (왕복 ${fare.bus.toLocaleString()}원)`)
+  const r = computeRoutePlan()
+  if (r.skip === 'online') return hide('')
+  if (r.skip === 'jeju')   return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
+  if (r.skip === 'bus') {
+    return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
   }
-  if (!KtxRoute.ready) return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
-
-  const startMin = toMinutes(state.startTime)
-  if (startMin == null) {
+  if (r.skip === 'data')   return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
+  if (r.skip === 'notime') {
     return hide('🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시각)')
   }
-  const dow = tripDow()
-  const dest = routeDestination()
-
-  // 좌표를 모르는 기관(앱에 등재도 안 됐고 장소 검색도 안 한 경우)은
-  // 도착역과 역→목적지 이동시간을 직접 받아 같은 역산을 돌린다.
-  let plan, manual = false
-  if (!dest) {
-    const pin = state.pinStation
-    const mins = pin ? state.accessOverride[pin] : null
-    if (!pin || !Number.isFinite(mins)) {
-      el.className = 'route-panel route-panel-bare'
-      el.innerHTML = `<div class="route-empty">🚄 출장 장소를 검색해서 고르면 도착역과 기차편을 자동으로 계산해 드려요.
-        검색이 안 되는 곳이면 아래에서 내릴 역과 이동시간을 직접 넣어 주세요.</div>
-        ${manualPickHtml()}`
-      return
-    }
-    manual = true
-    plan = planFromStation({
-      station: pin, accessMin: mins, startMin, dow,
-      isMS: state.isMS === true, endMin: toMinutes(state.endTime),
-    })
-  } else {
-    plan = planTrip({
-      lat: dest.lat, lon: dest.lon, startMin, dow,
-      isMS: state.isMS === true, endMin: toMinutes(state.endTime),
-      destRow: dest.row || null, access: state.accessOverride, only: state.pinStation,
-    })
+  if (r.skip === 'needmanual') {
+    el.className = 'route-panel route-panel-bare'
+    el.innerHTML = `<div class="route-empty">🚄 출장 장소를 검색해서 고르면 도착역과 기차편을 자동으로 계산해 드려요.
+      검색이 안 되는 곳이면 아래에서 내릴 역과 이동시간을 직접 넣어 주세요.</div>
+      ${manualPickHtml()}`
+    return
   }
-
+  const { plan, dest, manual, dow } = r
   if (!plan.ok && manual) {
     return hide(`🚄 ${escapeHtml(state.pinStation)}역으로는 시작시각 ${state.startTime} 전에 닿는 당일 열차가 없어요. 다른 역을 골라 보세요.`)
   }
@@ -2171,8 +2204,10 @@ function renderTripFormPreview() {
   }
 
   // ── 교통비 행 ──
+  // 역산으로 도착역이 정해졌으면 그 역 운임으로 적는다(화면 안내와 같은 역·같은 금액).
   let fareRows = ''
   let fareTotal = 0
+  const sheetRouteFare = isJeju ? null : routeFare()
   if (isJeju) {
     fareRows = `
       <tr>
@@ -2195,6 +2230,21 @@ function renderTripFormPreview() {
       </tr>
       <tr>
         <td class="tf-td" style="color:#8b95a1;font-size:12px">수정 패널에서 직접 입력한 금액</td>
+      </tr>`
+  } else if (sheetRouteFare) {
+    const rfs      = sheetRouteFare
+    const half     = rfs.oneWay
+    const viaGo    = rfs.transfers ? ` [${rfs.via.join(' → ')} 환승]` : ''
+    const viaBack  = rfs.transfers ? ` [${[...rfs.via].reverse().join(' → ')} 환승]` : ''
+    const modeLabel = `KTX(${rfs.grade === '특실' ? '특실' : '일반'})`
+    fareTotal = rfs.roundTrip
+    fareRows = `
+      <tr>
+        <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
+        <td class="tf-td">마산 → ${rfs.station}역${viaGo}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+      </tr>
+      <tr>
+        <td class="tf-td">${rfs.station}역 → 마산${viaBack}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
       </tr>`
   } else {
     const fare = getFare(state.region || state.place)

@@ -337,6 +337,26 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
   return { ok: true, best, alternatives, ret, noBuffer, destRow: destRow || null }
 }
 
+// 역산 결과 → 정산서에 그대로 적는 교통비. 화면 안내와 정산 금액이 서로 다른 역을
+// 가리키지 않도록, 금액·경로를 여기 한 곳에서만 만든다.
+// 운임표에 없는 역이면 null을 돌려 앱이 기존 지역 운임표로 되돌아가게 한다.
+function settlementFare(plan) {
+  if (!plan || !plan.ok || !plan.best) return null
+  const b = plan.best
+  if (!b.fare || !Number.isFinite(b.fare.roundTrip) || !Number.isFinite(b.fare.oneWay)) return null
+  return {
+    station: b.station,
+    grade: b.fare.grade,
+    oneWay: b.fare.oneWay,
+    roundTrip: b.fare.roundTrip,
+    transfers: b.transfers,
+    via: b.via || [],
+    dep: b.dep,
+    arr: b.arr,
+    access: b.access,
+  }
+}
+
 // 목적지 좌표가 없을 때(등재 기관도 아니고 장소 검색도 하지 않은 경우) 쓰는 폴백.
 // 사용자가 고른 도착역과 역→목적지 이동시간만으로 같은 역산을 돌린다.
 function planFromStation({ station, accessMin, startMin, dow, isMS, endMin }) {
@@ -373,7 +393,7 @@ function planPreviousDay({ lat, lon, dow, destRow, access }) {
 
 if (typeof module !== 'undefined') {
   module.exports = { KtxRoute, loadRouteData, initRouteData, planTrip, planPreviousDay,
-                     planFromStation, fareStationNames,
+                     planFromStation, fareStationNames, settlementFare,
                      accessMinutes, accessInfo, findDestination, haversineKm, fmtTime, fmtDur,
                      findItineraries, candidateStations, fareOf }
 }
