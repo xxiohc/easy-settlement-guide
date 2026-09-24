@@ -2806,6 +2806,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   await Promise.all([loadRates(), loadRouteData()])
   updateProgress()
 
+  // overflow:clip 미지원 브라우저(사파리 15 이하) 폴백 — 카드 뷰포트는 절대 스크롤되지 않는다
+  const cardViewport = document.getElementById('cardViewport')
+  cardViewport.addEventListener('scroll', () => {
+    if (cardViewport.scrollLeft !== 0) cardViewport.scrollLeft = 0
+    if (cardViewport.scrollTop !== 0) cardViewport.scrollTop = 0
+  })
+
   // 장소 검색 드롭다운 외부 클릭 시 닫기
   document.addEventListener('click', e => {
     const placeWrap = document.getElementById('input-place')?.closest('.place-input-wrap')

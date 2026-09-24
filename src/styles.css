@@ -192,7 +192,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .card-viewport {
   flex: 1;
   position: relative;
+  /* overflow:hidden 이면 사파리가 "클릭한 요소를 보이게" 하려고 이 박스를 가로로 스크롤해
+     (대기 카드가 translateX(100%) 로 오른쪽에 쌓여 scrollWidth 가 2배다)
+     카드 전체가 왼쪽으로 밀린다 — 노트북 폭일수록 크게 밀린다. clip 은 스크롤 박스를 안 만든다. */
   overflow: hidden;
+  overflow: clip;
 }
 
 /* ── 카드 ── */
@@ -243,6 +247,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 /* ── 단계 인디케이터 트레일 ── */
 .step-trail {
+  flex-shrink: 0;
   display: flex;
   align-items: center;   /* 모든 dot을 수평 중심선에 정렬 */
   gap: 4px;
@@ -333,6 +338,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 /* 현재 단계 텍스트 — trail 바깥 형제 요소 (overflow clipping 없음) */
 .trail-current-info {
+  /* 카드가 세로 flex 라 내용이 길면 이 줄이 min-height(20px)까지 눌려 글자가 잘렸다 */
+  flex-shrink: 0;
   padding: 4px 20px 10px;
   font-size: 11px;
   font-weight: 700;
@@ -456,14 +463,16 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+    /* stretch(기본)면 짝이 되는 칸이 긴 쪽 높이만큼 늘어나 빈 상자가 생긴다 */
+    align-items: start;
   }
   #card-4 .info-fields-wrap .info-field {
     margin-bottom: 0;
   }
-  /* 교육명·기간·등록비는 full width 유지 */
+  /* 교육형태·교육명·등록비는 full width — 등록비는 금액입력·기준안내가 붙어 가장 길다 */
   #card-4 .info-fields-wrap .info-field:nth-child(1),
   #card-4 .info-fields-wrap .info-field:nth-child(2),
-  #card-4 .info-fields-wrap .info-field:nth-child(5) {
+  #card-4 .info-fields-wrap .info-field:nth-child(7) {
     grid-column: 1 / -1;
   }
 }
@@ -773,6 +782,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 /* ── 카드 하단 CTA ── */
 .card-footer {
+  flex-shrink: 0;
   padding: 12px 24px 32px;
   background: #fff;
   max-width: 560px;
@@ -1477,6 +1487,13 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   flex-shrink: 0;
   display: flex;
   align-items: center;
+}
+
+/* 360px 폭(갤럭시 S 계열 기본)에서 "10월 12일 (월)" 이 말줄임으로 잘리던 것 — 여백을 좁혀 글자를 살린다 */
+@media (max-width: 385px) {
+  .date-range-wrap { gap: 6px; }
+  .date-input-box { padding: 10px 9px; gap: 6px; }
+  .date-input-box.has-value .date-placeholder { font-size: 13px; }
 }
 
 /* ════════════════════════════════════════════════
