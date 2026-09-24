@@ -3042,6 +3042,90 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   color: #c2410c;
 }
 
+/* 역→목적지 이동시간 직접 입력 (마스터에 없는 기관 폴백) */
+.route-fix {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-radius: 12px;
+}
+
+.route-fix > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  list-style: none;
+}
+
+.route-fix > summary::-webkit-details-marker { display: none; }
+
+.route-fix > summary::before {
+  content: '＋';
+  margin-right: 6px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.route-fix[open] > summary::before { content: '−'; }
+
+.route-fix-body { margin-top: 12px; }
+
+.route-fix-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.route-fix-row select,
+.route-fix-row input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.route-fix-row select { flex: 1 1 110px; min-width: 110px; }
+.route-fix-row input  { flex: 0 1 84px;  min-width: 72px; }
+
+.route-fix-btn {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.route-fix-help {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.route-fix-clear {
+  display: inline;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .route-note {
   margin-top: 18px;
   padding-top: 12px;
@@ -3060,3 +3144,5 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   line-height: 1.6;
   color: var(--subtle);
 }
+
+.route-fix-open { margin-top: 12px; }

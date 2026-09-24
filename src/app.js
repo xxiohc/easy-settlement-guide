@@ -50,7 +50,8 @@ const state = {
   endTime: '',          // 출장(교육) 종료시각 HH:MM
   placeLat: null,       // 카카오 장소 검색으로 받은 목적지 좌표
   placeLon: null,
-  accessOverride: null, // 도착역→목적지 이동시간 수동 입력(분)
+  accessOverride: {},   // 도착역→목적지 이동시간 수동 입력 {역명: 분}
+  pinStation: null,     // 도착역 직접 지정(마스터에 없는 기관용 폴백)
   fareOverride: null,   // 교통비 수동 입력 (null이면 자동 계산)
   formEditMode: false,  // 출장신청서 수정 패널 열림 여부
 }
@@ -1358,6 +1359,8 @@ function onPlaceInput() {
   state.place = val
   state.placeLat = null
   state.placeLon = null
+  state.accessOverride = {}
+  state.pinStation = null
 
   const suggest = document.getElementById('placeSuggest')
 
@@ -1878,8 +1881,13 @@ function tripDow() {
   return isNaN(d) ? null : (d.getDay() + 6) % 7
 }
 
-// 목적지 좌표. 장소를 검색해 고른 경우가 1순위, 아니면 지역이 가리키는 역을 대신 쓴다.
+// 목적지 좌표. 앱에 등재된 출장 빈발 기관이 1순위(역→기관 이동시간이 확인된 값이라
+// 도착역 판정이 정확해진다), 그다음이 장소 검색 결과, 마지막이 지역 대표역이다.
 function routeDestination() {
+  const known = findDestination(state.place) || findDestination(state.region)
+  if (known) {
+    return { lat: known.lat, lon: known.lon, label: known.name, proxy: false, row: known }
+  }
   if (state.placeLat && state.placeLon) {
     return { lat: state.placeLat, lon: state.placeLon, label: state.place, proxy: false }
   }
@@ -1895,6 +1903,70 @@ function legLine(leg) {
     <span class="route-leg-time">${leg.from} ${fmtTime(leg.dep)} → ${leg.to} ${fmtTime(leg.arr)}</span>
     <span class="route-leg-note">${escapeHtml(leg.note)} 운행 · ${fmtDur(leg.arr - leg.dep)}</span>
   </div>`
+}
+
+const ACCESS_SRC_LABEL = { known: '확인값', user: '직접 입력', est: '추정' }
+function accessSrcLabel(src) { return ACCESS_SRC_LABEL[src] || '추정' }
+
+// 마스터에 없는 기관이거나 추정값이 실제와 다를 때, 도착역과 이동시간을 직접 넣는 폼.
+// 넣은 값은 그 역의 접근시간으로 바로 반영되고, 도착역 판정도 그 값으로 다시 계산한다.
+function accessFormHtml(best, plan) {
+  const opts = [best, ...plan.alternatives]
+    .map(p => p.station)
+    .filter((v, i, a) => a.indexOf(v) === i)
+  const cur = state.pinStation || best.station
+  const sel = opts.map(n =>
+    `<option value="${escapeHtml(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}역</option>`).join('')
+  const curMin = state.accessOverride[cur]
+  return `<details class="route-fix"${state.pinStation ? ' open' : ''}>
+    <summary>역→목적지 이동시간을 직접 넣기</summary>
+    <div class="route-fix-body">
+      <div class="route-fix-row">
+        <select id="routeFixStation" aria-label="도착역">${sel}</select>
+        <input id="routeFixMin" type="number" min="0" max="240" step="5" inputmode="numeric"
+               placeholder="분" value="${Number.isFinite(curMin) ? curMin : ''}" aria-label="이동시간(분)">
+        <button type="button" class="route-fix-btn" onclick="applyAccessOverride()">적용</button>
+      </div>
+      <div class="route-fix-help">실제 대중교통 소요시간을 아시면 넣어 주세요. 넣은 역으로 도착역이 고정됩니다.
+        ${state.pinStation ? `<button type="button" class="route-fix-clear" onclick="clearAccessOverride()">자동 판정으로 되돌리기</button>` : ''}</div>
+    </div>
+  </details>`
+}
+
+// 좌표를 모를 때 쓰는 폼 — 운임표에 있는 역 전체에서 내릴 역을 고르고 이동시간을 넣는다.
+function manualPickHtml() {
+  const names = fareStationNames()
+  if (!names.length) return ''
+  const cur = state.pinStation
+  const sel = ['<option value="">내릴 역 선택</option>']
+    .concat(names.map(n => `<option value="${escapeHtml(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}역</option>`))
+    .join('')
+  return `<div class="route-fix route-fix-open">
+    <div class="route-fix-row">
+      <select id="routeFixStation" aria-label="내릴 역">${sel}</select>
+      <input id="routeFixMin" type="number" min="0" max="240" step="5" inputmode="numeric"
+             placeholder="분" aria-label="역에서 목적지까지 이동시간(분)">
+      <button type="button" class="route-fix-btn" onclick="applyAccessOverride()">계산</button>
+    </div>
+    <div class="route-fix-help">역에서 교육장까지 대중교통으로 걸리는 시간을 분으로 넣어 주세요.</div>
+  </div>`
+}
+
+function applyAccessOverride() {
+  const st = document.getElementById('routeFixStation')?.value
+  const raw = document.getElementById('routeFixMin')?.value
+  if (!st) return
+  const min = Number(raw)
+  if (!raw || !Number.isFinite(min) || min < 0) return
+  state.accessOverride = { ...state.accessOverride, [st]: Math.round(min) }
+  state.pinStation = st
+  renderRoutePanel()
+}
+
+function clearAccessOverride() {
+  state.accessOverride = {}
+  state.pinStation = null
+  renderRoutePanel()
 }
 
 function renderRoutePanel() {
@@ -1921,20 +1993,44 @@ function renderRoutePanel() {
   if (startMin == null) {
     return hide('🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시각)')
   }
-  const dest = routeDestination()
-  if (!dest) return hide('🚄 출장 장소를 검색해서 고르면 도착역과 기차편을 계산해 드려요.')
-
   const dow = tripDow()
-  const plan = planTrip({
-    lat: dest.lat, lon: dest.lon, startMin, dow,
-    isMS: state.isMS === true, endMin: toMinutes(state.endTime),
-  })
+  const dest = routeDestination()
 
+  // 좌표를 모르는 기관(앱에 등재도 안 됐고 장소 검색도 안 한 경우)은
+  // 도착역과 역→목적지 이동시간을 직접 받아 같은 역산을 돌린다.
+  let plan, manual = false
+  if (!dest) {
+    const pin = state.pinStation
+    const mins = pin ? state.accessOverride[pin] : null
+    if (!pin || !Number.isFinite(mins)) {
+      el.className = 'route-panel route-panel-bare'
+      el.innerHTML = `<div class="route-empty">🚄 출장 장소를 검색해서 고르면 도착역과 기차편을 자동으로 계산해 드려요.
+        검색이 안 되는 곳이면 아래에서 내릴 역과 이동시간을 직접 넣어 주세요.</div>
+        ${manualPickHtml()}`
+      return
+    }
+    manual = true
+    plan = planFromStation({
+      station: pin, accessMin: mins, startMin, dow,
+      isMS: state.isMS === true, endMin: toMinutes(state.endTime),
+    })
+  } else {
+    plan = planTrip({
+      lat: dest.lat, lon: dest.lon, startMin, dow,
+      isMS: state.isMS === true, endMin: toMinutes(state.endTime),
+      destRow: dest.row || null, access: state.accessOverride, only: state.pinStation,
+    })
+  }
+
+  if (!plan.ok && manual) {
+    return hide(`🚄 ${escapeHtml(state.pinStation)}역으로는 시작시각 ${state.startTime} 전에 닿는 당일 열차가 없어요. 다른 역을 골라 보세요.`)
+  }
   if (!plan.ok && plan.reason === 'near') {
     return hide(`🚗 목적지가 마산역에서 직선 ${plan.originKm}km 거리라 기차를 탈 구간이 아니에요.`)
   }
   if (!plan.ok) {
-    const prev = planPreviousDay({ lat: dest.lat, lon: dest.lon, dow })
+    const prev = dest ? planPreviousDay({ lat: dest.lat, lon: dest.lon, dow,
+      destRow: dest.row || null, access: state.accessOverride }) : null
     const prevHtml = prev && prev.options.length
       ? `<div class="route-alt-title">전날 이동 후보 (${prev.station}역 도착)</div>` +
         prev.options.map(o => `<div class="route-alt">마산 ${fmtTime(o.dep)} → ${prev.station} ${fmtTime(o.arr)} · ${o.legs[0].no}${o.transfers ? ` · ${o.via.join('·')} 환승` : ' · 직통'}</div>`).join('')
@@ -1955,7 +2051,7 @@ function renderRoutePanel() {
 
   const altHtml = plan.alternatives.length
     ? `<div class="route-alt-title">다른 후보</div>` + plan.alternatives.map(a =>
-        `<div class="route-alt">마산 ${fmtTime(a.dep)} → ${a.station} ${fmtTime(a.arr)} · ${a.transfers ? `${a.via.join('·')} 환승` : '직통'} · 현장 여유 ${a.margin}분${a.tight ? ' <span class="route-tight">빠듯</span>' : ''}</div>`
+        `<div class="route-alt">마산 ${fmtTime(a.dep)} → ${a.station}역 ${fmtTime(a.arr)} · ${a.transfers ? `${a.via.join('·')} 환승` : '직통'} · 역에서 ${a.access}분 · 현장 ${fmtTime(a.arr + a.access)} 도착(여유 ${a.margin}분)${a.tight ? ' <span class="route-tight">빠듯</span>' : ''}</div>`
       ).join('')
     : ''
 
@@ -1969,20 +2065,21 @@ function renderRoutePanel() {
   show(`
     <div class="route-head">
       <span class="route-head-title">🚄 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
-      <span class="route-head-sub">${escapeHtml(dest.label || '')}${dest.proxy ? ' (역 기준 계산)' : ''} ${state.startTime} 시작 기준 역산</span>
+      <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} ${state.startTime} 시작 기준 역산</span>
     </div>
     <div class="route-pick">
       <span class="route-pick-label">이 기차를 타세요</span>
       <span class="route-pick-time">마산역 ${fmtTime(b.dep)} 출발</span>
     </div>
     ${b.legs.map(legLine).join(waitLine)}
-    <div class="route-step">🚶 ${escapeHtml(b.station)}역 ${fmtTime(b.arr)} 도착 → 목적지까지 대중교통 약 ${b.access}분(추정) → 현장 ${fmtTime(arriveVenue)} 도착</div>
+    <div class="route-step">🚶 ${escapeHtml(b.station)}역 ${fmtTime(b.arr)} 도착 → 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)}) → 현장 ${fmtTime(arriveVenue)} 도착</div>
     <div class="route-step">⏱ 시작 ${state.startTime}까지 여유 ${b.margin}분${b.tight ? ' <span class="route-tight">빠듯</span>' : ''} · 문 앞 총 소요 ${fmtDur(b.totalMin)}</div>
     ${plan.noBuffer ? '<div class="route-warn">권장 여유(10분)를 지키는 편이 없어 도착 직전에 닿는 편을 표시했습니다. 전날 이동도 함께 검토하세요.</div>' : ''}
     <div class="route-step">💳 ${fareLine}</div>
     ${altHtml}
     ${retHtml}
-    <div class="route-note">시간표 2026년 10월 기준 · 운임표 2026년 9월 기준. 역→목적지 이동시간은 직선거리 기반 <strong>추정치</strong>이고 실제 대중교통 조회 결과가 아닙니다. 좌석 잔여는 반영되지 않습니다.</div>`)
+    ${accessFormHtml(b, plan)}
+    <div class="route-note">시간표 2026년 10월 기준 · 운임표 2026년 9월 기준. ${b.accessSrc === 'est' ? '역→목적지 이동시간은 직선거리 기반 <strong>추정치</strong>이고 실제 대중교통 조회 결과가 아닙니다. ' : ''}좌석 잔여는 반영되지 않습니다.</div>`)
 }
 
 function getFare(place) {
@@ -2536,6 +2633,8 @@ function restartFlow() {
     dept: '', name: '',
     isMS: null, isShortDayTrip: null, isDayTrip: null, before12: null,
     lodgingProvided: null, mealProvided: null, hasPlane: null, hasShuttle: null,
+    startTime: '', endTime: '', placeLat: null, placeLon: null,
+    accessOverride: {}, pinStation: null, fareOverride: null,
   })
   // 폼 초기화
   ;['input-title','input-start','input-end','input-place','input-region','input-fee','input-dept','input-name'].forEach(id => {
