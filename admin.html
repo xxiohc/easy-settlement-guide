@@ -47,9 +47,10 @@
       }
 
       /* ── 요금표 테이블 ── */
-      .fare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      /* min-width: 폰에서 열이 "교/통/수/단" 처럼 한 글자씩 쪼개지던 것 — 감싼 div가 가로 스크롤한다 */
+      .fare-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px; }
       .fare-table th {
-        background: #f7f8fa; color: #6b7684; font-weight: 600;
+        background: #f7f8fa; color: #6b7684; font-weight: 600; white-space: nowrap;
         padding: 10px 12px; text-align: center; border-bottom: 1px solid #edf0f3;
       }
       .fare-table th:first-child { text-align: left; }
@@ -181,7 +182,7 @@
         <!-- 구간별 요금표 -->
         <div class="admin-section">
           <div class="admin-section-title">구간별 요금표 (마산역 출발 왕복)</div>
-          <div style="overflow-x:auto">
+          <div style="overflow-x:auto; -webkit-overflow-scrolling:touch">
             <table class="fare-table" id="fareEditorTable">
               <thead>
                 <tr>
