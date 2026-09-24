@@ -46,6 +46,11 @@ const state = {
   mealProvided: null,
   hasPlane: null,
   hasShuttle: null,
+  startTime: '',        // 출장(교육) 시작시각 HH:MM
+  endTime: '',          // 출장(교육) 종료시각 HH:MM
+  placeLat: null,       // 카카오 장소 검색으로 받은 목적지 좌표
+  placeLon: null,
+  accessOverride: null, // 도착역→목적지 이동시간 수동 입력(분)
   fareOverride: null,   // 교통비 수동 입력 (null이면 자동 계산)
   formEditMode: false,  // 출장신청서 수정 패널 열림 여부
 }
@@ -1062,7 +1067,49 @@ function parseDocMeta(filename, text) {
   // ── 온라인 여부 (제목에 "온라인" 명시된 경우만 true, 없으면 false=오프라인)
   const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300))
 
-  return { title, periodDisplay, startDate, endDate, nights, days, destination, registration, isOnline }
+  const { startTime, endTime } = extractTimes(tc)
+
+  return { title, periodDisplay, startDate, endDate, nights, days, destination, registration,
+           isOnline, startTime, endTime, venue: extractVenue(tc) }
+}
+
+// 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
+function extractTimes(tc) {
+  const toHM = (h, m, ampm) => {
+    let hh = parseInt(h, 10)
+    if (ampm === '오후' && hh < 12) hh += 12
+    if (ampm === '오전' && hh === 12) hh = 0
+    if (hh > 23) return ''
+    return `${String(hh).padStart(2, '0')}:${String(parseInt(m || 0, 10)).padStart(2, '0')}`
+  }
+  const AMPM = '(오전|오후)?\\s*'
+  const T = '(\\d{1,2})\\s*[:시]\\s*(\\d{1,2})?\\s*분?'
+  const rangeRe = new RegExp(AMPM + T + '\\s*(?:~|-|–|부터)\\s*' + AMPM + T)
+  const range = tc.match(rangeRe)
+  if (range) {
+    const start = toHM(range[2], range[3], range[1])
+    const end   = toHM(range[5], range[6], range[4] || range[1])
+    if (start) return { startTime: start, endTime: end && end > start ? end : '' }
+  }
+  const kwRe = new RegExp('(?:일\\s*시|시\\s*간|교육시간|시작)[^\\d오전후]{0,12}?' + AMPM + T)
+  const kw = tc.match(kwRe)
+  if (kw) {
+    const start = toHM(kw[2], kw[3], kw[1])
+    if (start) return { startTime: start, endTime: '' }
+  }
+  const from = tc.match(new RegExp(AMPM + T + '\\s*부터'))
+  if (from) {
+    const start = toHM(from[2], from[3], from[1])
+    if (start) return { startTime: start, endTime: '' }
+  }
+  return { startTime: '', endTime: '' }
+}
+
+// 공문의 장소 줄에서 기관·건물명을 뽑는다(카카오 장소 검색에 그대로 넣는다).
+function extractVenue(tc) {
+  const m = tc.match(/(?:장\s*소|위\s*치|개최장소)\s*[:：]?\s*([가-힣A-Za-z0-9()·\s]{2,40})/)
+  if (!m) return ''
+  return m[1].trim().replace(/\s{2,}.*$/, '').replace(/[,·]\s*$/, '').slice(0, 40)
 }
 
 function renderParseResult(filename, meta, hasText) {
@@ -1202,6 +1249,10 @@ function prepareCard4WithMeta() {
     setAutofilled('input-fee', meta.registration.toLocaleString())
     state.fee = meta.registration
   }
+  if (meta.startTime) setAutofilled('input-starttime', meta.startTime)
+  if (meta.endTime)   setAutofilled('input-endtime', meta.endTime)
+  if (meta.startTime || meta.endTime) onTimeChange()
+  if (meta.venue && !state.place) setAutofilled('input-place', meta.venue)
 
   // 확인 뷰 메시지
   if (meta.periodDisplay && meta.days) {
@@ -1305,6 +1356,8 @@ let _placeDebounce = null
 function onPlaceInput() {
   const val = document.getElementById('input-place').value.trim()
   state.place = val
+  state.placeLat = null
+  state.placeLon = null
 
   const suggest = document.getElementById('placeSuggest')
 
@@ -1350,7 +1403,7 @@ function onPlaceInput() {
         const addrRaw = d.road_address_name || d.address_name || ''
         return `
           <button class="suggest-item suggest-place-item"
-            onclick="selectPlace('${nameRaw.replace(/'/g,"\\'")}', '${addrRaw.replace(/'/g,"\\'")}')">
+            onclick="selectPlace('${nameRaw.replace(/'/g,"\\'")}', '${addrRaw.replace(/'/g,"\\'")}', ${d.y}, ${d.x})">
             <span class="suggest-place-name">${name}</span>
             ${cat ? `<span class="suggest-place-cat">${cat}</span>` : ''}
             ${addr ? `<span class="suggest-place-addr">${addr}</span>` : ''}
@@ -1364,10 +1417,12 @@ function onPlaceInput() {
   }, 300)
 }
 
-function selectPlace(name, addr) {
+function selectPlace(name, addr, lat, lon) {
   document.getElementById('input-place').value = name
   document.getElementById('placeSuggest').classList.add('hidden')
   state.place = name
+  state.placeLat = Number(lat) || null
+  state.placeLon = Number(lon) || null
   // 주소에서 지역 자동 채우기 (장소 선택 시 항상 덮어씀)
   if (addr) {
     const regionGuess = guessRegionFromAddress(addr)
@@ -1643,6 +1698,7 @@ function prepareCard9() {
   state.place  = document.getElementById('input-place')?.value?.trim()  || state.place
   state.region = document.getElementById('input-region')?.value?.trim() || state.region
   state.fee    = parseInt((document.getElementById('input-fee')?.value || '').replace(/,/g, '')) || state.fee
+  onTimeChange()
 
   // 온라인 교육: 다음 버튼 텍스트 변경
   const nextBtn = document.getElementById('card9-next-btn')
@@ -1669,6 +1725,7 @@ function prepareCard9() {
       : `<div class="breakdown-item"><span class="breakdown-label" style="color:#8b95a1">교육비 없음</span></div>`
     document.getElementById('totalAmount').textContent = `${total.toLocaleString()}원`
     document.getElementById('seoulBefore12Hint')?.classList.add('hidden')
+    document.getElementById('routePanel')?.classList.add('hidden')
     return
   }
 
@@ -1782,6 +1839,8 @@ function prepareCard9() {
     ? `${total.toLocaleString()}원 + 실비`
     : `${total.toLocaleString()}원`
 
+  renderRoutePanel()
+
   // 서울 12시 이전 선택 시 → 추가된 금액 강조 표시
   const seoulHintEl = document.getElementById('seoulBefore12Hint')
   if (seoulHintEl) {
@@ -1801,6 +1860,129 @@ function prepareCard9() {
         </div>`
     }
   }
+}
+
+function onTimeChange() {
+  state.startTime = document.getElementById('input-starttime')?.value || ''
+  state.endTime   = document.getElementById('input-endtime')?.value   || ''
+}
+
+function toMinutes(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '')
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null
+}
+
+function tripDow() {
+  if (!state.startDate) return null
+  const d = new Date(state.startDate + 'T00:00:00')
+  return isNaN(d) ? null : (d.getDay() + 6) % 7
+}
+
+// 목적지 좌표. 장소를 검색해 고른 경우가 1순위, 아니면 지역이 가리키는 역을 대신 쓴다.
+function routeDestination() {
+  if (state.placeLat && state.placeLon) {
+    return { lat: state.placeLat, lon: state.placeLon, label: state.place, proxy: false }
+  }
+  const fare = getFare(state.region || state.place)
+  const st = fare && fare.station && KtxRoute.stations && KtxRoute.stations[fare.station]
+  if (st) return { lat: st.lat, lon: st.lon, label: fare.label, proxy: true }
+  return null
+}
+
+function legLine(leg) {
+  return `<div class="route-leg">
+    <span class="route-leg-train">${escapeHtml(leg.no)} ${escapeHtml(leg.type)}</span>
+    <span class="route-leg-time">${leg.from} ${fmtTime(leg.dep)} → ${leg.to} ${fmtTime(leg.arr)}</span>
+    <span class="route-leg-note">${escapeHtml(leg.note)} 운행 · ${fmtDur(leg.arr - leg.dep)}</span>
+  </div>`
+}
+
+function renderRoutePanel() {
+  const el = document.getElementById('routePanel')
+  if (!el) return
+  const hide = msg => {
+    el.className = msg ? 'route-panel route-panel-bare' : 'route-panel hidden'
+    el.innerHTML = msg ? `<div class="route-empty">${msg}</div>` : ''
+  }
+  const show = html => {
+    el.className = 'route-panel'
+    el.innerHTML = html
+  }
+  if (state.isOnline) return hide('')
+  if (state.isJeju)  return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
+
+  const fare = getFare(state.region || state.place)
+  if (fare && fare.bus) {
+    return hide(`🚌 ${escapeHtml(fare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. (왕복 ${fare.bus.toLocaleString()}원)`)
+  }
+  if (!KtxRoute.ready) return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
+
+  const startMin = toMinutes(state.startTime)
+  if (startMin == null) {
+    return hide('🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시각)')
+  }
+  const dest = routeDestination()
+  if (!dest) return hide('🚄 출장 장소를 검색해서 고르면 도착역과 기차편을 계산해 드려요.')
+
+  const dow = tripDow()
+  const plan = planTrip({
+    lat: dest.lat, lon: dest.lon, startMin, dow,
+    isMS: state.isMS === true, endMin: toMinutes(state.endTime),
+  })
+
+  if (!plan.ok && plan.reason === 'near') {
+    return hide(`🚗 목적지가 마산역에서 직선 ${plan.originKm}km 거리라 기차를 탈 구간이 아니에요.`)
+  }
+  if (!plan.ok) {
+    const prev = planPreviousDay({ lat: dest.lat, lon: dest.lon, dow })
+    const prevHtml = prev && prev.options.length
+      ? `<div class="route-alt-title">전날 이동 후보 (${prev.station}역 도착)</div>` +
+        prev.options.map(o => `<div class="route-alt">마산 ${fmtTime(o.dep)} → ${prev.station} ${fmtTime(o.arr)} · ${o.legs[0].no}${o.transfers ? ` · ${o.via.join('·')} 환승` : ' · 직통'}</div>`).join('')
+      : ''
+    show(`<div class="route-head"><span class="route-head-title">🚄 당일 출발로는 시작시각을 못 맞춰요</span></div>
+      <div class="route-warn">시작시각 ${state.startTime} 기준으로 도착 가능한 당일 열차가 없습니다. 전날 이동이 필요합니다.</div>${prevHtml}`)
+    return
+  }
+
+  const b = plan.best
+  const arriveVenue = b.arr + b.access
+  const fareLine = b.fare
+    ? `편도 ${b.fare.oneWay.toLocaleString()}원 (${b.fare.grade}) · 왕복 ${b.fare.roundTrip.toLocaleString()}원`
+    : '운임표에 없는 역'
+  const routeKind = b.transfers ? `${b.via.join('·')} 환승 ${b.transfers}회` : '직통'
+  const waitLine = b.transfers && b.wait != null
+    ? `<div class="route-transfer">🔁 ${b.via.join('·')}역 환승 대기 ${b.wait}분</div>` : ''
+
+  const altHtml = plan.alternatives.length
+    ? `<div class="route-alt-title">다른 후보</div>` + plan.alternatives.map(a =>
+        `<div class="route-alt">마산 ${fmtTime(a.dep)} → ${a.station} ${fmtTime(a.arr)} · ${a.transfers ? `${a.via.join('·')} 환승` : '직통'} · 현장 여유 ${a.margin}분${a.tight ? ' <span class="route-tight">빠듯</span>' : ''}</div>`
+      ).join('')
+    : ''
+
+  const retHtml = plan.ret
+    ? (plan.ret.leg
+        ? `<div class="route-alt-title">귀가편 (종료 ${state.endTime} 기준)</div>
+           <div class="route-alt">${b.station}역 ${fmtTime(plan.ret.leg.dep)} 출발 → 마산 ${fmtTime(plan.ret.leg.arr)} 도착 · ${plan.ret.leg.no}${plan.ret.next ? ` (다음 편 ${fmtTime(plan.ret.next.dep)})` : ''}</div>`
+        : `<div class="route-alt-title">귀가편</div><div class="route-alt">종료시각 이후 마산 직통 편이 없어요 — 숙박 또는 환승 확인이 필요합니다.</div>`)
+    : ''
+
+  show(`
+    <div class="route-head">
+      <span class="route-head-title">🚄 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
+      <span class="route-head-sub">${escapeHtml(dest.label || '')}${dest.proxy ? ' (역 기준 계산)' : ''} ${state.startTime} 시작 기준 역산</span>
+    </div>
+    <div class="route-pick">
+      <span class="route-pick-label">이 기차를 타세요</span>
+      <span class="route-pick-time">마산역 ${fmtTime(b.dep)} 출발</span>
+    </div>
+    ${b.legs.map(legLine).join(waitLine)}
+    <div class="route-step">🚶 ${escapeHtml(b.station)}역 ${fmtTime(b.arr)} 도착 → 목적지까지 대중교통 약 ${b.access}분(추정) → 현장 ${fmtTime(arriveVenue)} 도착</div>
+    <div class="route-step">⏱ 시작 ${state.startTime}까지 여유 ${b.margin}분${b.tight ? ' <span class="route-tight">빠듯</span>' : ''} · 문 앞 총 소요 ${fmtDur(b.totalMin)}</div>
+    ${plan.noBuffer ? '<div class="route-warn">권장 여유(10분)를 지키는 편이 없어 도착 직전에 닿는 편을 표시했습니다. 전날 이동도 함께 검토하세요.</div>' : ''}
+    <div class="route-step">💳 ${fareLine}</div>
+    ${altHtml}
+    ${retHtml}
+    <div class="route-note">시간표 2026년 10월 기준 · 운임표 2026년 9월 기준. 역→목적지 이동시간은 직선거리 기반 <strong>추정치</strong>이고 실제 대중교통 조회 결과가 아닙니다. 좌석 잔여는 반영되지 않습니다.</div>`)
 }
 
 function getFare(place) {
@@ -2478,7 +2660,7 @@ async function runTests() {
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadRates()
+  await Promise.all([loadRates(), loadRouteData()])
   updateProgress()
 
   // 장소 검색 드롭다운 외부 클릭 시 닫기

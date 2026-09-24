@@ -300,6 +300,19 @@
                 <div class="duration-tag hidden" id="duration-tag"></div>
               </div>
 
+              <!-- 교육 시작·종료 시각 (KTX 역산 안내에 쓰임) -->
+              <div class="info-field" id="field-time">
+                <label class="info-label">교육 시각</label>
+                <div class="time-row">
+                  <input class="info-input time-input" type="time" id="input-starttime"
+                    onchange="onTimeChange()" />
+                  <span class="time-sep">~</span>
+                  <input class="info-input time-input" type="time" id="input-endtime"
+                    onchange="onTimeChange()" />
+                </div>
+                <p class="info-subhint">🚄 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요 (종료시각은 귀가편용, 선택)</p>
+              </div>
+
               <!-- 출장 장소 (구체적 장소 + 카카오 장소 검색) -->
               <div class="info-field" id="field-place">
                 <label class="info-label" for="input-place">출장 장소</label>
@@ -756,6 +769,9 @@
 
             <div class="amount-breakdown" id="amountBreakdown"></div>
 
+            <!-- KTX 역산 교통 안내 -->
+            <div class="route-panel hidden" id="routePanel"></div>
+
             <!-- 서울 12시 이전 추가 안내 (서울 출장이고 before12 미체크 시) -->
             <div class="seoul-before12-hint hidden" id="seoulBefore12Hint">
               ℹ️ 서울 출장 시 시작시간이 12시 이전이면 하루 일당(35,000원)과 숙박비(100,000원)가 추가돼요
@@ -881,6 +897,7 @@
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="./src/config.js"></script>
+    <script src="./src/route.js"></script>
     <script src="./src/app.js"></script>
   </body>
 </html>
