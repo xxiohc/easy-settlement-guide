@@ -46,23 +46,34 @@ const state = {
   mealProvided: null,
   hasPlane: null,
   hasShuttle: null,
+  startTime: '',        // 출장(교육) 시작시각 HH:MM
+  endTime: '',          // 출장(교육) 종료시각 HH:MM
+  placeLat: null,       // 카카오 장소 검색으로 받은 목적지 좌표
+  placeLon: null,
+  accessOverride: {},   // 도착역→목적지 이동시간 수동 입력 {역명: 분}
+  pinStation: null,     // 도착역 직접 지정(마스터에 없는 기관용 폴백)
   fareOverride: null,   // 교통비 수동 입력 (null이면 자동 계산)
   formEditMode: false,  // 출장신청서 수정 패널 열림 여부
 }
 
-// ── KTX / 버스 운임표 (마산역 출발 왕복) — data/rates.json 에서 로드됨 ────────
+// ── KTX / 버스 운임표 (마산역 출발 왕복) ──────────────────────────────────────
+// 금액·경로는 tools/build_fares.py 가 data/source 의 KORAIL 운임표에서 생성한다.
+// 직접 고치지 말 것 — 고치면 다음 생성 때 되돌아간다. 실제 값은 data/rates.json
+// 에서 덮어쓰며, 아래 배열은 로드 실패 시 쓰는 같은 값의 사본이다.
 let FARE_TABLE = [
-  { keywords: ['서울'],          label: '서울역',    ktxNormal: 106600, ktxFirst: 149600 },
-  { keywords: ['수서'],          label: '수서역',    ktxNormal: 102000, ktxFirst: 143000 },
-  { keywords: ['천안', '아산'],  label: '천안아산역', ktxNormal: 90000,  ktxFirst: 126000 },
-  { keywords: ['오송'],          label: '오송역',    ktxNormal: 84000,  ktxFirst: 118000 },
-  { keywords: ['대전'],          label: '대전역',    ktxNormal: 68000,  ktxFirst: 95000  },
-  { keywords: ['부산', '해운대'], label: '부산',     bus: 19600 },
-  { keywords: ['대구'],          label: '동대구역',  ktxNormal: 76000,  ktxFirst: 106000 },
-  { keywords: ['울산'],          label: '울산',      bus: 29000 },
-  { keywords: ['경주'],          label: '신경주역',   ktxNormal: 34200,  ktxFirst: 48200  },
-  { keywords: ['전주'],          label: '전주',      bus: 46000 },
-  { keywords: ['제주'],          label: '제주',      jeju: true },
+// <fare-table:auto>
+  { keywords: ['서울'], label: '서울역', station: '서울', ktxNormal: 97200, ktxFirst: 141000, oneWayNormal: 48600, oneWayFirst: 70500, transfers: 0, path: ['마산', '서울'] },
+  { keywords: ['수서'], label: '수서역', station: '수서', ktxNormal: 94400, ktxFirst: 136800, oneWayNormal: 47200, oneWayFirst: 68400, transfers: 0, path: ['마산', '수서'] },
+  { keywords: ['천안', '아산'], label: '천안아산역', station: '천안아산', ktxNormal: 72200, ktxFirst: 104600, oneWayNormal: 36100, oneWayFirst: 52300, transfers: 0, path: ['마산', '천안아산'] },
+  { keywords: ['오송'], label: '오송역', station: '오송', ktxNormal: 64200, ktxFirst: 93000, oneWayNormal: 32100, oneWayFirst: 46500, transfers: 0, path: ['마산', '오송'] },
+  { keywords: ['대전'], label: '대전역', station: '대전', ktxNormal: 54800, ktxFirst: 79400, oneWayNormal: 27400, oneWayFirst: 39700, transfers: 0, path: ['마산', '대전'] },
+  { keywords: ['부산', '해운대'], label: '부산', bus: 19600 },
+  { keywords: ['대구'], label: '동대구역', station: '동대구', ktxNormal: 21400, ktxFirst: 31000, oneWayNormal: 10700, oneWayFirst: 15500, transfers: 0, path: ['마산', '동대구'] },
+  { keywords: ['울산'], label: '울산', bus: 29000 },
+  { keywords: ['경주'], label: '경주역', station: '경주', ktxNormal: 36400, ktxFirst: 52800, oneWayNormal: 18200, oneWayFirst: 26400, transfers: 1, path: ['마산', '동대구', '경주'] },
+  { keywords: ['전주'], label: '전주', bus: 46000 },
+  { keywords: ['제주'], label: '제주', jeju: true },
+// </fare-table:auto>
 ]
 
 let DAILY_RATE     = 35000
@@ -1057,7 +1068,49 @@ function parseDocMeta(filename, text) {
   // ── 온라인 여부 (제목에 "온라인" 명시된 경우만 true, 없으면 false=오프라인)
   const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300))
 
-  return { title, periodDisplay, startDate, endDate, nights, days, destination, registration, isOnline }
+  const { startTime, endTime } = extractTimes(tc)
+
+  return { title, periodDisplay, startDate, endDate, nights, days, destination, registration,
+           isOnline, startTime, endTime, venue: extractVenue(tc) }
+}
+
+// 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
+function extractTimes(tc) {
+  const toHM = (h, m, ampm) => {
+    let hh = parseInt(h, 10)
+    if (ampm === '오후' && hh < 12) hh += 12
+    if (ampm === '오전' && hh === 12) hh = 0
+    if (hh > 23) return ''
+    return `${String(hh).padStart(2, '0')}:${String(parseInt(m || 0, 10)).padStart(2, '0')}`
+  }
+  const AMPM = '(오전|오후)?\\s*'
+  const T = '(\\d{1,2})\\s*[:시]\\s*(\\d{1,2})?\\s*분?'
+  const rangeRe = new RegExp(AMPM + T + '\\s*(?:~|-|–|부터)\\s*' + AMPM + T)
+  const range = tc.match(rangeRe)
+  if (range) {
+    const start = toHM(range[2], range[3], range[1])
+    const end   = toHM(range[5], range[6], range[4] || range[1])
+    if (start) return { startTime: start, endTime: end && end > start ? end : '' }
+  }
+  const kwRe = new RegExp('(?:일\\s*시|시\\s*간|교육시간|시작)[^\\d오전후]{0,12}?' + AMPM + T)
+  const kw = tc.match(kwRe)
+  if (kw) {
+    const start = toHM(kw[2], kw[3], kw[1])
+    if (start) return { startTime: start, endTime: '' }
+  }
+  const from = tc.match(new RegExp(AMPM + T + '\\s*부터'))
+  if (from) {
+    const start = toHM(from[2], from[3], from[1])
+    if (start) return { startTime: start, endTime: '' }
+  }
+  return { startTime: '', endTime: '' }
+}
+
+// 공문의 장소 줄에서 기관·건물명을 뽑는다(카카오 장소 검색에 그대로 넣는다).
+function extractVenue(tc) {
+  const m = tc.match(/(?:장\s*소|위\s*치|개최장소)\s*[:：]?\s*([가-힣A-Za-z0-9()·\s]{2,40})/)
+  if (!m) return ''
+  return m[1].trim().replace(/\s{2,}.*$/, '').replace(/[,·]\s*$/, '').slice(0, 40)
 }
 
 function renderParseResult(filename, meta, hasText) {
@@ -1197,6 +1250,10 @@ function prepareCard4WithMeta() {
     setAutofilled('input-fee', meta.registration.toLocaleString())
     state.fee = meta.registration
   }
+  if (meta.startTime) setAutofilled('input-starttime', meta.startTime)
+  if (meta.endTime)   setAutofilled('input-endtime', meta.endTime)
+  if (meta.startTime || meta.endTime) onTimeChange()
+  if (meta.venue && !state.place) setAutofilled('input-place', meta.venue)
 
   // 확인 뷰 메시지
   if (meta.periodDisplay && meta.days) {
@@ -1300,6 +1357,10 @@ let _placeDebounce = null
 function onPlaceInput() {
   const val = document.getElementById('input-place').value.trim()
   state.place = val
+  state.placeLat = null
+  state.placeLon = null
+  state.accessOverride = {}
+  state.pinStation = null
 
   const suggest = document.getElementById('placeSuggest')
 
@@ -1345,7 +1406,7 @@ function onPlaceInput() {
         const addrRaw = d.road_address_name || d.address_name || ''
         return `
           <button class="suggest-item suggest-place-item"
-            onclick="selectPlace('${nameRaw.replace(/'/g,"\\'")}', '${addrRaw.replace(/'/g,"\\'")}')">
+            onclick="selectPlace('${nameRaw.replace(/'/g,"\\'")}', '${addrRaw.replace(/'/g,"\\'")}', ${d.y}, ${d.x})">
             <span class="suggest-place-name">${name}</span>
             ${cat ? `<span class="suggest-place-cat">${cat}</span>` : ''}
             ${addr ? `<span class="suggest-place-addr">${addr}</span>` : ''}
@@ -1359,10 +1420,12 @@ function onPlaceInput() {
   }, 300)
 }
 
-function selectPlace(name, addr) {
+function selectPlace(name, addr, lat, lon) {
   document.getElementById('input-place').value = name
   document.getElementById('placeSuggest').classList.add('hidden')
   state.place = name
+  state.placeLat = Number(lat) || null
+  state.placeLon = Number(lon) || null
   // 주소에서 지역 자동 채우기 (장소 선택 시 항상 덮어씀)
   if (addr) {
     const regionGuess = guessRegionFromAddress(addr)
@@ -1638,6 +1701,7 @@ function prepareCard9() {
   state.place  = document.getElementById('input-place')?.value?.trim()  || state.place
   state.region = document.getElementById('input-region')?.value?.trim() || state.region
   state.fee    = parseInt((document.getElementById('input-fee')?.value || '').replace(/,/g, '')) || state.fee
+  onTimeChange()
 
   // 온라인 교육: 다음 버튼 텍스트 변경
   const nextBtn = document.getElementById('card9-next-btn')
@@ -1664,6 +1728,7 @@ function prepareCard9() {
       : `<div class="breakdown-item"><span class="breakdown-label" style="color:#8b95a1">교육비 없음</span></div>`
     document.getElementById('totalAmount').textContent = `${total.toLocaleString()}원`
     document.getElementById('seoulBefore12Hint')?.classList.add('hidden')
+    document.getElementById('routePanel')?.classList.add('hidden')
     return
   }
 
@@ -1672,17 +1737,31 @@ function prepareCard9() {
   const breakdown = []
   let total = 0
 
-  // 1. 교통비 (지역 기준으로 운임 조회)
+  // 1. 교통비 — 역산으로 도착역이 정해지면 그 역 운임을 쓴다.
+  // (예: 삼성서울병원은 서울역이 아니라 수서역이 나오므로 금액도 수서역 기준이어야 한다)
   const fare = getFare(state.region || state.place)
+  const rf   = isJeju ? null : routeFare()
   if (isJeju) {
     breakdown.push({ label: '항공료 (제주)', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
     if (state.hasShuttle === true) {
       breakdown.push({ label: '공항 셔틀버스', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
     }
+  } else if (rf) {
+    const kind = rf.transfers ? `${rf.via.join('·')} 환승 ${rf.transfers}회` : '직통'
+    breakdown.push({
+      label: `KTX ${rf.grade} (${rf.station}역)`,
+      amount: rf.roundTrip,
+      note: `마산역 ${fmtTime(rf.dep)} 출발 · ${kind} · 편도 ${rf.oneWay.toLocaleString()}원 × 2회`,
+    })
+    total += rf.roundTrip
   } else if (fare) {
     const useFirst = state.isMS && fare.ktxFirst
     const fareAmt = useFirst ? fare.ktxFirst : (fare.ktxNormal ?? fare.bus ?? 0)
-    const routeNote = `왕복 기준 · 마산역 → ${fare.label}`
+    const route = fareRouteText(fare)
+    const oneWay = fareAmt / 2
+    const routeNote = route
+      ? `마산역 → ${fare.label} · ${route} · 편도 ${oneWay.toLocaleString()}원 × 2회`
+      : `왕복 기준 · 마산역 → ${fare.label}`
     const fareLabel = fare.bus
       ? `시외버스 (${fare.label})`
       : `KTX ${useFirst ? '특실' : '일반실'} (${fare.label})`
@@ -1773,6 +1852,8 @@ function prepareCard9() {
     ? `${total.toLocaleString()}원 + 실비`
     : `${total.toLocaleString()}원`
 
+  renderRoutePanel()
+
   // 서울 12시 이전 선택 시 → 추가된 금액 강조 표시
   const seoulHintEl = document.getElementById('seoulBefore12Hint')
   if (seoulHintEl) {
@@ -1794,12 +1875,260 @@ function prepareCard9() {
   }
 }
 
+function onTimeChange() {
+  state.startTime = document.getElementById('input-starttime')?.value || ''
+  state.endTime   = document.getElementById('input-endtime')?.value   || ''
+}
+
+function toMinutes(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '')
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null
+}
+
+function tripDow() {
+  if (!state.startDate) return null
+  const d = new Date(state.startDate + 'T00:00:00')
+  return isNaN(d) ? null : (d.getDay() + 6) % 7
+}
+
+// 목적지 좌표. 앱에 등재된 출장 빈발 기관이 1순위(역→기관 이동시간이 확인된 값이라
+// 도착역 판정이 정확해진다), 그다음이 장소 검색 결과, 마지막이 지역 대표역이다.
+function routeDestination() {
+  const known = findDestination(state.place) || findDestination(state.region)
+  if (known) {
+    return { lat: known.lat, lon: known.lon, label: known.name, proxy: false, row: known }
+  }
+  if (state.placeLat && state.placeLon) {
+    return { lat: state.placeLat, lon: state.placeLon, label: state.place, proxy: false }
+  }
+  const fare = getFare(state.region || state.place)
+  const st = fare && fare.station && KtxRoute.stations && KtxRoute.stations[fare.station]
+  if (st) return { lat: st.lat, lon: st.lon, label: fare.label, proxy: true }
+  return null
+}
+
+function legLine(leg) {
+  return `<div class="route-leg">
+    <span class="route-leg-train">${escapeHtml(leg.no)} ${escapeHtml(leg.type)}</span>
+    <span class="route-leg-time">${leg.from} ${fmtTime(leg.dep)} → ${leg.to} ${fmtTime(leg.arr)}</span>
+    <span class="route-leg-note">${escapeHtml(leg.note)} 운행 · ${fmtDur(leg.arr - leg.dep)}</span>
+  </div>`
+}
+
+const ACCESS_SRC_LABEL = { known: '확인값', user: '직접 입력', est: '추정' }
+function accessSrcLabel(src) { return ACCESS_SRC_LABEL[src] || '추정' }
+
+// 마스터에 없는 기관이거나 추정값이 실제와 다를 때, 도착역과 이동시간을 직접 넣는 폼.
+// 넣은 값은 그 역의 접근시간으로 바로 반영되고, 도착역 판정도 그 값으로 다시 계산한다.
+function accessFormHtml(best, plan) {
+  const opts = [best, ...plan.alternatives]
+    .map(p => p.station)
+    .filter((v, i, a) => a.indexOf(v) === i)
+  const cur = state.pinStation || best.station
+  const sel = opts.map(n =>
+    `<option value="${escapeHtml(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}역</option>`).join('')
+  const curMin = state.accessOverride[cur]
+  return `<details class="route-fix"${state.pinStation ? ' open' : ''}>
+    <summary>역→목적지 이동시간을 직접 넣기</summary>
+    <div class="route-fix-body">
+      <div class="route-fix-row">
+        <select id="routeFixStation" aria-label="도착역">${sel}</select>
+        <input id="routeFixMin" type="number" min="0" max="240" step="5" inputmode="numeric"
+               placeholder="분" value="${Number.isFinite(curMin) ? curMin : ''}" aria-label="이동시간(분)">
+        <button type="button" class="route-fix-btn" onclick="applyAccessOverride()">적용</button>
+      </div>
+      <div class="route-fix-help">실제 대중교통 소요시간을 아시면 넣어 주세요. 넣은 역으로 도착역이 고정됩니다.
+        ${state.pinStation ? `<button type="button" class="route-fix-clear" onclick="clearAccessOverride()">자동 판정으로 되돌리기</button>` : ''}</div>
+    </div>
+  </details>`
+}
+
+// 좌표를 모를 때 쓰는 폼 — 운임표에 있는 역 전체에서 내릴 역을 고르고 이동시간을 넣는다.
+function manualPickHtml() {
+  const names = fareStationNames()
+  if (!names.length) return ''
+  const cur = state.pinStation
+  const sel = ['<option value="">내릴 역 선택</option>']
+    .concat(names.map(n => `<option value="${escapeHtml(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}역</option>`))
+    .join('')
+  return `<div class="route-fix route-fix-open">
+    <div class="route-fix-row">
+      <select id="routeFixStation" aria-label="내릴 역">${sel}</select>
+      <input id="routeFixMin" type="number" min="0" max="240" step="5" inputmode="numeric"
+             placeholder="분" aria-label="역에서 목적지까지 이동시간(분)">
+      <button type="button" class="route-fix-btn" onclick="applyAccessOverride()">계산</button>
+    </div>
+    <div class="route-fix-help">역에서 교육장까지 대중교통으로 걸리는 시간을 분으로 넣어 주세요.</div>
+  </div>`
+}
+
+// 도착역·이동시간을 바꾸면 안내 패널뿐 아니라 예상금액 교통비도 같이 바뀌어야 한다.
+function refreshAmountAndRoute() {
+  if (typeof prepareCard9 === 'function' && document.getElementById('amountBreakdown')) prepareCard9()
+  else renderRoutePanel()
+}
+
+function applyAccessOverride() {
+  const st = document.getElementById('routeFixStation')?.value
+  const raw = document.getElementById('routeFixMin')?.value
+  if (!st) return
+  const min = Number(raw)
+  if (!raw || !Number.isFinite(min) || min < 0) return
+  state.accessOverride = { ...state.accessOverride, [st]: Math.round(min) }
+  state.pinStation = st
+  refreshAmountAndRoute()
+}
+
+function clearAccessOverride() {
+  state.accessOverride = {}
+  state.pinStation = null
+  refreshAmountAndRoute()
+}
+
+// 역산 계산만 떼어낸 함수. 화면 안내(renderRoutePanel)와 정산 교통비가 서로 다른 역을
+// 가리키지 않도록, 두 곳이 모두 이 함수 하나를 부른다.
+function computeRoutePlan() {
+  if (state.isOnline) return { skip: 'online' }
+  if (state.isJeju)   return { skip: 'jeju' }
+  const busFare = getFare(state.region || state.place)
+  if (busFare && busFare.bus) return { skip: 'bus', busFare }
+  if (!KtxRoute.ready) return { skip: 'data' }
+
+  const startMin = toMinutes(state.startTime)
+  if (startMin == null) return { skip: 'notime' }
+  const dow  = tripDow()
+  const dest = routeDestination()
+
+  // 좌표를 모르는 기관(앱에 등재도 안 됐고 장소 검색도 안 한 경우)은
+  // 도착역과 역→목적지 이동시간을 직접 받아 같은 역산을 돌린다.
+  if (!dest) {
+    const pin  = state.pinStation
+    const mins = pin ? state.accessOverride[pin] : null
+    if (!pin || !Number.isFinite(mins)) return { skip: 'needmanual' }
+    return { manual: true, dest: null, dow, plan: planFromStation({
+      station: pin, accessMin: mins, startMin, dow,
+      isMS: state.isMS === true, endMin: toMinutes(state.endTime),
+    }) }
+  }
+  return { manual: false, dest, dow, plan: planTrip({
+    lat: dest.lat, lon: dest.lon, startMin, dow,
+    isMS: state.isMS === true, endMin: toMinutes(state.endTime),
+    destRow: dest.row || null, access: state.accessOverride, only: state.pinStation,
+  }) }
+}
+
+// 정산 교통비에 그대로 넣을 금액·경로. 역산이 성립할 때만 값을 주고, 안 되면 null을
+// 돌려 기존 지역 운임표(getFare)로 되돌아간다.
+function routeFare() {
+  const r = computeRoutePlan()
+  if (!r || r.skip) return null
+  return settlementFare(r.plan)
+}
+
+function renderRoutePanel() {
+  const el = document.getElementById('routePanel')
+  if (!el) return
+  const hide = msg => {
+    el.className = msg ? 'route-panel route-panel-bare' : 'route-panel hidden'
+    el.innerHTML = msg ? `<div class="route-empty">${msg}</div>` : ''
+  }
+  const show = html => {
+    el.className = 'route-panel'
+    el.innerHTML = html
+  }
+
+  const r = computeRoutePlan()
+  if (r.skip === 'online') return hide('')
+  if (r.skip === 'jeju')   return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
+  if (r.skip === 'bus') {
+    return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
+  }
+  if (r.skip === 'data')   return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
+  if (r.skip === 'notime') {
+    return hide('🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시각)')
+  }
+  if (r.skip === 'needmanual') {
+    el.className = 'route-panel route-panel-bare'
+    el.innerHTML = `<div class="route-empty">🚄 출장 장소를 검색해서 고르면 도착역과 기차편을 자동으로 계산해 드려요.
+      검색이 안 되는 곳이면 아래에서 내릴 역과 이동시간을 직접 넣어 주세요.</div>
+      ${manualPickHtml()}`
+    return
+  }
+  const { plan, dest, manual, dow } = r
+  if (!plan.ok && manual) {
+    return hide(`🚄 ${escapeHtml(state.pinStation)}역으로는 시작시각 ${state.startTime} 전에 닿는 당일 열차가 없어요. 다른 역을 골라 보세요.`)
+  }
+  if (!plan.ok && plan.reason === 'near') {
+    return hide(`🚗 목적지가 마산역에서 직선 ${plan.originKm}km 거리라 기차를 탈 구간이 아니에요.`)
+  }
+  if (!plan.ok) {
+    const prev = dest ? planPreviousDay({ lat: dest.lat, lon: dest.lon, dow,
+      destRow: dest.row || null, access: state.accessOverride }) : null
+    const prevHtml = prev && prev.options.length
+      ? `<div class="route-alt-title">전날 이동 후보 (${prev.station}역 도착)</div>` +
+        prev.options.map(o => `<div class="route-alt">마산 ${fmtTime(o.dep)} → ${prev.station} ${fmtTime(o.arr)} · ${o.legs[0].no}${o.transfers ? ` · ${o.via.join('·')} 환승` : ' · 직통'}</div>`).join('')
+      : ''
+    show(`<div class="route-head"><span class="route-head-title">🚄 당일 출발로는 시작시각을 못 맞춰요</span></div>
+      <div class="route-warn">시작시각 ${state.startTime} 기준으로 도착 가능한 당일 열차가 없습니다. 전날 이동이 필요합니다.</div>${prevHtml}`)
+    return
+  }
+
+  const b = plan.best
+  const arriveVenue = b.arr + b.access
+  const fareLine = b.fare
+    ? `편도 ${b.fare.oneWay.toLocaleString()}원 (${b.fare.grade}) · 왕복 ${b.fare.roundTrip.toLocaleString()}원`
+    : '운임표에 없는 역'
+  const routeKind = b.transfers ? `${b.via.join('·')} 환승 ${b.transfers}회` : '직통'
+  const waitLine = b.transfers && b.wait != null
+    ? `<div class="route-transfer">🔁 ${b.via.join('·')}역 환승 대기 ${b.wait}분</div>` : ''
+
+  const altHtml = plan.alternatives.length
+    ? `<div class="route-alt-title">다른 후보</div>` + plan.alternatives.map(a =>
+        `<div class="route-alt">마산 ${fmtTime(a.dep)} → ${a.station}역 ${fmtTime(a.arr)} · ${a.transfers ? `${a.via.join('·')} 환승` : '직통'} · 역에서 ${a.access}분 · 현장 ${fmtTime(a.arr + a.access)} 도착(여유 ${a.margin}분)${a.tight ? ' <span class="route-tight">빠듯</span>' : ''}</div>`
+      ).join('')
+    : ''
+
+  const retHtml = plan.ret
+    ? (plan.ret.leg
+        ? `<div class="route-alt-title">귀가편 (종료 ${state.endTime} 기준)</div>
+           <div class="route-alt">${b.station}역 ${fmtTime(plan.ret.leg.dep)} 출발 → 마산 ${fmtTime(plan.ret.leg.arr)} 도착 · ${plan.ret.leg.no}${plan.ret.next ? ` (다음 편 ${fmtTime(plan.ret.next.dep)})` : ''}</div>`
+        : `<div class="route-alt-title">귀가편</div><div class="route-alt">종료시각 이후 마산 직통 편이 없어요 — 숙박 또는 환승 확인이 필요합니다.</div>`)
+    : ''
+
+  show(`
+    <div class="route-head">
+      <span class="route-head-title">🚄 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
+      <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} ${state.startTime} 시작 기준 역산</span>
+    </div>
+    <div class="route-pick">
+      <span class="route-pick-label">이 기차를 타세요</span>
+      <span class="route-pick-time">마산역 ${fmtTime(b.dep)} 출발</span>
+    </div>
+    ${b.legs.map(legLine).join(waitLine)}
+    <div class="route-step">🚶 ${escapeHtml(b.station)}역 ${fmtTime(b.arr)} 도착 → 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)}) → 현장 ${fmtTime(arriveVenue)} 도착</div>
+    <div class="route-step">⏱ 시작 ${state.startTime}까지 여유 ${b.margin}분${b.tight ? ' <span class="route-tight">빠듯</span>' : ''} · 문 앞 총 소요 ${fmtDur(b.totalMin)}</div>
+    ${plan.noBuffer ? '<div class="route-warn">권장 여유(10분)를 지키는 편이 없어 도착 직전에 닿는 편을 표시했습니다. 전날 이동도 함께 검토하세요.</div>' : ''}
+    <div class="route-step">💳 ${fareLine}</div>
+    ${altHtml}
+    ${retHtml}
+    ${accessFormHtml(b, plan)}
+    <div class="route-note">시간표 2026년 10월 기준 · 운임표 2026년 9월 기준. ${b.accessSrc === 'est' ? '역→목적지 이동시간은 직선거리 기반 <strong>추정치</strong>이고 실제 대중교통 조회 결과가 아닙니다. ' : ''}좌석 잔여는 반영되지 않습니다.</div>`)
+}
+
 function getFare(place) {
   if (!place) return null
   for (const row of FARE_TABLE) {
     if (row.keywords.some(k => place.includes(k))) return row
   }
   return null
+}
+
+// 운임 행 → "직통" / "동대구 환승 1회" 같은 경로 한 줄. 버스·항공 행은 빈 문자열.
+function fareRouteText(fare) {
+  if (!fare || !Array.isArray(fare.path) || fare.path.length < 2) return ''
+  if (!fare.transfers) return '직통'
+  const via = fare.path.slice(1, -1).join('·')
+  return `${via} 환승 ${fare.transfers}회`
 }
 
 // ── 출장신청서 미리보기 ────────────────────────────────────────────────────────
@@ -1875,8 +2204,10 @@ function renderTripFormPreview() {
   }
 
   // ── 교통비 행 ──
+  // 역산으로 도착역이 정해졌으면 그 역 운임으로 적는다(화면 안내와 같은 역·같은 금액).
   let fareRows = ''
   let fareTotal = 0
+  const sheetRouteFare = isJeju ? null : routeFare()
   if (isJeju) {
     fareRows = `
       <tr>
@@ -1900,6 +2231,21 @@ function renderTripFormPreview() {
       <tr>
         <td class="tf-td" style="color:#8b95a1;font-size:12px">수정 패널에서 직접 입력한 금액</td>
       </tr>`
+  } else if (sheetRouteFare) {
+    const rfs      = sheetRouteFare
+    const half     = rfs.oneWay
+    const viaGo    = rfs.transfers ? ` [${rfs.via.join(' → ')} 환승]` : ''
+    const viaBack  = rfs.transfers ? ` [${[...rfs.via].reverse().join(' → ')} 환승]` : ''
+    const modeLabel = `KTX(${rfs.grade === '특실' ? '특실' : '일반'})`
+    fareTotal = rfs.roundTrip
+    fareRows = `
+      <tr>
+        <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
+        <td class="tf-td">마산 → ${rfs.station}역${viaGo}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+      </tr>
+      <tr>
+        <td class="tf-td">${rfs.station}역 → 마산${viaBack}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+      </tr>`
   } else {
     const fare = getFare(state.region || state.place)
     if (fare) {
@@ -1908,14 +2254,17 @@ function renderTripFormPreview() {
       const half      = fareAmt / 2
       const modeLabel = fare.bus ? '시외버스' : `KTX(${useFirst ? '특실' : '일반'})`
       const dest      = fare.label
+      const route     = fareRouteText(fare)
+      const viaGo     = fare.transfers ? ` [${fare.path.slice(1, -1).join(' → ')} 환승]` : ''
+      const viaBack   = fare.transfers ? ` [${fare.path.slice(1, -1).reverse().join(' → ')} 환승]` : ''
       fareTotal = fareAmt
       fareRows = `
         <tr>
           <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
-          <td class="tf-td">마산 → ${dest}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+          <td class="tf-td">마산 → ${dest}${viaGo}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
         </tr>
         <tr>
-          <td class="tf-td">${dest} → 마산&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+          <td class="tf-td">${dest} → 마산${viaBack}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
         </tr>`
     } else if (state.region || state.place) {
       fareRows = `<tr>
@@ -2334,6 +2683,8 @@ function restartFlow() {
     dept: '', name: '',
     isMS: null, isShortDayTrip: null, isDayTrip: null, before12: null,
     lodgingProvided: null, mealProvided: null, hasPlane: null, hasShuttle: null,
+    startTime: '', endTime: '', placeLat: null, placeLon: null,
+    accessOverride: {}, pinStation: null, fareOverride: null,
   })
   // 폼 초기화
   ;['input-title','input-start','input-end','input-place','input-region','input-fee','input-dept','input-name'].forEach(id => {
@@ -2458,7 +2809,7 @@ async function runTests() {
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadRates()
+  await Promise.all([loadRates(), loadRouteData()])
   updateProgress()
 
   // 장소 검색 드롭다운 외부 클릭 시 닫기
