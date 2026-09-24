@@ -207,8 +207,11 @@ def patch_js(path, rows, open_mark, close_mark):
     body = js_literal(rows)
     new = re.sub(re.escape(open_mark) + r'.*?' + re.escape(close_mark),
                  open_mark + '\n' + body + '\n' + close_mark, src, flags=re.S)
-    if new == src:
+    if open_mark not in src or close_mark not in src:
         raise SystemExit(f'!! 마커를 못 찾았다: {path}')
+    if new == src:
+        print(f'{path} — 변경 없음 (이미 최신)')
+        return
     Path(path).write_text(new, encoding='utf-8')
     print(f'{path} — fareTable {len(rows)}행 갱신')
 
