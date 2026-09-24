@@ -1315,15 +1315,9 @@ function onDateChange() {
 }
 
 // 달력 열기 — showPicker() 우선, 미지원 브라우저는 focus() 폴백
-function openDatePicker(inputId) {
-  const input = document.getElementById(inputId)
-  if (!input) return
-  try {
-    input.showPicker()
-  } catch {
-    input.focus()
-  }
-}
+// 날짜 피커는 네이티브 input 이 직접 연다 (styles.css .date-native).
+// showPicker() 경유 방식은 WebKit(사파리·iOS)에서 예외 없이 무시돼
+// 공문 없이 날짜를 고를 방법이 사라졌었다 — 되살리지 말 것.
 
 function updateDateBox(inputId, placeholderId) {
   const input = document.getElementById(inputId)

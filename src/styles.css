@@ -1456,7 +1456,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   cursor: pointer;
   border: none;
   background: none;
-  pointer-events: none;   /* onclick은 .date-input-box에서 처리 */
+  /* 네이티브 입력이 직접 클릭을 받는다.
+     이전에는 pointer-events:none + 박스 onclick -> showPicker() 였는데
+     WebKit(사파리·iOS)에서 showPicker()가 예외도 없이 아무 일도 하지 않아
+     공문 없이 날짜를 직접 고를 방법이 사라졌다. (2026-09-24 재현·수정)
+     -webkit-appearance:none 을 주면 사파리에서 피커가 안 열리므로 건드리지 않는다. */
+  pointer-events: auto;
+  color: transparent;
+  font-size: 16px;   /* iOS 자동 확대 방지 */
 }
 
 /* 날짜가 선택된 경우 placeholder 숨김 + 값 표시 */
