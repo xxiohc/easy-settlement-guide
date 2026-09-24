@@ -50,7 +50,12 @@ function checkPassword() {
 }
 
 function logout() {
+  // 토큰은 탭을 닫으면 사라지는 sessionStorage 에만 둔다.
+  // 예전 버전이 localStorage 에 남겨둔 토큰도 여기서 함께 지운다.
   sessionStorage.removeItem('smc_admin_token')
+  localStorage.removeItem('smc_admin_token')
+  const tokenInput = document.getElementById('githubToken')
+  if (tokenInput) tokenInput.value = ''
   document.getElementById('adminMain').classList.add('hidden')
   document.getElementById('gateOverlay').classList.remove('hidden')
   document.getElementById('gateInput').value = ''
@@ -59,7 +64,13 @@ function logout() {
 // ── 초기화 ───────────────────────────────────────────────────────────────────
 async function initAdmin() {
   // 저장된 토큰 복원
-  const savedToken = localStorage.getItem('smc_admin_token')
+  // 예전 버전이 localStorage 에 영구 저장한 토큰이 있으면 sessionStorage 로 옮기고 지운다
+  const legacyToken = localStorage.getItem('smc_admin_token')
+  if (legacyToken) {
+    sessionStorage.setItem('smc_admin_token', legacyToken)
+    localStorage.removeItem('smc_admin_token')
+  }
+  const savedToken = sessionStorage.getItem('smc_admin_token')
   if (savedToken) document.getElementById('githubToken').value = savedToken
 
   // 현재 rates.json 로드
@@ -190,8 +201,8 @@ function toggleAuto25p() {
 function saveToken() {
   const tok = document.getElementById('githubToken').value.trim()
   if (tok) {
-    localStorage.setItem('smc_admin_token', tok)
-    setStatus('토큰이 세션에 저장되었습니다.', 'ok')
+    sessionStorage.setItem('smc_admin_token', tok)
+    setStatus('토큰을 이 탭에만 저장했습니다. 탭을 닫으면 지워집니다.', 'ok')
   }
 }
 

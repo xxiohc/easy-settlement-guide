@@ -1534,9 +1534,6 @@ function formatFeeInput(input) {
   input.value = raw ? Number(raw).toLocaleString() : ''
 }
 
-// ── CARD 5: 등록비 기준 안내 준비 ────────────────────────────────────────────
-// (prepareCard5는 goToCard(5) 전에 필요하면 호출, 현재는 HTML 고정)
-
 // ── CARD 6: 납부 여부 ─────────────────────────────────────────────────────────
 function select6(val) {
   state.feeStatus = val

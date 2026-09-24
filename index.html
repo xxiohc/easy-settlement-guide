@@ -410,66 +410,6 @@
         </section>
 
         <!-- ══════════════════════════════════════
-             CARD 5: 등록비 기준 안내
-        ══════════════════════════════════════ -->
-        <section class="flow-card" id="card-5" data-step="5">
-          <button class="back-btn" onclick="goBack(5)" aria-label="뒤로">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
-          <div class="step-trail" id="trail-5"></div>
-
-          <div class="card-body">
-            <div class="card-icon">
-              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-                <rect width="56" height="56" rx="18" fill="#FFF9EC"/>
-                <circle cx="28" cy="26" r="10" stroke="#f59e0b" stroke-width="2"/>
-                <path d="M28 22v5M28 30v1" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-            </div>
-            <h1 class="card-question">등록비 처리 기준을<br>먼저 확인해주세요</h1>
-            <p class="card-desc">삼성서울병원은 아래 기준 금액만 비용처리 돼요</p>
-
-            <div class="notice-card">
-              <div class="notice-rule">
-                <div class="notice-rule-dot"></div>
-                <div>
-                  <strong>사전납입 기준</strong>
-                  <span>행사 전 미리 납부했을 때 적용되는 할인 금액</span>
-                </div>
-              </div>
-              <div class="notice-rule">
-                <div class="notice-rule-dot"></div>
-                <div>
-                  <strong>회원병원 기준</strong>
-                  <span>병원 단체 회원으로 등록된 경우의 할인 금액</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 공문 인식 시: 금액 비교 표 -->
-            <div class="fee-compare hidden" id="feeCompare">
-              <div class="fee-compare-header">공문에서 인식된 금액</div>
-              <div class="fee-compare-body" id="feeCompareBody">
-                <!-- JS로 채워짐 -->
-              </div>
-            </div>
-
-            <div class="notice-warn">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#d97706" stroke-width="1.2"/><path d="M7 4.5v3M7 9.5v.5" stroke="#d97706" stroke-width="1.2" stroke-linecap="round"/></svg>
-              <span>이 기준보다 높은 금액으로 납부하셨더라도, 비용처리는 위 기준 금액까지만 가능해요</span>
-            </div>
-          </div>
-
-          <div class="card-footer">
-            <button class="back-footer-btn" onclick="goBack(5)">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12l-4-4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              이전
-            </button>
-            <button class="cta-btn" onclick="goToCard(6)">알겠어요, 다음으로</button>
-          </div>
-        </section>
-
-        <!-- ══════════════════════════════════════
              CARD 6: 등록비 납부 여부
         ══════════════════════════════════════ -->
         <section class="flow-card" id="card-6" data-step="6">
