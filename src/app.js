@@ -93,10 +93,19 @@ async function loadRates() {
 }
 
 // ── 카드 내비게이션 ───────────────────────────────────────────────────────────
+// 브라우저 뒤로가기(안드로이드 뒤로, 사파리 스와이프)로 앱을 벗어나 입력이 통째로
+// 날아가던 문제 때문에, 카드 이동마다 history 항목을 하나씩 쌓는다.
+// popstate 로 되돌아올 때는 다시 push 하지 않는다(무한 루프 방지).
+let navigatingByHistory = false
+
 function goToCard(n) {
   const current = document.getElementById(`card-${state.currentCard}`)
   const next    = document.getElementById(`card-${n}`)
   if (!next) return
+
+  if (!navigatingByHistory && n !== state.currentCard) {
+    history.pushState({ card: n }, '')
+  }
 
   // 진입 전 준비
   if (n === 4) {
@@ -214,6 +223,12 @@ function validateCard4() {
     document.getElementById('end-box')?.classList.remove('input-error')
   }
 
+  // 3-1. 기간 역전 (시작일 > 종료일)
+  if (startEl?.value && endEl?.value && new Date(endEl.value) < new Date(startEl.value)) {
+    errs.push({ id: 'end-box', label: '출장 종료일 — 시작일보다 앞설 수 없어요' })
+    document.getElementById('end-box')?.classList.add('input-error')
+  }
+
   // 4. 출장 지역 (오프라인만 필수)
   if (!state.isOnline) {
     const regionEl = document.getElementById('input-region')
@@ -248,16 +263,21 @@ function validateCard4() {
   return errs
 }
 
-// ── Card 4 에러 배너 렌더 ──────────────────────────────────────────────────────
-function renderCard4Errors(errs) {
-  let banner = document.getElementById('c4-err-banner')
+// ── 에러 배너 렌더 (카드 4·8 공용) ───────────────────────────────────────────
+// 배너는 질문·입력 '위'에 넣는다. 카드 푸터 앞에 두면 첫 오류 필드로 스크롤한 순간
+// 배너가 화면 밖으로 밀려 무엇이 잘못됐는지 보이지 않았다.
+function renderFlowErrors(cardNum, errs, title) {
+  const bannerId = `c${cardNum}-err-banner`
+  let banner = document.getElementById(bannerId)
   if (!banner) {
     banner = document.createElement('div')
-    banner.id = 'c4-err-banner'
+    banner.id = bannerId
     banner.className = 'c4-err-banner'
-    // card-footer 바로 앞에 삽입
-    const footer = document.querySelector('#card-4 .card-footer')
-    footer?.parentNode.insertBefore(banner, footer)
+    const body = document.querySelector(`#card-${cardNum} .card-body`)
+    const anchor = body?.querySelector('.info-fields-wrap, .extra-field')
+    if (anchor) body.insertBefore(banner, anchor)
+    else document.querySelector(`#card-${cardNum} .card-footer`)
+      ?.parentNode.insertBefore(banner, document.querySelector(`#card-${cardNum} .card-footer`))
   }
 
   if (errs.length === 0) {
@@ -269,20 +289,20 @@ function renderCard4Errors(errs) {
   banner.innerHTML = `
     <div class="c4-err-icon">⚠️</div>
     <div class="c4-err-body">
-      <strong>아래 항목을 채워주세요</strong>
+      <strong>${title}</strong>
       <ul class="c4-err-list">
         ${errs.map(e => `<li>${e.label}</li>`).join('')}
       </ul>
     </div>`
 
-  // 첫 번째 오류 필드로 스크롤
-  const firstId = errs[0].id
-  const firstEl = document.getElementById(firstId)
-  if (firstEl) {
-    firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    // 포커스 (input인 경우)
-    if (firstEl.tagName === 'INPUT') firstEl.focus()
-  }
+  // 배너를 먼저 보여준 뒤 첫 번째 오류 필드로 스크롤
+  banner.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const firstEl = document.getElementById(errs[0].id)
+  if (firstEl && firstEl.tagName === 'INPUT') firstEl.focus({ preventScroll: true })
+}
+
+function renderCard4Errors(errs) {
+  renderFlowErrors(4, errs, '아래 항목을 채워주세요')
 }
 
 // ── Card 4 입력 변경 시 에러 실시간 해제 ──────────────────────────────────────
@@ -1304,11 +1324,28 @@ function onDateChange() {
   if (start) clearCard4Error('start-box')
   if (end)   clearCard4Error('end-box')
 
+  // 종료일 달력에서 시작일 이전을 고를 수 없게 막는다.
+  // 시작일 쪽에는 max 를 걸지 않는다 — 일정을 통째로 뒤로 옮길 때 막혀버린다.
+  const endEl = document.getElementById('input-end')
+  if (endEl) endEl.min = start || ''
+
+  const tag = document.getElementById('duration-tag')
   if (start && end) {
     const ms = new Date(end) - new Date(start)
-    state.nights = Math.max(0, Math.floor(ms / 86400000))
+    if (ms < 0) {
+      // 종료일이 시작일보다 앞서면 예전에는 조용히 '1일 (당일)'로 계산됐다 — 금액이 틀린다
+      state.nights = 0
+      state.days   = 0
+      tag.textContent = '종료일이 시작일보다 앞서요'
+      tag.classList.remove('hidden')
+      tag.classList.add('duration-tag-error')
+      document.getElementById('end-box')?.classList.add('input-error')
+      return
+    }
+    tag.classList.remove('duration-tag-error')
+    document.getElementById('end-box')?.classList.remove('input-error')
+    state.nights = Math.floor(ms / 86400000)
     state.days   = state.nights + 1
-    const tag = document.getElementById('duration-tag')
     tag.textContent = state.nights === 0 ? `${state.days}일 (당일)` : `${state.nights}박 ${state.days}일`
     tag.classList.remove('hidden')
   }
@@ -1607,6 +1644,9 @@ function select7(val) {
 
 // ── CARD 8: 추가 확인 준비 ───────────────────────────────────────────────────
 function prepareCard8() {
+  // 재진입 시 지난 에러 표시는 지우고 시작한다
+  document.getElementById('c8-err-banner')?.classList.add('hidden')
+  document.querySelectorAll('#card-8 .field-error').forEach(el => el.classList.remove('field-error'))
   // field-before12는 항상 숨김
   document.getElementById('field-before12').classList.add('hidden')
   // 당일치기 → 항상 숙박으로 간주 (isDayTrip = false)
@@ -1646,9 +1686,62 @@ function prepareCard8() {
   }
 }
 
+// ── Card 8 유효성 검사 ────────────────────────────────────────────────────────
+// 화면에 보이는 Y/N 질문 중 답하지 않은 것이 있으면 금액을 계산하지 않는다.
+// 예전에는 무검증으로 Card 9 로 넘어가, 숙소 제공 질문을 못 보고 지나치면
+// 숙박비 10만원이 그대로 붙은 금액이 '예상 정산 총액'으로 나왔다.
+const CARD8_QUESTIONS = [
+  { field: 'isShortDayTrip',  id: 'field-shortdaytrip', label: '교육+이동 8시간 이하 당일 출장인지' },
+  { field: 'isMS',            id: 'field-rank',         label: '직급이 MS 이상인지' },
+  { field: 'before12',        id: 'field-daytrip',      label: '시작시간이 12시 이전인지' },
+  { field: 'lodgingProvided', id: 'field-lodging',      label: '숙소가 제공되는지' },
+  { field: 'mealProvided',    id: 'field-meal',         label: '식사가 제공되는지' },
+  { field: 'hasShuttle',      id: 'field-shuttle',      label: '공항 셔틀버스를 이용했는지' },
+]
+
+function validateCard8() {
+  const errs = []
+  for (const q of CARD8_QUESTIONS) {
+    const el = document.getElementById(q.id)
+    if (!el || el.classList.contains('hidden')) {
+      el?.classList.remove('field-error')
+      continue
+    }
+    if (state[q.field] === null || state[q.field] === undefined) {
+      errs.push({ id: q.id, label: q.label })
+      el.classList.add('field-error')
+    } else {
+      el.classList.remove('field-error')
+    }
+  }
+  return errs
+}
+
+function goFromCard8() {
+  const errs = validateCard8()
+  if (errs.length > 0) {
+    renderFlowErrors(8, errs, '아래 질문에 답해주세요 — 금액이 달라져요')
+    const btn = document.getElementById('ctaNext8')
+    btn?.classList.add('shake')
+    setTimeout(() => btn?.classList.remove('shake'), 600)
+    return
+  }
+  document.getElementById('c8-err-banner')?.classList.add('hidden')
+  goToCard(9)
+}
+
 // Y/N 버튼 선택 + 조건부 필드 show/hide
 function setYN(field, val) {
   state[field] = val
+
+  // 답한 질문은 에러 표시 해제 + 남은 오류가 없으면 배너도 닫는다
+  const q = CARD8_QUESTIONS.find(x => x.field === field)
+  if (q) {
+    document.getElementById(q.id)?.classList.remove('field-error')
+    if (!document.querySelector('#card-8 .field-error')) {
+      document.getElementById('c8-err-banner')?.classList.add('hidden')
+    }
+  }
 
   // 버튼 선택 표시
   const fieldMap = {
@@ -2378,9 +2471,12 @@ function renderTripFormPreview() {
   el.innerHTML = `
     <div class="trip-form-section-label">
       📋 출장신청서 작성 참고
-      <button class="tf-edit-toggle ${state.formEditMode ? 'active' : ''}" onclick="toggleFormEdit()">
-        ${state.formEditMode ? '✔ 수정 완료' : '✏ 수정'}
-      </button>
+      <span class="tf-label-actions">
+        <button class="tf-edit-toggle" id="tfCopyBtn" onclick="copyTripForm()">📋 복사</button>
+        <button class="tf-edit-toggle ${state.formEditMode ? 'active' : ''}" onclick="toggleFormEdit()">
+          ${state.formEditMode ? '✔ 수정 완료' : '✏ 수정'}
+        </button>
+      </span>
     </div>
     <p class="trip-form-section-note">S-Portal 전자결재 작성 시 아래 내용을 참고하세요 · 성명·결재선은 직접 입력</p>
 
@@ -2430,6 +2526,58 @@ function renderTripFormPreview() {
         <span class="tf-total-amount">${totalStr}</span>
       </div>
     </div>`
+}
+
+// ── 출장신청서 내용 복사 ──────────────────────────────────────────────────────
+// S-Portal 전자결재에 옮겨 적어야 해서, 화면에 그려진 표를 그대로 텍스트로 만든다.
+// 금액을 다시 계산하지 않고 렌더된 DOM 을 읽는다 — 화면과 복사본이 어긋나지 않게.
+function tripFormText() {
+  const box = document.querySelector('#tripFormWrap .tf-box')
+  if (!box) return ''
+  const lines = ['[출장신청서]']
+  box.querySelectorAll('tr').forEach(tr => {
+    const kids = [...tr.children]
+    const txt  = el => el.innerText.trim().replace(/\s+/g, ' ')
+    // 항목명(th) 없이 값만 있는 줄(교통비 왕복 둘째 줄 등)은 그대로 이어 붙인다
+    if (!kids.some(el => el.tagName === 'TH')) {
+      const v = kids.map(txt).filter(Boolean).join(' ')
+      if (v) lines.push(`  ${v}`)
+      return
+    }
+    for (let i = 0; i < kids.length; i += 2) {
+      const label = txt(kids[i])
+      if (!label) continue
+      lines.push(`${label}: ${kids[i + 1] ? txt(kids[i + 1]) : ''}`)
+    }
+  })
+  const total = box.querySelector('.tf-total-row')
+  if (total) lines.push(total.innerText.trim().replace(/\s+/g, ' '))
+  return lines.join('\n')
+}
+
+async function copyTripForm() {
+  const text = tripFormText()
+  if (!text) return
+  const btn = document.getElementById('tfCopyBtn')
+  let ok = false
+  try {
+    await navigator.clipboard.writeText(text)
+    ok = true
+  } catch (e) {
+    // http·구형 사파리 폴백
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    try { ok = document.execCommand('copy') } catch (_) { ok = false }
+    ta.remove()
+  }
+  if (btn) {
+    btn.textContent = ok ? '✔ 복사됨' : '복사 실패'
+    setTimeout(() => { btn.textContent = '📋 복사' }, 1600)
+  }
 }
 
 // ── 출장신청서 수정 패널 토글 ──────────────────────────────────────────────────
@@ -2698,6 +2846,7 @@ function restartFlow() {
   card1.classList.add('active')
   card1.style.transform = ''
   updateProgress()
+  if (!navigatingByHistory) history.pushState({ card: 1 }, '')
 }
 
 // ── 자동 테스트 (콘솔에서 runTests() 호출) ────────────────────────────────────
@@ -2803,11 +2952,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   await Promise.all([loadRates(), loadRouteData()])
   updateProgress()
 
+  // 첫 화면을 history 에 고정해 두고, 뒤로가기는 이전 카드로 되돌린다.
+  history.replaceState({ card: state.currentCard }, '')
+  window.addEventListener('popstate', e => {
+    const card = e.state?.card
+    if (!card || card === state.currentCard) return
+    navigatingByHistory = true
+    try { goToCard(card) } finally { navigatingByHistory = false }
+  })
+
   // overflow:clip 미지원 브라우저(사파리 15 이하) 폴백 — 카드 뷰포트는 절대 스크롤되지 않는다
   const cardViewport = document.getElementById('cardViewport')
   cardViewport.addEventListener('scroll', () => {
     if (cardViewport.scrollLeft !== 0) cardViewport.scrollLeft = 0
     if (cardViewport.scrollTop !== 0) cardViewport.scrollTop = 0
+  })
+
+  // Esc 로 자동완성 드롭다운 닫기 (키보드만 쓰는 담당자용)
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return
+    document.getElementById('placeSuggest')?.classList.add('hidden')
+    document.getElementById('regionSuggest')?.classList.add('hidden')
   })
 
   // 장소 검색 드롭다운 외부 클릭 시 닫기

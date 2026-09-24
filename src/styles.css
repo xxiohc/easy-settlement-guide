@@ -798,6 +798,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   padding-top: 10px;
 }
 
+/* 배너가 card-body 안(질문 위)에 들어간 경우 — 좌우 여백은 body 가 이미 준다 */
+.card-body > .c4-err-banner {
+  margin: 0 0 16px;
+}
+
 /* PC: footer max-width card-body에 맞추고 여백 압축 */
 @media (min-width: 769px) {
   .card-footer { max-width: 860px; padding: 12px 48px 28px; }
@@ -949,6 +954,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .date-input-box.input-error {
   border: 1.5px solid #ef4444 !important;
   background: #fff5f5 !important;
+}
+/* Card 8 — 답하지 않은 Y/N 질문 표시 */
+.extra-field.field-error {
+  border-color: #ef4444;
+  background: #fff5f5;
+}
+.extra-field.field-error .yn-btn {
+  border-color: #fecdd3;
 }
 .field-error .fee-toggle-group {
   border: 1.5px solid #ef4444;
@@ -2010,6 +2023,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   padding: 3px 12px;
 }
 
+.duration-tag.duration-tag-error {
+  color: #dc2626;
+  background: #fff1f2;
+}
+
 /* 장소 자동완성 */
 .place-input-wrap {
   position: relative;
@@ -2625,6 +2643,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   margin-bottom: 4px;
 }
 
+/* 복사·수정 버튼 묶음 */
+.tf-label-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 /* 수정 토글 버튼 */
 .tf-edit-toggle {
   margin-left: auto;
@@ -2640,6 +2666,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   white-space: nowrap;
 }
 .tf-edit-toggle:hover { background: #e8edf5; border-color: #b0b8c4; }
+.tf-label-actions .tf-edit-toggle { margin-left: 0; }
 .tf-edit-toggle.active { background: #dbeeff; color: #1b64da; border-color: #93c5fd; }
 
 /* 수정 패널 */
