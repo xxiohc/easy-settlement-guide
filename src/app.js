@@ -775,6 +775,14 @@ async function ocrBlob(blob, pctStart = 5, pctEnd = 90) {
   }
 }
 
+// 같은 값이 가장 많이 나온 금액을 고른다(같으면 작은 값 — 회원가는 보통 낮은 쪽이다).
+function mostCommon(nums) {
+  if (!nums.length) return null
+  const count = new Map()
+  for (const n of nums) count.set(n, (count.get(n) || 0) + 1)
+  return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
+}
+
 function parseDocMeta(filename, text) {
   const norm = s => s.replace(/\s+/g, '')
   const col  = s => s.replace(/\s+/g, ' ').trim()
@@ -1008,6 +1016,7 @@ function parseDocMeta(filename, text) {
 
   // ── 등록비 ──
   let registration = null
+  let registrationNote = null
 
   // 금액 문자열 파싱 헬퍼 (만원 단위 지원: "18만" → 180000, "180,000" → 180000)
   const parseAmt = s => {
@@ -1048,6 +1057,39 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  // 우선순위2.5: 표 형식 교육비 — 헤더가 교육비·등록비이고 하위 칸이 회원/비회원으로 갈리는 공문.
+  // 금액이 프로그램 행마다 따로 있어 키워드와 같은 줄에 없다(대한간호협회 보수교육 안내가 대표).
+  if (!registration) {
+    const headIdx = tnFee.search(/(교육비|등록비|수강료|참가비)/)
+    const feeTable = headIdx >= 0 ? tnFee.slice(headIdx) : ''
+    const hasMemberCols = /(등록[,·․、\/]?NE회원|정회원|회원병원|회원)/.test(feeTable)
+                       && /(미등록회원|미등록|비회원)/.test(feeTable)
+    if (hasMemberCols) {
+      // 행 = 이수시간 + 회원가 + 비회원가 순서. 앞 금액이 회원가다.
+      const rows = [...feeTable.matchAll(/(\d+)시간([\d,]{4,})원([\d,]{4,})원/g)]
+        .map(m => ({ hours: parseInt(m[1]), member: parseAmt(m[2]) }))
+        .filter(r => r.member)
+      const requiredM = tnFee.match(/연간(\d+)시간이상/)
+      const requiredHours = requiredM ? parseInt(requiredM[1]) : null
+      const target = requiredHours ? rows.filter(r => r.hours === requiredHours) : rows
+      const pick = mostCommon(target.map(r => r.member))
+      if (pick) {
+        registration = pick
+        registrationNote = requiredHours
+          ? `연간 ${requiredHours}시간 이수 의무 기준이고 회원 가격이에요. 맞나요?`
+          : '공문 표의 회원 기준 금액이에요. 맞나요?'
+      } else {
+        // 이수시간 칸이 없는 표 — 첫 행 회원가를 쓴다.
+        const pairM = feeTable.match(/([\d,]{4,})원([\d,]{4,})원/)
+        const first = pairM ? parseAmt(pairM[1]) : null
+        if (first) {
+          registration = first
+          registrationNote = '공문 표의 회원 기준 금액이에요. 맞나요?'
+        }
+      }
+    }
+  }
+
   // 우선순위3: "금 XXX원" 형식 — 납부 안내서, 고지서 (예: "금 25,000 원 / 1 명")
   // ※ \b는 한글 앞뒤에서 동작하지 않으므로 사용하지 않음
   if (!registration) {
@@ -1085,13 +1127,20 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  // 간호사 보수교육 공문은 금액을 못 읽어도 기본값을 채운다.
+  // 의료법 시행규칙 제20조에 따라 연간 8시간 이상 이수 의무이고, 8시간 프로그램 회원가는 40,000원으로 같다.
+  if (!registration && /보수교육/.test(tnFee) && /간호/.test(tnFee)) {
+    registration = 40000
+    registrationNote = '간호사 보수교육 8시간·회원 기준 기본값이에요. 다르면 고쳐주세요.'
+  }
+
   // ── 온라인 여부 (제목에 "온라인" 명시된 경우만 true, 없으면 false=오프라인)
   const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300))
 
   const { startTime, endTime } = extractTimes(tc)
 
   return { title, periodDisplay, startDate, endDate, nights, days, destination, registration,
-           isOnline, startTime, endTime, venue: extractVenue(tc) }
+           registrationNote, isOnline, startTime, endTime, venue: extractVenue(tc) }
 }
 
 // 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
@@ -1289,7 +1338,8 @@ function prepareCard4WithMeta() {
   if (meta.registration) {
     document.getElementById('c4-fee-label').textContent =
       `등록비가 ${meta.registration.toLocaleString()}원인 것 같아요`
-    document.getElementById('c4-fee-sub').textContent = '사전납입·회원병원 기준 금액이에요. 맞나요?'
+    document.getElementById('c4-fee-sub').textContent =
+      meta.registrationNote || '사전납입·회원병원 기준 금액이에요. 맞나요?'
     feeQ.classList.remove('hidden')
   } else {
     feeQ.classList.add('hidden')
