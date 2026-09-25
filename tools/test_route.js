@@ -160,3 +160,45 @@ test('rates.json 동대구 왕복은 76,000원이 아니라 21,400원이다', ()
   assert.equal(regionFare('대구').ktxNormal, 21400)
   assert.equal(regionFare('대구').oneWayNormal, 10700)
 })
+
+// ── 전날 이동 판정 고정 케이스 ────────────────────────────────────────────────
+// 판정 기준은 하나다: 마산역 역산 출발이 정상 출근시각(08:30)보다 이른가.
+// 실제 목적지 6곳 × 4갈래(자동 인정·자동 미인정·당일열차 없음·경계)를 고정해 둔다.
+const WORK_START_MIN = 8 * 60 + 30
+const prevDayCases = [
+  // [목적지, 시작시각(분), 기대 판정]  judged: 'yes' | 'no' | 'forced'
+  ['삼성서울병원',        13 * 60, 'yes'],    // 수서 07:33 — 12시 기준이면 미인정이던 구간
+  ['삼성서울병원',        14 * 60, 'no'],     // 수서 09:21
+  ['서울지방국세청',       9 * 60, 'yes'],    // 서울 04:59
+  ['서울지방국세청',      13 * 60, 'no'],     // 서울 09:21 — 서울인데도 미인정
+  ['건강보험심사평가원',   9 * 60, 'forced'], // 원주 — 당일 도착 열차 없음
+  ['국민건강보험공단',    10 * 60, 'forced'], // 원주 — 당일 도착 열차 없음
+  ['대한병원협회',        13 * 60, 'yes'],    // 용산 07:33
+  ['한국보건복지인재원',  13 * 60, 'no'],     // 오송 09:21
+]
+
+for (const [name, startMin, judged] of prevDayCases) {
+  test(`전날 이동 판정: ${name} ${R.fmtTime(startMin)} 시작 → ${judged}`, () => {
+    const p = planFor(name, startMin)
+    if (judged === 'forced') {
+      assert.equal(p.ok, false)
+      assert.equal(p.reason, 'no-train')
+      return
+    }
+    assert.ok(p.ok, `${name} 역산이 성립해야 한다`)
+    assert.equal(p.best.dep < WORK_START_MIN, judged === 'yes',
+      `마산역 ${R.fmtTime(p.best.dep)} 출발 — 08:30 기준 판정이 바뀌었다`)
+  })
+}
+
+test('08:30 경계에 걸치는 마산역 상행편은 없다 (판정이 흔들릴 여지 없음)', () => {
+  const deps = new Set()
+  for (const [name, startMin] of prevDayCases) {
+    const p = planFor(name, startMin)
+    if (p.ok) deps.add(p.best.dep)
+  }
+  for (const d of deps) {
+    assert.ok(Math.abs(d - WORK_START_MIN) > 30,
+      `마산역 ${R.fmtTime(d)} 출발이 08:30 경계 30분 안에 들어왔다 — 판정 근거를 다시 봐야 한다`)
+  }
+})

@@ -580,22 +580,18 @@
               </div>
             </div>
 
-            <!-- 서울 출장: 12시 이전 시작 여부 (비서울 출장은 숨김) -->
+            <!-- 전날 이동: 출근시각(08:30) 전에 출발해야 했는지 -->
             <div class="extra-field hidden" id="field-daytrip">
               <div class="extra-question">
-                <strong>서울이 출장지역이고 출장관련 시작시간이 12시 이전인가요?</strong>
-                <span>해당 시 전날 출발이 필요하여 일당과 숙박비가 추가돼요</span>
+                <strong>교육에 맞추려면 출근시각(08:30)보다 먼저 출발해야 했나요?</strong>
+                <span>해당 시 전날 이동으로 보아 일당과 숙박비가 추가돼요</span>
               </div>
               <div class="auto-judged hidden" id="daytrip-auto"></div>
               <div class="yn-group">
-                <button class="yn-btn" onclick="setYN('before12', true)">네, 12시 이전이에요</button>
-                <button class="yn-btn" onclick="setYN('before12', false)">아니요, 12시 이후예요</button>
+                <button class="yn-btn" onclick="setYN('prevDayMove', true)">네, 08:30 전에 나서야 해요</button>
+                <button class="yn-btn" onclick="setYN('prevDayMove', false)">아니요, 그 이후에 나서요</button>
               </div>
-              <!-- before12 안내는 Card 9 예상금액 화면에서 표시 -->
             </div>
-
-            <!-- field-before12: field-daytrip으로 통합됨 — 항상 숨김 -->
-            <div class="extra-field hidden" id="field-before12"></div>
 
             <!-- 숙소 제공 여부 (숙박할 때) -->
             <div class="extra-field hidden" id="field-lodging">
@@ -678,9 +674,9 @@
             <!-- KTX 역산 교통 안내 -->
             <div class="route-panel hidden" id="routePanel"></div>
 
-            <!-- 서울 12시 이전 추가 안내 (서울 출장이고 before12 미체크 시) -->
-            <div class="seoul-before12-hint hidden" id="seoulBefore12Hint">
-              ℹ️ 서울 출장 시 시작시간이 12시 이전이면 하루 일당(35,000원)과 숙박비(100,000원)가 추가돼요
+            <!-- 전날 이동 추가 안내 -->
+            <div class="prev-day-hint hidden" id="prevDayHint">
+              ℹ️ 교육에 맞추려 출근시각(08:30) 전에 출발해야 하면 하루 일당(35,000원)과 숙박비(100,000원)가 추가돼요
             </div>
 
             <div class="amount-note">

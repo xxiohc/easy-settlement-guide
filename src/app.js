@@ -41,7 +41,7 @@ const state = {
   isMS: null,           // true | false  (MS 이상 직급)
   isShortDayTrip: null, // true | false  (교육+이동 8h 이하 당일 출장)
   isDayTrip: null,
-  before12: null,
+  prevDayMove: null,
   lodgingProvided: null,
   mealProvided: null,
   hasPlane: null,
@@ -1712,13 +1712,57 @@ function confirmCard6NotPaid() {
   state.isOnline ? goToCard(9) : goToCard(8)
 }
 
+// ── 전날 이동 판정 ───────────────────────────────────────────────────────────
+// 기준은 하나다: 교육 시작에 닿으려면 정상 출근시각(08:30)보다 먼저 마산역을 떠나야
+// 하는가. 예전 기준이던 '서울 + 12시 이전 시작'은 이 판정의 옛 근사치라 버렸다
+// (2026-09-25 지석초이 승인). 역산이 되는 구간은 앱이 자동으로 답을 정한다.
+const WORK_START_MIN = 8 * 60 + 30
+
+function applyPrevDayMove() {
+  const autoEl = document.getElementById('daytrip-auto')
+  const setNote = html => {
+    if (!autoEl) return
+    autoEl.innerHTML = html
+    autoEl.classList.remove('hidden')
+  }
+  if (autoEl) autoEl.classList.add('hidden')
+
+  const r = computeRoutePlan()
+  const plan = r && !r.skip ? r.plan : null
+
+  if (plan && plan.ok && plan.best) {
+    const early = plan.best.dep < WORK_START_MIN
+    if (state.prevDayMove === null) setYN('prevDayMove', early)
+    setNote(early
+      ? `역산하면 마산역 <strong>${fmtTime(plan.best.dep)}</strong> 출발이라 출근시각 08:30보다 일러요. 전날 이동으로 골라 뒀어요 — 다르면 아래에서 바꾸세요.`
+      : `역산하면 마산역 <strong>${fmtTime(plan.best.dep)}</strong> 출발이라 출근시각 08:30 이후예요. 당일 이동으로 골라 뒀어요 — 다르면 아래에서 바꾸세요.`)
+    return { mode: 'ask' }
+  }
+
+  // 당일 도착할 열차가 아예 없으면 선택지가 없다 — 묻지 않고 확정한다.
+  if (plan && !plan.ok && plan.reason === 'no-train') {
+    state.prevDayMove = true
+    return { mode: 'forced' }
+  }
+  // 마산역 인근이라 기차를 타지 않는 구간은 전날 이동이 성립하지 않는다.
+  if (plan && !plan.ok && plan.reason === 'near') {
+    state.prevDayMove = false
+    return { mode: 'skip' }
+  }
+
+  // 시외버스·제주·좌표 미상: 역산이 안 되니 직접 묻는다.
+  const startMin = toMinutes(state.startTime)
+  if (startMin != null) {
+    setNote(`입력하신 교육 시작시각은 <strong>${escapeHtml(state.startTime)}</strong>이에요. 여기에 맞추려면 08:30 전에 나서야 했는지 골라주세요.`)
+  }
+  return { mode: 'ask' }
+}
+
 // ── CARD 8: 추가 확인 준비 ───────────────────────────────────────────────────
 function prepareCard8() {
   // 재진입 시 지난 에러 표시는 지우고 시작한다
   document.getElementById('c8-err-banner')?.classList.add('hidden')
   document.querySelectorAll('#card-8 .field-error').forEach(el => el.classList.remove('field-error'))
-  // field-before12는 항상 숨김
-  document.getElementById('field-before12').classList.add('hidden')
   // 당일치기 → 항상 숙박으로 간주 (isDayTrip = false)
   state.isDayTrip = false
 
@@ -1728,7 +1772,9 @@ function prepareCard8() {
   // → 시외버스 지역(부산·울산·경주 등): 애매하므로 표시
   // → 운임표 없는 인근 지역(창원·진주 등): 표시
   const fare = getFare(state.region || state.place)
-  const showShortDay = !state.isSeoul && (state.nights || 0) === 0 && !(fare && fare.ktxNormal)
+  const prevDay = applyPrevDayMove()
+  const showShortDay = !state.isSeoul && (state.nights || 0) === 0
+    && !(fare && fare.ktxNormal) && state.prevDayMove !== true
   document.getElementById('field-shortdaytrip').classList.toggle('hidden', !showShortDay)
   if (!showShortDay) {
     state.isShortDayTrip = null
@@ -1738,29 +1784,16 @@ function prepareCard8() {
   const isShort   = state.isShortDayTrip === true
   const isDayTrip = (state.nights || 0) === 0
 
-  // 8시간 이하 당일 출장이면 직급·서울12시·숙소·식사 질문 숨김
+  // 8시간 이하 당일 출장이면 직급·전날이동·숙소·식사 질문 숨김
   // 제주 출장이면 KTX를 타지 않으므로 직급(특실 여부) 질문 불필요
   // 당일 출장(nights=0)이면 숙소 질문도 숨김
   document.getElementById('field-rank').classList.toggle('hidden', isShort || state.isJeju)
-  document.getElementById('field-daytrip').classList.toggle('hidden', isShort || !state.isSeoul)
+  document.getElementById('field-daytrip').classList.toggle('hidden', isShort || prevDay.mode !== 'ask')
   document.getElementById('field-lodging').classList.toggle('hidden', isShort || isDayTrip)
   const showMeal = !isShort && (state.nights || 0) >= 2
   document.getElementById('field-meal').classList.toggle('hidden', !showMeal)
 
-  // 서울 12시 이전 여부는 입력된 시작시각으로 판정한다. 답이 이미 정해진 질문을
-  // 되돌리지 않고, 판정 근거를 보여준 뒤 다르면 고칠 수 있게 둔다.
-  const autoEl   = document.getElementById('daytrip-auto')
   const startMin = toMinutes(state.startTime)
-  if (state.isSeoul && startMin != null && !isShort) {
-    const before = startMin < 12 * 60
-    if (state.before12 === null) setYN('before12', before)
-    if (autoEl) {
-      autoEl.innerHTML = `입력하신 시작시각 <strong>${escapeHtml(state.startTime)}</strong> 기준으로 12시 ${before ? '이전' : '이후'}으로 골라 뒀어요. 다르면 아래에서 바꾸세요.`
-      autoEl.classList.remove('hidden')
-    }
-  } else if (autoEl) {
-    autoEl.classList.add('hidden')
-  }
 
   // 8시간 판정은 자동으로 못 한다 — 시외버스 구간(부산·울산·전주 등)은 소요시간
   // 자료가 없어 왕복 이동시간을 더할 수 없다. 대신 앱이 아는 교육시간을 보여준다.
@@ -1793,7 +1826,7 @@ function prepareCard8() {
 const CARD8_QUESTIONS = [
   { field: 'isShortDayTrip',  id: 'field-shortdaytrip', label: '교육+이동 8시간 이하 당일 출장인지' },
   { field: 'isMS',            id: 'field-rank',         label: '직급이 MS 이상인지' },
-  { field: 'before12',        id: 'field-daytrip',      label: '시작시간이 12시 이전인지' },
+  { field: 'prevDayMove',     id: 'field-daytrip',      label: '출근시각(08:30) 전에 출발해야 했는지' },
   { field: 'lodgingProvided', id: 'field-lodging',      label: '숙소가 제공되는지' },
   { field: 'mealProvided',    id: 'field-meal',         label: '식사가 제공되는지' },
   { field: 'hasShuttle',      id: 'field-shuttle',      label: '공항 셔틀버스를 이용했는지' },
@@ -1834,6 +1867,17 @@ function goFromCard8() {
 function setYN(field, val) {
   state[field] = val
 
+  // 전날 이동이 붙으면 당일 출장이 아니다 — 8시간 질문을 숨기고 답을 비운다.
+  if (field === 'prevDayMove') {
+    const hideShort = val === true
+    const shortEl = document.getElementById('field-shortdaytrip')
+    if (hideShort && shortEl && !shortEl.classList.contains('hidden')) {
+      state.isShortDayTrip = null
+      shortEl.querySelectorAll('.yn-btn').forEach(b => b.classList.remove('selected'))
+      shortEl.classList.add('hidden')
+    }
+  }
+
   // 답한 질문은 에러 표시 해제 + 남은 오류가 없으면 배너도 닫는다
   const q = CARD8_QUESTIONS.find(x => x.field === field)
   if (q) {
@@ -1847,7 +1891,7 @@ function setYN(field, val) {
   const fieldMap = {
     isShortDayTrip:  'field-shortdaytrip',
     isMS:            'field-rank',
-    before12:        'field-daytrip',   // field-daytrip에 통합됨
+    prevDayMove:     'field-daytrip',
     lodgingProvided: 'field-lodging',
     mealProvided:    'field-meal',
     hasShuttle:      'field-shuttle',
@@ -1864,19 +1908,19 @@ function setYN(field, val) {
     const isShort   = val === true
     const isDayTrip = (state.nights || 0) === 0
     document.getElementById('field-rank').classList.toggle('hidden', isShort || state.isJeju)
-    document.getElementById('field-daytrip').classList.toggle('hidden', isShort || !state.isSeoul)
+    document.getElementById('field-daytrip').classList.toggle('hidden', isShort || applyPrevDayMove().mode !== 'ask')
     document.getElementById('field-lodging').classList.toggle('hidden', isShort || isDayTrip)
     const showMeal = !isShort && (state.nights || 0) >= 2
     document.getElementById('field-meal').classList.toggle('hidden', !showMeal)
     // 8시간 이하 당일이면 관련 state도 초기화
     if (isShort) {
-      state.isMS = null; state.before12 = null
+      state.isMS = null; state.prevDayMove = null
       state.lodgingProvided = null; state.mealProvided = null
       document.querySelectorAll('#field-rank .yn-btn, #field-daytrip .yn-btn, #field-lodging .yn-btn, #field-meal .yn-btn')
         .forEach(b => b.classList.remove('selected'))
     }
   }
-  // before12 노트는 Card 9 예상 금액에서 표시 (Card 8에선 숨김)
+  // prevDayMove 노트는 Card 9 예상 금액에서 표시 (Card 8에선 숨김)
 }
 
 // ── CARD 9: 예상 금액 계산 ───────────────────────────────────────────────────
@@ -1912,13 +1956,12 @@ function prepareCard9() {
           </div>`).join('')
       : `<div class="breakdown-item"><span class="breakdown-label" style="color:#8b95a1">교육비 없음</span></div>`
     document.getElementById('totalAmount').textContent = `${total.toLocaleString()}원`
-    document.getElementById('seoulBefore12Hint')?.classList.add('hidden')
+    document.getElementById('prevDayHint')?.classList.add('hidden')
     document.getElementById('routePanel')?.classList.add('hidden')
     return
   }
 
   const isJeju  = state.isJeju
-  const isSeoul = state.isSeoul
   const breakdown = []
   let total = 0
 
@@ -1964,8 +2007,8 @@ function prepareCard9() {
     // 숙박비 없음 (당일)
   } else {
     let baseDays = Math.max(1, state.days || 1)
-    const seoulBonus = isSeoul && state.before12 ? 1 : 0  // 전날 +1일
-    const totalDays  = baseDays + seoulBonus
+    const prevDayBonus = state.prevDayMove ? 1 : 0  // 전날 +1일
+    const totalDays  = baseDays + prevDayBonus
     const tripNights = Math.max(0, state.nights || 0)
 
     let dailyTotal = 0
@@ -1973,11 +2016,11 @@ function prepareCard9() {
       // 식사 지원: 출장 중간날만 25% 적용
       const middleDays    = Math.max(0, baseDays - 2)
       const tripNormDays  = baseDays - middleDays
-      dailyTotal = seoulBonus * DAILY_RATE
+      dailyTotal = prevDayBonus * DAILY_RATE
                  + tripNormDays * DAILY_RATE
                  + middleDays * DAILY_RATE_25P
       const parts = []
-      if (seoulBonus) parts.push(`전날 1일 × ${DAILY_RATE.toLocaleString()}원`)
+      if (prevDayBonus) parts.push(`전날 1일 × ${DAILY_RATE.toLocaleString()}원`)
       parts.push(`출장 ${tripNormDays}일 × ${DAILY_RATE.toLocaleString()}원`)
       if (middleDays > 0) parts.push(`중간 ${middleDays}일 × ${DAILY_RATE_25P.toLocaleString()}원 (25%)`)
       breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, note: parts.join(' + ') })
@@ -1990,16 +2033,16 @@ function prepareCard9() {
     // 3. 숙박비 (제주 포함 동일 기준: 100,000원/박, 숙박제공시 0원)
     if (!state.isDayTrip) {
       if (state.lodgingProvided) {
-        if (seoulBonus > 0) {
-          const bonusLodging = seoulBonus * LODGING_RATE
-          breakdown.push({ label: `숙박비 전날 (${seoulBonus}박)`, amount: bonusLodging, note: '12시 이전 출발 전날 · 본인 부담' })
+        if (prevDayBonus > 0) {
+          const bonusLodging = prevDayBonus * LODGING_RATE
+          breakdown.push({ label: `숙박비 전날 (${prevDayBonus}박)`, amount: bonusLodging, note: '출근시각 전 출발 — 전날 이동 · 본인 부담' })
           total += bonusLodging
         }
         if (tripNights > 0) {
           breakdown.push({ label: `숙박비 (${tripNights}박)`, amount: 0, note: '숙소 제공으로 미지급' })
         }
       } else {
-        const baseNights = tripNights + seoulBonus
+        const baseNights = tripNights + prevDayBonus
         if (baseNights > 0) {
           const lodgingTotal = baseNights * LODGING_RATE
           breakdown.push({ label: `숙박비 (${baseNights}박)`, amount: lodgingTotal, note: `${baseNights}박 × ${LODGING_RATE.toLocaleString()}원` })
@@ -2039,16 +2082,16 @@ function prepareCard9() {
 
   renderRoutePanel()
 
-  // 서울 12시 이전 선택 시 → 추가된 금액 강조 표시
-  const seoulHintEl = document.getElementById('seoulBefore12Hint')
-  if (seoulHintEl) {
-    const show = isSeoul && state.before12 === true
-    seoulHintEl.classList.toggle('hidden', !show)
+  // 전날 이동 인정 시 → 추가된 금액 강조 표시
+  const prevDayHintEl = document.getElementById('prevDayHint')
+  if (prevDayHintEl) {
+    const show = state.prevDayMove === true
+    prevDayHintEl.classList.toggle('hidden', !show)
     if (show) {
-      seoulHintEl.innerHTML = `
-        <div class="seoul-hint-title">✅ 12시 이전 출발 적용됨</div>
+      prevDayHintEl.innerHTML = `
+        <div class="seoul-hint-title">✅ 전날 이동 적용됨</div>
         <div class="seoul-hint-body">
-          전날 출발 기준으로 아래 금액이 <strong>추가</strong>됐어요
+          전날 이동 기준으로 아래 금액이 <strong>추가</strong>됐어요
           <div class="seoul-hint-items">
             <span>📅 일당 +1일</span><span class="seoul-hint-amt">+35,000원</span>
           </div>
@@ -2344,12 +2387,11 @@ function renderTripFormPreview() {
   if (!el) return
 
   const isJeju  = state.isJeju
-  const isSeoul = state.isSeoul
-  const seoulBonus  = isSeoul && state.before12 ? 1 : 0
+  const prevDayBonus  = state.prevDayMove ? 1 : 0
   const baseDays    = Math.max(1, state.days || 1)
-  const totalDays   = baseDays + seoulBonus
+  const totalDays   = baseDays + prevDayBonus
   const tripNights  = Math.max(0, state.nights || 0)
-  const baseNights  = tripNights + seoulBonus
+  const baseNights  = tripNights + prevDayBonus
   const isShort     = state.isShortDayTrip === true
 
   // ── 일당 행 ──
@@ -2365,9 +2407,9 @@ function renderTripFormPreview() {
     if (state.mealProvided && tripNights >= 2) {
       const mid  = Math.max(0, baseDays - 2)
       const norm = baseDays - mid
-      dailyAmt   = seoulBonus * DAILY_RATE + norm * DAILY_RATE + mid * DAILY_RATE_25P
+      dailyAmt   = prevDayBonus * DAILY_RATE + norm * DAILY_RATE + mid * DAILY_RATE_25P
       const parts = []
-      if (seoulBonus) parts.push(`@ 35,000 × ${seoulBonus}일(전날) × 1명 = ₩ ${(seoulBonus*DAILY_RATE).toLocaleString()}`)
+      if (prevDayBonus) parts.push(`@ 35,000 × ${prevDayBonus}일(전날) × 1명 = ₩ ${(prevDayBonus*DAILY_RATE).toLocaleString()}`)
       parts.push(`@ 35,000 × ${norm}일 × 1명 = ₩ ${(norm*DAILY_RATE).toLocaleString()}`)
       if (mid > 0) parts.push(`@ 8,750 × ${mid}일(중간·식사지원) × 1명 = ₩ ${(mid*DAILY_RATE_25P).toLocaleString()}`)
       dailyDesc = parts.join('<br>')
@@ -2389,9 +2431,9 @@ function renderTripFormPreview() {
       <td class="tf-td">해당없음</td>
     </tr>`
   } else if (state.lodgingProvided) {
-    const bonusAmt = seoulBonus * LODGING_RATE
-    const bonusPart = seoulBonus > 0
-      ? `@ 100,000 × ${seoulBonus}박(전날) × 1명 = ₩ ${bonusAmt.toLocaleString()}<br>`
+    const bonusAmt = prevDayBonus * LODGING_RATE
+    const bonusPart = prevDayBonus > 0
+      ? `@ 100,000 × ${prevDayBonus}박(전날) × 1명 = ₩ ${bonusAmt.toLocaleString()}<br>`
       : ''
     const tripPart = tripNights > 0
       ? `@ 100,000 × ${tripNights}박 × 1명 = ₩ 0 (숙소 제공 — 미지급)`
@@ -2496,12 +2538,12 @@ function renderTripFormPreview() {
     // 일당
     if (state.mealProvided && tripNights >= 2) {
       const mid = Math.max(0, baseDays - 2)
-      totalAmt += seoulBonus * DAILY_RATE + (baseDays - mid) * DAILY_RATE + mid * DAILY_RATE_25P
+      totalAmt += prevDayBonus * DAILY_RATE + (baseDays - mid) * DAILY_RATE + mid * DAILY_RATE_25P
     } else {
       totalAmt += totalDays * DAILY_RATE
     }
     // 숙박비 (제주 포함 동일 기준)
-    if (state.lodgingProvided) totalAmt += seoulBonus * LODGING_RATE
+    if (state.lodgingProvided) totalAmt += prevDayBonus * LODGING_RATE
     else totalAmt += baseNights * LODGING_RATE
     // 교통비: fareOverride 있으면 우선
     totalAmt += (state.fareOverride !== null && !isJeju) ? state.fareOverride : fareTotal
@@ -2539,7 +2581,7 @@ function renderTripFormPreview() {
   } else {
     if (state.isMS === true)  tokgiItems.push('&lt;교통비&gt; MS 적용')
     if (state.isMS === false) tokgiItems.push('&lt;교통비&gt; MS 미적용')
-    if (seoulBonus > 0) tokgiItems.push('서울 12시 이전 시작 — 전날 출발 적용 (+1일 +1박)')
+    if (prevDayBonus > 0) tokgiItems.push('출근시각 전 출발 — 전날 이동 적용 (+1일 +1박)')
   }
   if (isJeju) tokgiItems.push('제주 항공료·셔틀버스: 사후정산 (법인카드 결제 후 매출전표 제출)')
   const tokgiStr = tokgiItems.length
@@ -2967,7 +3009,7 @@ function restartFlow() {
     place: '', region: '', isJeju: false, isSeoul: false, fee: 0,
     hasFee: null, feeStatus: null, receiptType: null,
     dept: '', name: '',
-    isMS: null, isShortDayTrip: null, isDayTrip: null, before12: null,
+    isMS: null, isShortDayTrip: null, isDayTrip: null, prevDayMove: null,
     lodgingProvided: null, mealProvided: null, hasPlane: null, hasShuttle: null,
     startTime: '', endTime: '', placeLat: null, placeLon: null,
     accessOverride: {}, pinStation: null, fareOverride: null,
