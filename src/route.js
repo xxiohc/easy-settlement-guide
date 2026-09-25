@@ -22,6 +22,11 @@ const ACCESS_TOL     = 30   // 가장 가까운 역보다 접근시간이 이만
 const TRANSFER_BACK  = 180  // 최적 직통보다 이만큼 이른 출발편까지만 환승을 탐색한다
 const DETOUR_RATIO   = 2.0  // 철도 이동거리가 직선거리의 이 배 이상이면 우회로 본다
 const DETOUR_NORTH   = 20   // 환승역이 목적지보다 이만큼 북쪽이면 '올라갔다 내려오는' 경로
+const BUS_KMH        = 70   // 시외버스 고속도로 실효속도(정차·감속 포함)
+const BUS_ROAD       = 1.25 // 직선거리 → 실제 도로거리 보정계수
+const BUS_WAIT       = 20   // 터미널 도착·대기
+const BUS_LOCAL      = 30   // 도착 터미널 → 목적지 시내 이동
+const BUS_ADVANTAGE  = 60   // 철도보다 이만큼 이상 빨라야 시외버스를 먼저 권한다(추정오차 여유)
 
 const KtxRoute = {
   timetable: null,
@@ -96,6 +101,26 @@ function detourOf(hub, dest) {
     railKm:    Math.round(railKm),
     directKm:  Math.round(directKm),
     northKm:   Math.round(northKm),
+  }
+}
+
+// 마산 → 목적지 시외버스 문 앞 소요시간 추정. 시외버스는 시간표·소요시간 자료가 없어
+// 직선거리에 도로 보정계수를 곱한 추정값이다(실측 아님). 전라도처럼 철도가 크게 도는
+// 구간은 이 추정만으로도 철도보다 한 시간 이상 빠른 것이 드러난다.
+function busEstimate(lat, lon) {
+  const o = KtxRoute.stations && KtxRoute.stations[ORIGIN_STATION]
+  if (!o) return null
+  const directKm = haversineKm(o.lat, o.lon, lat, lon)
+  const roadKm   = directKm * BUS_ROAD
+  const rideMin  = Math.round(roadKm / BUS_KMH * 60)
+  return {
+    directKm: Math.round(directKm),
+    roadKm:   Math.round(roadKm),
+    rideMin,
+    waitMin:  BUS_WAIT,
+    localMin: BUS_LOCAL,
+    totalMin: rideMin + BUS_WAIT + BUS_LOCAL,
+    est: true,
   }
 }
 
@@ -327,7 +352,8 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
     if (detoursSeen.length) {
       // 우회가 아닌 철도 경로가 아예 없는 구간 — 시외버스로 안내한다.
       const d = detoursSeen.reduce((a, b) => (b.ratio < a.ratio ? b : a))
-      return { ok: false, reason: 'detour', detour: d, candidates: cands.map(c => c.st.name) }
+      return { ok: false, reason: 'detour', detour: d, bus: busEstimate(lat, lon),
+               candidates: cands.map(c => c.st.name) }
     }
     return { ok: false, reason: 'no-train', candidates: cands.map(c => c.st.name) }
   }
@@ -375,7 +401,17 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
     else ret = { leg: null, readyAt, next: null }
   }
 
-  return { ok: true, best, alternatives, ret, noBuffer, destRow: destRow || null }
+  // 철도 경로가 성립해도 시외버스가 확실히 빠른 구간은 버스를 먼저 권한다. 마산에서
+  // 전라도·원주는 철도가 오송·서울까지 올라갔다 내려와, 우회 판정(ratio 2배)에 걸리지
+  // 않는 구간도 버스가 한 시간 이상 빠르다. 철도 안내와 기준 운임은 그대로 남겨 둔다 —
+  // 실제로 기차를 타는 경우의 정산 근거가 사라지면 안 되기 때문이다.
+  const bus = busEstimate(lat, lon)
+  const busFaster = bus && bus.totalMin + BUS_ADVANTAGE <= best.travelMin
+    ? { ...bus, railMin: best.travelMin, railStation: best.station, railVia: best.via || [],
+        savedMin: best.travelMin - bus.totalMin }
+    : null
+
+  return { ok: true, best, alternatives, ret, noBuffer, busFaster, destRow: destRow || null }
 }
 
 // 역산 결과 → 정산서에 그대로 적는 교통비. 화면 안내와 정산 금액이 서로 다른 역을
@@ -436,5 +472,6 @@ if (typeof module !== 'undefined') {
   module.exports = { KtxRoute, loadRouteData, initRouteData, planTrip, planPreviousDay,
                      planFromStation, fareStationNames, settlementFare,
                      accessMinutes, accessInfo, findDestination, haversineKm, fmtTime, fmtDur, detourOf,
+                     busEstimate,
                      findItineraries, candidateStations, fareOf }
 }

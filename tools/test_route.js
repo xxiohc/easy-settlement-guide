@@ -246,3 +246,44 @@ test('우회 판정이 기존 추천을 건드리지 않는다 (수서·서울·
   assert.equal(planFor('삼성서울병원').best.station, '수서')
   assert.equal(planFor('서울지방국세청').best.station, '서울')
 })
+
+// ── 시외버스가 빠른 구간 ─────────────────────────────────────────────────────
+test('시외버스 추정은 터미널 대기·도착지 시내 이동을 포함한다', () => {
+  const b = R.busEstimate(35.8242, 127.1480)   // 전주역 좌표
+  assert.ok(b.totalMin === b.rideMin + b.waitMin + b.localMin)
+  assert.ok(b.roadKm > b.directKm, '도로거리는 직선거리보다 길어야 한다')
+  assert.equal(b.est, true)
+})
+
+test('전주 국민연금공단은 철도 대신 시외버스를 먼저 권한다', () => {
+  const p = planFor('국민연금공단')
+  assert.ok(p.ok, '철도 안내 자체는 남아 있어야 한다')
+  assert.ok(p.busFaster, '시외버스 우세 판정이 붙어야 한다')
+  assert.equal(p.busFaster.railStation, '전주')
+  assert.ok(p.busFaster.savedMin >= 60)
+  // 기차를 탄 경우의 정산 근거는 사라지지 않는다
+  assert.ok(R.settlementFare(p), '정산 기준 운임이 남아 있어야 한다')
+})
+
+test('원주 건보공단·심평원도 시외버스가 빠른 구간으로 잡힌다', () => {
+  for (const n of ['국민건강보험공단', '건강보험심사평가원']) {
+    const p = planFor(n)
+    assert.ok(p.ok, n)
+    assert.ok(p.busFaster, `${n}: 시외버스 우세가 잡히지 않았다`)
+  }
+})
+
+test('수도권·대전·오송 추천은 시외버스로 뒤집히지 않는다', () => {
+  for (const n of ['삼성서울병원', '서울지방국세청', '보건복지부', '질병관리청', '대한병원협회']) {
+    const p = planFor(n)
+    assert.ok(p.ok, n)
+    assert.equal(p.busFaster, null, `${n}: 철도 추천이 버스로 뒤집혔다`)
+  }
+})
+
+test('도착역을 직접 골라도 철도 계산은 그대로 하고 버스 우세만 알린다', () => {
+  const p = planFor('국민연금공단', 14 * 60, { only: '서울', access: { 서울: 120 } })
+  assert.ok(p.ok)
+  assert.equal(p.best.station, '서울')
+  assert.ok(p.busFaster, '직접 고른 역에서도 버스 우세는 알려야 한다')
+})
