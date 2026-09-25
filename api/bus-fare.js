@@ -151,6 +151,17 @@ module.exports = async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost')
   res.setHeader('content-type', 'application/json; charset=utf-8')
   try {
+    if (url.searchParams.get('raw')) {
+      const svc = url.searchParams.get('svc') === 'exp' ? 'ExpBusInfo' : 'SuburbsBusInfo'
+      const op = url.searchParams.get('op')
+      const params = {}
+      for (const [k, v] of url.searchParams) {
+        if (!['raw', 'svc', 'op'].includes(k)) params[k] = v
+      }
+      const out = await callPage(svc, op, params, process.env.TAGO_SERVICE_KEY, 1)
+      res.end(JSON.stringify({ svc, op, params, totalCount: out.totalCount, sample: out.items.slice(0, 5) }))
+      return
+    }
     const data = await lookupBusFare({
       dep: url.searchParams.get('dep') || '마산',
       arr: url.searchParams.get('arr'),
