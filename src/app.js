@@ -9,8 +9,8 @@ const STEPS = [
   { card: 3,  label: '공문 업로드' },
   { card: 4,  label: '정보 확인' },
   // Card 5 (등록비 기준)은 Card 4 인라인으로 통합 — STEPS에서 제외
-  { card: 6,  label: '납부 여부' },
-  { card: 7,  label: '납부 형태' },
+  // Card 7 (납부 형태)은 Card 6으로 통합 — STEPS에서 제외
+  { card: 6,  label: '등록비 납부' },
   { card: 8,  label: '추가 확인' },
   { card: 9,  label: '예상 금액' },
   { card: 10, label: '신청서' },
@@ -117,7 +117,6 @@ function goToCard(n) {
     }
   }
   if (n === 6)  resetCard6()
-  if (n === 7)  resetCard7()
   if (n === 8)  prepareCard8()
   if (n === 9)  prepareCard9()
   if (n === 10) prepareCard10()
@@ -166,20 +165,12 @@ function goToCard(n) {
 function goBack(cardNum) {
   // 공문 없이 왔을 때 Card 4에서 뒤로 → Card 2로
   if (cardNum === 4 && !state.hasDoc) return goToCard(2)
-  // Card 6에서 뒤로 → Card 4 (Card 5는 인라인 통합됨)
+  // Card 6에서 뒤로 → Card 4 (Card 5·7은 인라인 통합됨)
   if (cardNum === 6) return goToCard(4)
-  // Card 8에서 뒤로 → 등록비 없으면 Card 4, 납부 안했으면 Card 6, 납부했으면 Card 7
-  if (cardNum === 8) {
-    if (state.hasFee === false) return goToCard(4)
-    if (state.feeStatus === 'not-paid') return goToCard(6)
-    return goToCard(7)
-  }
-  // Card 9에서 뒤로 (온라인) → 등록비 없으면 Card 4, 납부 안했으면 Card 6, 납부했으면 Card 7
-  if (cardNum === 9 && state.isOnline) {
-    if (state.hasFee === false) return goToCard(4)
-    if (state.feeStatus === 'not-paid') return goToCard(6)
-    return goToCard(7)
-  }
+  // Card 8에서 뒤로 → 등록비 없으면 Card 4, 있으면 Card 6
+  if (cardNum === 8) return goToCard(state.hasFee === false ? 4 : 6)
+  // Card 9에서 뒤로 (온라인) → 등록비 없으면 Card 4, 있으면 Card 6
+  if (cardNum === 9 && state.isOnline) return goToCard(state.hasFee === false ? 4 : 6)
   // Card 11에서 뒤로 (온라인) → Card 9
   if (cardNum === 11 && state.isOnline) return goToCard(9)
   goToCard(cardNum - 1)
@@ -360,11 +351,8 @@ function getVisibleSteps() {
   // 온라인 교육이면 Card 8(추가 확인), Card 10(출장신청서) 제외
   if (state.isOnline) steps = steps.filter(s => s.card !== 8 && s.card !== 10)
 
-  // 등록비 없으면 Card 6(납부 여부), Card 7(납부 형태) 모두 제외
-  if (state.hasFee === false) return steps.filter(s => s.card !== 6 && s.card !== 7)
-
-  // 등록비 있지만 납부 안했으면 Card 7 제외
-  if (state.feeStatus === 'not-paid') return steps.filter(s => s.card !== 7)
+  // 등록비 없으면 Card 6(등록비 납부) 제외
+  if (state.hasFee === false) return steps.filter(s => s.card !== 6)
 
   return steps
 }
@@ -393,7 +381,7 @@ function renderTrails() {
 
     visibleSteps.forEach(({ card: c, label }, idx) => {
       const clickable = c < state.currentCard
-      const isUpcoming = state.hasFee === true && c > state.currentCard && (c === 6 || c === 7)
+      const isUpcoming = state.hasFee === true && c > state.currentCard && c === 6
       const status = c < state.currentCard ? 'done'
         : c === state.currentCard ? 'current'
         : isUpcoming ? 'upcoming'
@@ -783,6 +771,30 @@ function mostCommon(nums) {
   return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
 }
 
+// 자간을 벌려 인쇄한 공문은 PDF 텍스트가 "방 사 선안전 교 육"처럼 낱글자로 쪼개져
+// 나온다. 낱글자 비중이 절반을 넘을 때만 낱글자 사이 공백을 지운다
+// (두 글자 이상 덩어리끼리의 공백은 실제 띄어쓰기이므로 남긴다).
+function fixLetterSpacing(str) {
+  const toks = String(str || '').split(/\s+/).filter(Boolean)
+  if (toks.length < 4) return String(str || '').trim()
+  const singles = toks.filter(t => t.length === 1).length
+  if (singles / toks.length < 0.5) return toks.join(' ')
+  let out = ''
+  toks.forEach((tok, i) => {
+    if (i > 0 && toks[i - 1].length > 1 && tok.length > 1) out += ' '
+    out += tok
+  })
+  return out
+}
+
+// 제목 칸에 본문이 통째로 딸려오는 것을 막는다. 공문 본문은 "1." "가." "수신"
+// "붙임" 같은 항목 구분자로 시작하므로 그 앞에서 자른다.
+const TITLE_BODY_CUT = /\s*(?:\d+\s*\.|[가나다라마바사아자차카타파하]\s*\.|수\s*신|경\s*유|붙\s*임).*$/
+
+function cleanTitle(raw) {
+  return fixLetterSpacing(String(raw || '').replace(TITLE_BODY_CUT, '')).trim()
+}
+
 function parseDocMeta(filename, text) {
   const norm = s => s.replace(/\s+/g, '')
   const col  = s => s.replace(/\s+/g, ' ').trim()
@@ -791,13 +803,14 @@ function parseDocMeta(filename, text) {
   const tc   = col(normalized)
   const tn   = norm(normalized)
   const curY = new Date().getFullYear()
+  let yearGuessed = false
 
   // ── 제목 ──
   let title = ''
   // normalized text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
   const titleLineM = normalized.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣\d][^\n]{3,79})/)
   if (titleLineM) {
-    title = titleLineM[1].trim().replace(/\s+/g, ' ')
+    title = cleanTitle(titleLineM[1])
     // 목록 기호 혼입 제거 (끝에 붙은 " 나." " 다." 등)
     title = title.replace(/\s+[가나다라마바사아자차카타파하]\s*\.?\s*$/, '').trim()
   }
@@ -805,9 +818,8 @@ function parseDocMeta(filename, text) {
   if (!title) {
     const titleM = tc.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。]?\s+([가-힣\d].{3,79})/)
     if (titleM) {
-      title = titleM[1].trim().replace(/\s+/g, ' ')
       // 본문 항목 구분자(숫자. / 가.나.다. / 수신 / 붙임) 이후 잘라냄
-      title = title.replace(/\s*(?:\d+\s*\.|[가나다라마바사아자차카타파하]\s*\.|수\s*신|경\s*유|붙\s*임).*$/, '').trim()
+      title = cleanTitle(titleM[1])
     }
   }
   // 파일명에서 추출 (숫자+언더스코어로만 구성된 파일명은 제외)
@@ -823,7 +835,7 @@ function parseDocMeta(filename, text) {
     for (const line of normalized.split('\n')) {
       const l = line.trim()
       if (l.length > 5 && l.length < 80 && kwRe.test(l)) {
-        title = l; break
+        title = cleanTitle(l); break
       }
     }
   }
@@ -904,7 +916,7 @@ function parseDocMeta(filename, text) {
   // 패턴4: MM.DD(요일) ~ MM.DD(요일) — 연도 없는 경우 올해로 설정
   if (!startDate) {
     const m = tc.match(/(\d{1,2})\.(\d{1,2})(?:\s*\([^)]{1,3}\))?\s*~\s*(\d{1,2})\.(\d{1,2})/)
-    if (m) setRange(curY,+m[1],+m[2], curY,+m[3],+m[4])
+    if (m) { yearGuessed = true; setRange(curY,+m[1],+m[2], curY,+m[3],+m[4]) }
   }
 
   // 패턴5: 일시·기간·개최기간 라벨 근방에서 날짜 탐색 (대괄호 형식 "[일 시]" 포함)
@@ -916,7 +928,7 @@ function parseDocMeta(filename, text) {
       if (sm) { const ey = sm[4] ? +sm[4] : +sm[1]; setRange(+sm[1],+sm[2],+sm[3], ey,+sm[5],+sm[6]) }
       if (!startDate) {
         sm = snip.match(/(\d{1,2})[. ]+(\d{1,2})(?:\s*\([가-힣]{1,3}\))?\s*~\s*(\d{1,2})[. ]+(\d{1,2})/)
-        if (sm) setRange(curY,+sm[1],+sm[2], curY,+sm[3],+sm[4])
+        if (sm) { yearGuessed = true; setRange(curY,+sm[1],+sm[2], curY,+sm[3],+sm[4]) }
       }
     }
   }
@@ -1139,8 +1151,12 @@ function parseDocMeta(filename, text) {
 
   const { startTime, endTime } = extractTimes(tc)
 
+  // 출장·교육 공문이 맞는지 — 아니면 화면에서 "못 찾았다"고 말한다.
+  const isTripDoc = /교육|출장|세미나|연수|워크숍|워크샵|학술대회|심포지엄|컨퍼런스|포럼|보수교육|학회|훈련/.test(tn)
+
   return { title, periodDisplay, startDate, endDate, nights, days, destination, registration,
-           registrationNote, isOnline, startTime, endTime, venue: extractVenue(tc) }
+           registrationNote, isOnline, startTime, endTime, venue: extractVenue(tc),
+           yearGuessed, isTripDoc, guessedYear: yearGuessed ? curY : null }
 }
 
 // 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
@@ -1179,7 +1195,8 @@ function extractTimes(tc) {
 function extractVenue(tc) {
   const m = tc.match(/(?:장\s*소|위\s*치|개최장소)\s*[:：]?\s*([가-힣A-Za-z0-9()·\s]{2,40})/)
   if (!m) return ''
-  return m[1].trim().replace(/\s{2,}.*$/, '').replace(/[,·]\s*$/, '').slice(0, 40)
+  const raw = m[1].trim().replace(/\s{2,}.*$/, '').replace(/[,·]\s*$/, '').slice(0, 40)
+  return fixLetterSpacing(raw.replace(TITLE_BODY_CUT, '')).trim()
 }
 
 function renderParseResult(filename, meta, hasText) {
@@ -1189,13 +1206,21 @@ function renderParseResult(filename, meta, hasText) {
   const fmt = v => v ? `<span>${escapeHtml(String(v))}</span>` : `<span class="empty">확인 안 됨</span>`
   const feeStr = meta.registration ? `${meta.registration.toLocaleString()}원` : ''
 
-  // 파일명/텍스트에서 뭔가 읽혔는지 확인
-  const hasMeta = !!(meta.title || meta.periodDisplay || meta.destination || meta.registration)
-
   let warnHtml = ''
+  // 출장·교육 공문이 아니면(영수증·매출전표 등) 읽은 척하지 않는다
+  if (hasText && meta.isTripDoc === false) {
+    warnHtml += `
+      <div class="result-warn full">
+        <span>❌</span>
+        <div>
+          <strong>출장·교육 공문으로 보이지 않아요</strong>
+          <p>이 파일에서는 교육·출장 관련 내용을 찾지 못했어요.<br>다른 파일을 올리시거나, 다음 단계에서 직접 입력해주세요.</p>
+        </div>
+      </div>`
+  }
   if (!hasText) {
     // OCR/텍스트 추출 실패 → 파일명 기반 파싱만 됨
-    warnHtml = `
+    warnHtml += `
       <div class="result-warn full">
         <span>⚠️</span>
         <div>
@@ -1205,11 +1230,23 @@ function renderParseResult(filename, meta, hasText) {
       </div>`
   }
 
+  // 공문에 연도가 없어 올해로 채운 경우엔 추정이라고 밝힌다
+  const periodStr = meta.periodDisplay && meta.yearGuessed
+    ? `${meta.periodDisplay} (${meta.guessedYear}년으로 추정)`
+    : meta.periodDisplay
+
+  // 지역은 읽었지만 건물·기관명(장소)은 못 읽는 공문이 많다.
+  // 예전에는 그걸 "장소"로 보여줘 다음 화면에서 "출장 지역" 오류로 막혔다.
+  const venueHtml = meta.venue
+    ? `<div class="result-item full"><label>장소</label><span>${escapeHtml(meta.venue)}</span></div>`
+    : `<div class="result-item full"><label>장소</label><span class="empty">확인 안 됨 — 다음 화면에서 직접 넣어주세요</span></div>`
+
   grid.innerHTML = `
     <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
     <div class="result-item full"><label>출장/교육명</label>${fmt(meta.title)}</div>
-    <div class="result-item"><label>기간</label>${fmt(meta.periodDisplay)}</div>
-    <div class="result-item"><label>장소</label>${fmt(meta.destination)}</div>
+    <div class="result-item"><label>기간</label>${fmt(periodStr)}</div>
+    <div class="result-item"><label>지역</label>${fmt(meta.destination)}</div>
+    ${venueHtml}
     <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}</div>
     ${warnHtml}
   `
@@ -1269,6 +1306,11 @@ function selectOnlineMode(isOnline) {
   if (fieldPlace)  fieldPlace.classList.toggle('hidden', isOnline)
   if (fieldRegion) fieldRegion.classList.toggle('hidden', isOnline)
 
+  // 기차 역산 안내는 탈 기차를 추천할 때만 의미가 있다 — 온라인 교육과
+  // 이미 다녀온 출장에서는 숨긴다(다녀온 출장은 routePanel도 추천을 빼고 그린다).
+  document.getElementById('time-ktx-hint')
+    ?.classList.toggle('hidden', isOnline || state.tripStatus === 'done')
+
   // 교육비 버튼 / 없어요 연동
   prepareCard4Online()
 
@@ -1276,19 +1318,12 @@ function selectOnlineMode(isOnline) {
   updateProgress()
 }
 
-// ── CARD 4: 온라인 교육 시 "없어요" 숨기고 교육비 자동 설정 ────────────────────
+// ── CARD 4: 교육비 유무 버튼 노출 ────────────────────────────────────────────
+// 온라인 교육에도 무료 과정이 있으므로 "없어요"를 숨기지 않는다. 예전에는 온라인을
+// 고르면 "없어요"가 사라지면서 hasFee가 true로 덮어써졌고, 오프라인으로 되돌려도
+// 사용자가 고른 적 없는 "있어요"가 선택된 채 남아 그대로 계산에 들어갔다.
 function prepareCard4Online() {
-  const btnNo  = document.getElementById('feeBtn-no')
-  const noneMsg = document.getElementById('feeNoneMsg')
-  if (state.isOnline) {
-    // 온라인: 교육비 항상 있음 → 없어요 버튼 숨김, hasFee 자동 true
-    if (btnNo) btnNo.classList.add('hidden')
-    if (noneMsg) noneMsg.classList.add('hidden')
-    if (state.hasFee !== true) selectFeePresence(true)
-  } else {
-    // 출장: 없어요 버튼 다시 표시
-    if (btnNo) btnNo.classList.remove('hidden')
-  }
+  document.getElementById('feeBtn-no')?.classList.remove('hidden')
 }
 
 // 자동채우기 하이라이트 helper
@@ -1318,6 +1353,9 @@ function prepareCard4WithMeta() {
   if (meta.registration) {
     setAutofilled('input-fee', meta.registration.toLocaleString())
     state.fee = meta.registration
+    // 금액을 인식했으면 "있어요"까지 미리 골라 둔다. 예전에는 위쪽 확인 배너만 보고
+    // 넘어가면 아래 토글이 비어 있어 "교육/등록비 유무 선택" 오류로 막혔다.
+    selectFeePresence(true)
   }
   if (meta.startTime) setAutofilled('input-starttime', meta.startTime)
   if (meta.endTime)   setAutofilled('input-endtime', meta.endTime)
@@ -1621,75 +1659,57 @@ function formatFeeInput(input) {
   input.value = raw ? Number(raw).toLocaleString() : ''
 }
 
-// ── CARD 6: 납부 여부 ─────────────────────────────────────────────────────────
-function select6(val) {
-  state.feeStatus = val
-  highlight(val)
-  updateDocStrip()
-  if (val === 'paid') {
-    setTimeout(() => goToCard(7), 150)
-  } else {
-    // 납부 전 → 예정 방식 안내 패널 표시
-    const sub = document.getElementById('c6-not-paid-sub')
-    sub.classList.remove('hidden')
-    document.getElementById('c6-btn-card')?.classList.remove('selected')
-    document.getElementById('c6-btn-bank')?.classList.remove('selected')
-    document.getElementById('c6-card-note')?.classList.add('hidden')
-    document.getElementById('c6-bank-note')?.classList.add('hidden')
-    // 패널로 스크롤
-    sub.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }
-}
-
-function select6NotPaidMethod(method) {
-  document.getElementById('c6-btn-card').classList.toggle('selected', method === 'card')
-  document.getElementById('c6-btn-bank').classList.toggle('selected', method === 'bank')
-  document.getElementById('c6-card-note').classList.toggle('hidden', method !== 'card')
-  document.getElementById('c6-bank-note').classList.toggle('hidden', method !== 'bank')
-}
-
-function confirmCard6NotPaid() {
-  state.receiptType = null
-  state.isOnline ? goToCard(9) : goToCard(8)
-}
-
+// ── CARD 6: 등록비 납부 (납부 여부 + 납부 형태 통합) ────────────────────────
+// 예전에는 "납부했나요"(Card 6) → "어떻게 납부했나요"(Card 7)로 갈라 두 화면에서
+// 선택지를 두 개씩만 물었다. 같은 주제를 두 번 넘기게 되어 한 화면으로 합쳤다.
 function resetCard6() {
-  document.getElementById('c6-not-paid-sub')?.classList.add('hidden')
-  document.getElementById('c6-btn-card')?.classList.remove('selected')
-  document.getElementById('c6-btn-bank')?.classList.remove('selected')
-  document.getElementById('c6-card-note')?.classList.add('hidden')
-  document.getElementById('c6-bank-note')?.classList.add('hidden')
+  ;['c6-card-note', 'c6-bank-opts', 'c6-pending-sub', 'c6-pend-card-note', 'c6-pend-bank-note']
+    .forEach(id => document.getElementById(id)?.classList.add('hidden'))
+  ;['c6-btn-card', 'c6-btn-bank', 'c6-btn-pending', 'c6-pend-card', 'c6-pend-bank']
+    .forEach(id => document.getElementById(id)?.classList.remove('selected'))
+  const q = document.getElementById('card6-q')
+  if (q) q.innerHTML = state.tripStatus === 'planned'
+    ? '교육비 / 등록비를<br>어떻게 납부하실 건가요?'
+    : '교육비 / 등록비를<br>어떻게 납부하셨나요?'
 }
 
-// ── CARD 7: 납부 형태 ─────────────────────────────────────────────────────────
-// Card 7 진입 시 초기화
-function resetCard7() {
-  document.getElementById('c7CardNote')?.classList.add('hidden')
-  document.getElementById('c7BankOpts')?.classList.add('hidden')
-  document.getElementById('c7-btn-card')?.classList.remove('selected')
-  document.getElementById('c7-btn-bank')?.classList.remove('selected')
-}
-
-// 1단계: 카드 / 계좌이체 선택
-function select7PayMethod(method) {
-  // 버튼 선택 표시
-  document.getElementById('c7-btn-card').classList.toggle('selected', method === 'card')
-  document.getElementById('c7-btn-bank').classList.toggle('selected', method === 'bank')
-
-  if (method === 'card') {
-    document.getElementById('c7CardNote').classList.remove('hidden')
-    document.getElementById('c7BankOpts').classList.add('hidden')
-  } else {
-    document.getElementById('c7BankOpts').classList.remove('hidden')
-    document.getElementById('c7CardNote').classList.add('hidden')
+function select6Method(method) {
+  state.feeStatus   = method === 'pending' ? 'not-paid' : 'paid'
+  state.receiptType = null
+  ;['card', 'bank', 'pending'].forEach(m =>
+    document.getElementById(`c6-btn-${m}`)?.classList.toggle('selected', m === method))
+  document.getElementById('c6-card-note')?.classList.toggle('hidden', method !== 'card')
+  document.getElementById('c6-bank-opts')?.classList.toggle('hidden', method !== 'bank')
+  document.getElementById('c6-pending-sub')?.classList.toggle('hidden', method !== 'pending')
+  if (method === 'pending') {
+    document.getElementById('c6-pend-card')?.classList.remove('selected')
+    document.getElementById('c6-pend-bank')?.classList.remove('selected')
+    document.getElementById('c6-pend-card-note')?.classList.add('hidden')
+    document.getElementById('c6-pend-bank-note')?.classList.add('hidden')
   }
+  updateDocStrip()
+  const panelId = method === 'card' ? 'c6-card-note' : method === 'bank' ? 'c6-bank-opts' : 'c6-pending-sub'
+  document.getElementById(panelId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 }
 
-// 2단계: 최종 영수증 종류 확정 → card 8 (또는 온라인이면 card 9)로
-function select7(val) {
+function select6PendingMethod(method) {
+  document.getElementById('c6-pend-card')?.classList.toggle('selected', method === 'card')
+  document.getElementById('c6-pend-bank')?.classList.toggle('selected', method === 'bank')
+  document.getElementById('c6-pend-card-note')?.classList.toggle('hidden', method !== 'card')
+  document.getElementById('c6-pend-bank-note')?.classList.toggle('hidden', method !== 'bank')
+}
+
+function select6Receipt(val) {
+  state.feeStatus   = 'paid'
   state.receiptType = val
   updateDocStrip()
   setTimeout(() => state.isOnline ? goToCard(9) : goToCard(8), 150)
+}
+
+function confirmCard6NotPaid() {
+  state.feeStatus   = 'not-paid'
+  state.receiptType = null
+  state.isOnline ? goToCard(9) : goToCard(8)
 }
 
 // ── CARD 8: 추가 확인 준비 ───────────────────────────────────────────────────
@@ -1726,6 +1746,36 @@ function prepareCard8() {
   document.getElementById('field-lodging').classList.toggle('hidden', isShort || isDayTrip)
   const showMeal = !isShort && (state.nights || 0) >= 2
   document.getElementById('field-meal').classList.toggle('hidden', !showMeal)
+
+  // 서울 12시 이전 여부는 입력된 시작시각으로 판정한다. 답이 이미 정해진 질문을
+  // 되돌리지 않고, 판정 근거를 보여준 뒤 다르면 고칠 수 있게 둔다.
+  const autoEl   = document.getElementById('daytrip-auto')
+  const startMin = toMinutes(state.startTime)
+  if (state.isSeoul && startMin != null && !isShort) {
+    const before = startMin < 12 * 60
+    if (state.before12 === null) setYN('before12', before)
+    if (autoEl) {
+      autoEl.innerHTML = `입력하신 시작시각 <strong>${escapeHtml(state.startTime)}</strong> 기준으로 12시 ${before ? '이전' : '이후'}으로 골라 뒀어요. 다르면 아래에서 바꾸세요.`
+      autoEl.classList.remove('hidden')
+    }
+  } else if (autoEl) {
+    autoEl.classList.add('hidden')
+  }
+
+  // 8시간 판정은 자동으로 못 한다 — 시외버스 구간(부산·울산·전주 등)은 소요시간
+  // 자료가 없어 왕복 이동시간을 더할 수 없다. 대신 앱이 아는 교육시간을 보여준다.
+  const shortAutoEl = document.getElementById('shortday-auto')
+  if (shortAutoEl) {
+    const endMin = toMinutes(state.endTime)
+    const known  = (startMin != null && endMin != null && endMin > startMin)
+      ? `입력하신 교육 시간은 <strong>${fmtDur(endMin - startMin)}</strong>이에요. `
+      : ''
+    shortAutoEl.innerHTML = known +
+      (fare && fare.bus
+        ? '시외버스 구간은 소요시간 자료가 없어 왕복 이동시간까지 자동으로 더하지 못해요 — 직접 골라주세요.'
+        : '여기에 왕복 이동시간을 더해 8시간을 넘는지 골라주세요.')
+    shortAutoEl.classList.toggle('hidden', !showShortDay)
+  }
 
   // 제주: 항공 안내 표시, 셔틀은 항상 이용 가정 → 질문 숨기고 자동 true
   document.getElementById('field-plane').classList.toggle('hidden', !state.isJeju)
@@ -1839,7 +1889,8 @@ function prepareCard9() {
 
   // 온라인 교육: 다음 버튼 텍스트 변경
   const nextBtn = document.getElementById('card9-next-btn')
-  if (nextBtn) nextBtn.textContent = state.isOnline ? '구비서류 확인하기' : '출장신청서 작성하기'
+  if (nextBtn) nextBtn.textContent = state.isOnline ? '구비서류 확인하기'
+    : state.tripStatus === 'done' ? '출장신청서 내용 확인하기' : '출장신청서 작성하기'
 
   // 온라인 교육: 교통비·일당·숙박 없음 → 교육비만 계산
   if (state.isOnline) {
@@ -2706,6 +2757,16 @@ function resetTripFormEdit() {
 
 // ── CARD 10: 출장신청서 미리보기 ─────────────────────────────────────────────
 function prepareCard10() {
+  // 이미 다녀온 출장은 신청서를 '미리' 쓰는 게 아니라 결재된 신청서와 대조하는 단계다
+  const isDone = state.tripStatus === 'done'
+  const titleEl = document.getElementById('card10-title')
+  const descEl  = document.getElementById('card10-desc')
+  if (titleEl) titleEl.innerHTML = isDone
+    ? '결재된 출장신청서와<br>내용을 맞춰볼게요'
+    : '출장신청서를<br>미리 작성해볼게요'
+  if (descEl) descEl.textContent = isDone
+    ? '이미 결재된 신청서와 아래 내용이 같은지 확인하세요'
+    : 'S-Portal 전자결재 작성 시 참고하세요'
   const deptEl = document.getElementById('input-dept')
   const nameEl = document.getElementById('input-name')
   if (deptEl) state.dept = deptEl.value
@@ -2731,8 +2792,15 @@ const RECEIPT_LABELS = {
 function prepareCard11() {
   // ── 구비서류 체크리스트 ──
   const items = []
-  items.push({ icon: '📋', title: '출장신청서', desc: '출발 전 결재 완료된 신청서 — 내부 승인 절차가 적법하게 이루어졌는지 확인' })
-  items.push({ icon: '📄', title: '출장 관련 공문', desc: '출장 장소·일정·등록비 등이 신청서 내용과 일치하는지 한 번 더 확인' })
+  const isDone = state.tripStatus === 'done'
+  items.push({ icon: '📋', title: '출장신청서',
+    desc: isDone
+      ? '출발 전 결재 완료된 신청서 — 내부 승인 절차가 적법하게 이루어졌는지 확인'
+      : '출발 전에 결재를 완료해야 해요 — 사후 결재는 내부 승인 절차 위반이에요' })
+  // 공문 없이 직접 입력한 경우엔 없는 서류를 요구하지 않는다
+  if (state.hasDoc) {
+    items.push({ icon: '📄', title: '출장 관련 공문', desc: '출장 장소·일정·등록비 등이 신청서 내용과 일치하는지 한 번 더 확인' })
+  }
 
   // 8시간 이하 당일 출장: 식사비 법인카드 영수증
   if (state.isShortDayTrip === true) {
@@ -2774,10 +2842,17 @@ function prepareCard11() {
     </label>`).join('')
 
   // ── 전표 처리 안내: 피출장인이 할 일 1가지만 ──
+  // 안내문은 위 체크리스트에 실제로 올라온 서류만 부른다
+  const docNames = items.map(item => item.title)
+  const lastChar = docNames.at(-1).charCodeAt(docNames.at(-1).length - 1)
+  const hasJong  = lastChar >= 0xac00 && lastChar <= 0xd7a3 && (lastChar - 0xac00) % 28 !== 0
+  const phrase   = docNames.length > 1
+    ? `${docNames.join(' · ')}${hasJong ? '을' : '를'} 묶어 `
+    : `${docNames[0]}${hasJong ? '을' : '를'} `
   document.getElementById('voucherItems').innerHTML = `
     <div class="voucher-step">
       <span class="voucher-step-num">1</span>
-      <span>출장신청서 · 공문 · 영수증을 묶어 <strong>전표 처리자에게 제출</strong></span>
+      <span>${escapeHtml(phrase)}<strong>전표 처리자에게 제출</strong></span>
     </div>`
 
   // ── 세금계산서 수령 시 긴급 안내 ──
