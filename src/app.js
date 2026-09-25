@@ -1329,10 +1329,23 @@ function selectOnlineMode(isOnline) {
   if (fieldPlace)  fieldPlace.classList.toggle('hidden', isOnline)
   if (fieldRegion) fieldRegion.classList.toggle('hidden', isOnline)
 
+  // 교육 시각은 KTX 역산과 8시간 일당 판정에만 쓰인다. 온라인 교육은 둘 다 하지
+  // 않으므로(prepareCard9·dailyAllowance가 isOnline에서 바로 빠진다) 입력칸째 숨긴다.
+  // 값은 지우지 않는다 — 오프라인으로 되돌렸을 때 공문에서 읽어 둔 시각이 사라지면
+  // KTX 역산이 통째로 빠진다(2026-09-26 ui_sweep에서 실제로 잡힌 회귀).
+  const fieldTime = document.getElementById('field-time')
+  if (fieldTime) fieldTime.classList.toggle('hidden', isOnline)
+
   // 기차 역산 안내는 탈 기차를 추천할 때만 의미가 있다 — 온라인 교육과
   // 이미 다녀온 출장에서는 숨긴다(다녀온 출장은 routePanel도 추천을 빼고 그린다).
   document.getElementById('time-ktx-hint')
     ?.classList.toggle('hidden', isOnline || state.tripStatus === 'done')
+
+  // 온라인이면 "출장"이 아니라 "교육"이다 — 라벨·자리표시를 맞춘다
+  const labelTitle  = document.getElementById('label-title')
+  const labelPeriod = document.getElementById('label-period')
+  if (labelTitle)  labelTitle.textContent  = isOnline ? '교육명' : '출장 / 교육명'
+  if (labelPeriod) labelPeriod.textContent = isOnline ? '교육 기간' : '출장 기간'
 
   // 교육비 버튼 / 없어요 연동
   prepareCard4Online()
@@ -3286,10 +3299,62 @@ async function runTests() {
   console.log('%c✅ 테스트 완료', 'font-weight:bold;color:#00a661')
 }
 
+// ── 알약 배지 한 줄 맞춤 ─────────────────────────────────────────────────────
+// 배지 문구가 칸보다 한두 글자 길어 두 줄로 접히는 것을 막는다. CSS가 nowrap을
+// 걸어 두고, 여기서 들어갈 때까지 글자 크기만 0.5px씩 줄인다(최소 8px).
+const PILL_SELECTOR = '.alt-tag, .auto-badge, .pending-badge, .doc-badge-jeju, .doc-badge-shortday, .duration-tag, .duration-badge, .sub-badge, .tf-post-badge'
+const PILL_MIN_PX = 8
+
+function fitPills(root = document) {
+  root.querySelectorAll(PILL_SELECTOR).forEach(el => {
+    if (!el.offsetParent) return
+    const parent = el.parentElement
+    if (!parent) return
+    const ps = getComputedStyle(parent)
+    const avail = parent.clientWidth - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight)
+    if (!(avail > 0)) return
+
+    el.style.fontSize = ''
+    let size = parseFloat(getComputedStyle(el).fontSize)
+    const base = size
+    // 글자가 칸 밖으로 나가는 경우는 둘이다 — 배지 자체가 부모보다 넓거나(inline-block),
+    // 배지 폭은 부모에 맞춰졌는데 nowrap 글자가 그 안에서 넘치거나(block).
+    const overflows = () =>
+      el.getBoundingClientRect().width > avail + 0.5 || el.scrollWidth > el.clientWidth + 0.5
+    while (overflows() && size > PILL_MIN_PX) {
+      size -= 0.5
+      el.style.fontSize = `${size}px`
+    }
+    if (size === base) el.style.fontSize = ''
+  })
+}
+
+let pillFitQueued = false
+let pillObserver = null
+
+// fitPills 자신이 style을 건드리므로 관찰을 끊고 맞춘 뒤 다시 붙인다.
+// 끊지 않으면 자기 변경을 다시 감지해 매 프레임 무한 반복한다.
+function queueFitPills() {
+  if (pillFitQueued) return
+  pillFitQueued = true
+  requestAnimationFrame(() => {
+    pillFitQueued = false
+    pillObserver?.disconnect()
+    fitPills()
+    pillObserver?.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] })
+  })
+}
+
 // ── 초기화 ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await Promise.all([loadRates(), loadRouteData()])
   updateProgress()
+
+  // 배지가 그려지거나 화면 폭이 바뀔 때마다 한 줄로 다시 맞춘다
+  pillObserver = new MutationObserver(queueFitPills)
+  pillObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] })
+  window.addEventListener('resize', queueFitPills)
+  queueFitPills()
 
   // 첫 화면을 history 에 고정해 두고, 뒤로가기는 이전 카드로 되돌린다.
   history.replaceState({ card: state.currentCard }, '')
