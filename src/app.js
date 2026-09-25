@@ -1996,7 +1996,11 @@ function prepareCard9() {
     breakdown.push({ label: fareLabel, amount: fareAmt, note: routeNote })
     total += fareAmt
   } else if (state.region || state.place) {
-    breakdown.push({ label: '교통비', amount: '직접 확인 필요', note: '운임표에 없는 지역' })
+    const detour = routeDetour()
+    breakdown.push(detour
+      ? { label: '교통비 (시외버스)', amount: '직접 확인 필요',
+          note: `철도는 ${detour.hub}까지 올라갔다 되내려오는 우회 구간 · 시외버스 왕복 요금 확인 필요` }
+      : { label: '교통비', amount: '직접 확인 필요', note: '운임표에 없는 지역' })
   }
 
   // 2. 일당 / 식사비 계산
@@ -2253,6 +2257,13 @@ function routeFare() {
   return settlementFare(r.plan)
 }
 
+// 철도 우회로 시외버스를 권한 구간인지. 예상 금액 문구가 화면 안내와 같은 말을 하도록 쓴다.
+function routeDetour() {
+  const r = computeRoutePlan()
+  if (!r || r.skip || !r.plan || r.plan.ok) return null
+  return r.plan.reason === 'detour' ? r.plan.detour : null
+}
+
 function renderRoutePanel() {
   const el = document.getElementById('routePanel')
   if (!el) return
@@ -2295,6 +2306,7 @@ function renderRoutePanel() {
   if (!plan.ok && plan.reason === 'near') {
     return hide(`🚗 목적지가 마산역에서 직선 ${plan.originKm}km 거리라 기차를 탈 구간이 아니에요.`)
   }
+  if (!plan.ok && plan.reason === 'detour') return show(detourBusHtml(plan.detour, dest))
   if (!plan.ok) {
     if (isDone) {
       return show(`<div class="route-head"><span class="route-head-title">🚄 당일 출발로는 시작시각을 못 맞추는 구간이에요</span></div>
@@ -2317,6 +2329,10 @@ function renderRoutePanel() {
     ? `편도 ${b.fare.oneWay.toLocaleString()}원 (${b.fare.grade}) · 왕복 ${b.fare.roundTrip.toLocaleString()}원`
     : '운임표에 없는 역'
   const routeKind = b.transfers ? `${b.via.join('·')} 환승 ${b.transfers}회` : '직통'
+  // 사용자가 도착역을 직접 고른 경우에만 우회 경로가 여기까지 온다(자동 추천에서는 걸러진다).
+  const detourWarn = b.detour
+    ? `<div class="route-warn">직접 고르신 ${escapeHtml(b.station)}역은 ${escapeHtml(b.detour.hub)}까지 올라갔다 되내려오는 경로예요 — 직선 ${b.detour.directKm}km를 ${b.detour.railKm}km로 돕니다. 시외버스가 빠를 수 있습니다.</div>`
+    : ''
   const waitLine = b.transfers && b.wait != null
     ? `<div class="route-transfer">🔁 ${b.via.join('·')}역 환승 대기 ${b.wait}분</div>` : ''
 
@@ -2339,6 +2355,7 @@ function renderRoutePanel() {
         <span class="route-head-title">🚄 정산 기준 — 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
         <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} 기준 운임</span>
       </div>
+      ${detourWarn}
       <div class="route-step">💳 ${fareLine}</div>
       <div class="route-step">🚶 ${escapeHtml(b.station)}역에서 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)})</div>
       ${accessFormHtml(b, plan)}
@@ -2354,6 +2371,7 @@ function renderRoutePanel() {
       <span class="route-pick-label">이 기차를 타세요</span>
       <span class="route-pick-time">마산역 ${fmtTime(b.dep)} 출발</span>
     </div>
+    ${detourWarn}
     ${b.legs.map(legLine).join(waitLine)}
     <div class="route-step">🚶 ${escapeHtml(b.station)}역 ${fmtTime(b.arr)} 도착 → 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)}) → 현장 ${fmtTime(arriveVenue)} 도착</div>
     <div class="route-step">⏱ 시작 ${state.startTime}까지 여유 ${b.margin}분${b.tight ? ' <span class="route-tight">빠듯</span>' : ''} · 문 앞 총 소요 ${fmtDur(b.totalMin)}</div>
@@ -2363,6 +2381,26 @@ function renderRoutePanel() {
     ${retHtml}
     ${accessFormHtml(b, plan)}
     <div class="route-note">시간표 2026년 10월 기준 · 운임표 2026년 9월 기준. ${b.accessSrc === 'est' ? '역→목적지 이동시간은 직선거리 기반 <strong>추정치</strong>이고 실제 대중교통 조회 결과가 아닙니다. ' : ''}좌석 잔여는 반영되지 않습니다.</div>`)
+}
+
+// 철도가 종착지보다 북쪽으로 올라갔다 되내려오는 구간(여수·순천·목포 등)에서 띄우는 안내.
+// KTX 편을 추천하는 대신 시외버스로 돌린다. 요금은 운임표에 등록된 값만 쓰고, 없으면
+// 없다고 밝힌다 — 근거 없는 금액을 정산서에 올리지 않기 위해서다.
+function detourBusHtml(d, dest) {
+  const where = (dest && dest.label) || state.place || '목적지'
+  const bus   = getFare(state.region || state.place)
+  const fareLine = bus && bus.bus
+    ? `<div class="route-step">💳 시외버스 왕복 ${bus.bus.toLocaleString()}원 (${escapeHtml(bus.label)})</div>`
+    : `<div class="route-warn">이 구간 시외버스 요금은 아직 운임표에 없어 자동 계산되지 않습니다. 관리자 화면에서 등록해야 예상 금액에 잡힙니다.</div>`
+  return `
+    <div class="route-head">
+      <span class="route-head-title">🚌 이 구간은 시외버스를 타세요</span>
+      <span class="route-head-sub">${escapeHtml(where)} · 철도는 우회 구간</span>
+    </div>
+    <div class="route-step">기차로 가려면 <strong>${escapeHtml(d.hub)}역</strong>까지 올라갔다가 ${escapeHtml(d.dest)}역으로 다시 내려와야 합니다. ${escapeHtml(d.hub)}역은 도착역보다 ${d.northKm}km 북쪽입니다.</div>
+    <div class="route-step">📏 직선 ${d.directKm}km를 ${d.railKm}km로 도는 경로(${d.ratio}배)라 추천에서 뺐습니다.</div>
+    ${fareLine}
+    <div class="route-note">시외버스는 시간표 자료가 없어 몇 시 차를 탈지는 역산하지 않습니다. 터미널 시간표를 직접 확인해 주세요.</div>`
 }
 
 function getFare(place) {

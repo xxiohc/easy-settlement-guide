@@ -20,6 +20,8 @@ const CAND_LIMIT     = 10   // 비교할 도착역 후보 수
 const CAND_MAX_KM    = 80   // 목적지에서 이보다 먼 역은 후보로 보지 않는다
 const ACCESS_TOL     = 30   // 가장 가까운 역보다 접근시간이 이만큼 더 걸리는 역은 버린다
 const TRANSFER_BACK  = 180  // 최적 직통보다 이만큼 이른 출발편까지만 환승을 탐색한다
+const DETOUR_RATIO   = 2.0  // 철도 이동거리가 직선거리의 이 배 이상이면 우회로 본다
+const DETOUR_NORTH   = 20   // 환승역이 목적지보다 이만큼 북쪽이면 '올라갔다 내려오는' 경로
 
 const KtxRoute = {
   timetable: null,
@@ -71,6 +73,30 @@ function haversineKm(aLat, aLon, bLat, bLon) {
   const h = Math.sin(dLat / 2) ** 2 +
             Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLon / 2) ** 2
   return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+// 마산 → 환승역 → 도착역이 '종착지보다 위로 올라갔다가 다시 내려오는' 경로인지 판정한다.
+// 호남·전남권(여수·순천·목포·광주)과 부산·울산은 마산에서 철도로 가려면 오송·밀양·동대구까지
+// 거슬러 올라갔다 되내려와야 해서, 직선거리의 두세 배를 돌게 된다. 이런 구간은 시외버스가 빠르다.
+// 두 조건을 모두 만족할 때만 우회로 본다 — 멀리 돌지만 아래로만 가는 경로(광명 경유 등)를
+// 잘못 잡지 않기 위해서다.
+function detourOf(hub, dest) {
+  const st = KtxRoute.stations
+  const o = st && st[ORIGIN_STATION], h = st && st[hub], d = st && st[dest]
+  if (!o || !h || !d) return null
+  const directKm = haversineKm(o.lat, o.lon, d.lat, d.lon)
+  if (directKm < 1) return null
+  const railKm  = haversineKm(o.lat, o.lon, h.lat, h.lon) + haversineKm(h.lat, h.lon, d.lat, d.lon)
+  const ratio   = railKm / directKm
+  const northKm = haversineKm(d.lat, d.lon, h.lat, d.lon) * (h.lat > d.lat ? 1 : -1)
+  if (ratio < DETOUR_RATIO || northKm < DETOUR_NORTH) return null
+  return {
+    hub, dest,
+    ratio:     Math.round(ratio * 10) / 10,
+    railKm:    Math.round(railKm),
+    directKm:  Math.round(directKm),
+    northKm:   Math.round(northKm),
+  }
 }
 
 // 직선거리 → 대중교통 소요시간 추정. 실측이 아니라 거리 기반 추정값이다.
@@ -181,6 +207,7 @@ function findItineraries(dest, deadline, dow) {
         trans.push({
           legs: [leg1, leg2], transfers: 1, via: [hub],
           dep: leg1.dep, arr: leg2.arr, wait: leg2.dep - leg1.arr,
+          detour: detourOf(hub, dest),
         })
       }
     }
@@ -256,11 +283,20 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
   const usable = scored.filter(x => x.ai.min <= minAccess + ACCESS_TOL)
   const cands = (usable.length ? usable : scored)
 
+  // 우회 경로(환승역이 목적지보다 한참 북쪽)는 추천 대상에서 뺀다. 다만 사용자가 도착역을
+  // 직접 지정했으면(only) 그 선택을 존중해 그대로 쓰고, 화면에만 우회 사실을 알린다.
+  const dropDetour = !only
+  const detoursSeen = []
+
   const collect = buffer => {
     const acc = []
     for (const { st, ai } of cands) {
       const deadline = startMin - ai.min - buffer
-      const its = findItineraries(st.name, deadline, dow)
+      let its = findItineraries(st.name, deadline, dow)
+      if (dropDetour) {
+        for (const it of its) if (it.detour) detoursSeen.push(it.detour)
+        its = its.filter(it => !it.detour)
+      }
       if (!its.length) continue
       const fare = fareOf(st.name, isMS)
       for (const it of its.slice(0, 4)) {
@@ -288,6 +324,11 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
     noBuffer = plans.length > 0
   }
   if (!plans.length) {
+    if (detoursSeen.length) {
+      // 우회가 아닌 철도 경로가 아예 없는 구간 — 시외버스로 안내한다.
+      const d = detoursSeen.reduce((a, b) => (b.ratio < a.ratio ? b : a))
+      return { ok: false, reason: 'detour', detour: d, candidates: cands.map(c => c.st.name) }
+    }
     return { ok: false, reason: 'no-train', candidates: cands.map(c => c.st.name) }
   }
 
@@ -386,7 +427,7 @@ function planPreviousDay({ lat, lon, dow, destRow, access }) {
     .sort((a, b) => a.ai.min - b.ai.min)
   if (!scored.length) return null
   const { s: st, ai } = scored[0]
-  const its = findItineraries(st.name, 1440 + 360, prevDow)
+  const its = findItineraries(st.name, 1440 + 360, prevDow).filter(it => !it.detour)
   if (!its.length) return null
   return { station: st.name, access: ai.min, accessSrc: ai.src, options: its.slice(0, 3) }
 }
@@ -394,6 +435,6 @@ function planPreviousDay({ lat, lon, dow, destRow, access }) {
 if (typeof module !== 'undefined') {
   module.exports = { KtxRoute, loadRouteData, initRouteData, planTrip, planPreviousDay,
                      planFromStation, fareStationNames, settlementFare,
-                     accessMinutes, accessInfo, findDestination, haversineKm, fmtTime, fmtDur,
+                     accessMinutes, accessInfo, findDestination, haversineKm, fmtTime, fmtDur, detourOf,
                      findItineraries, candidateStations, fareOf }
 }

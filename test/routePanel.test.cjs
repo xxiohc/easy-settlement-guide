@@ -84,3 +84,36 @@ test('다녀온 출장에서 당일 열차가 없으면 전날 후보 열차 대
   assert.ok(app.panel.innerHTML.includes('전날 이동'))
   assert.ok(!app.panel.innerHTML.includes('전날 이동 후보'))
 })
+
+// ── 우회 구간 안내 ───────────────────────────────────────────────────────────
+const DETOUR_PLAN = {
+  ok: false,
+  reason: 'detour',
+  detour: { hub: '오송', dest: '여수엑스포', ratio: 4.3, railKm: 398, directKm: 92, northKm: 208 },
+}
+
+function renderDetour(place, region) {
+  const app = loadApp()
+  Object.assign(app.state, { tripStatus: 'planned', startTime: '14:00', place, region: region || '' })
+  app.stubPlan({ manual: false, dow: 1, dest: { label: place, proxy: false, row: null }, plan: DETOUR_PLAN })
+  app.render()
+  return app.panel.innerHTML
+}
+
+test('우회 구간은 기차편 대신 시외버스를 안내한다', () => {
+  const html = renderDetour('여수시청')
+  assert.ok(html.includes('시외버스를 타세요'))
+  assert.ok(html.includes('오송'))
+  assert.ok(html.includes('4.3배'))
+  assert.ok(!html.includes('이 기차를 타세요'))
+})
+
+test('우회 구간 요금이 운임표에 없으면 없다고 밝힌다', () => {
+  assert.ok(renderDetour('여수시청').includes('아직 운임표에 없어'))
+})
+
+test('우회 구간 요금이 운임표에 있으면 그 금액을 보여준다', () => {
+  const html = renderDetour('부산진구청', '부산')
+  assert.ok(html.includes('19,600원'))
+  assert.ok(!html.includes('아직 운임표에 없어'))
+})
