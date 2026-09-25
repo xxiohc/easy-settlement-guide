@@ -202,3 +202,47 @@ test('08:30 경계에 걸치는 마산역 상행편은 없다 (판정이 흔들�
       `마산역 ${R.fmtTime(d)} 출발이 08:30 경계 30분 안에 들어왔다 — 판정 근거를 다시 봐야 한다`)
   }
 })
+
+// ── 우회 경로 차단 ───────────────────────────────────────────────────────────
+// 마산에서 호남·전남권은 철도로 가려면 오송까지 올라갔다 되내려와야 한다. 직선의 두 배를
+// 넘게 도는 이런 구간은 추천하지 않고 시외버스로 돌린다(2026-09-25 지석초이 지시).
+const AT = { 여수시청: [34.760, 127.662], 순천시청: [34.950, 127.487], 광주시청: [35.160, 126.851] }
+function planAt(name, startMin = 14 * 60, extra = {}) {
+  const [lat, lon] = AT[name]
+  return R.planTrip({ lat, lon, startMin, dow: THU, isMS: false, ...extra })
+}
+
+test('오송까지 올라갔다 내려오는 경로는 우회로 판정한다', () => {
+  const d = R.detourOf('오송', '여수엑스포')
+  assert.ok(d)
+  assert.ok(d.ratio >= 4)
+  assert.ok(d.northKm > 200)
+})
+
+test('정상 환승(동대구→경주·밀양→부산)은 우회로 보지 않는다', () => {
+  assert.equal(R.detourOf('동대구', '경주'), null)
+  assert.equal(R.detourOf('밀양', '부산'), null)
+  assert.equal(R.detourOf('오송', '익산'), null)
+})
+
+test('여수·순천은 기차를 추천하지 않고 우회 사유를 돌려준다', () => {
+  for (const name of ['여수시청', '순천시청']) {
+    const p = planAt(name)
+    assert.equal(p.ok, false, `${name} 에 기차편이 추천됐다`)
+    assert.equal(p.reason, 'detour')
+    assert.equal(p.detour.hub, '오송')
+    assert.ok(p.detour.railKm > p.detour.directKm * 2)
+  }
+})
+
+test('우회 구간이어도 사용자가 도착역을 직접 고르면 그 역으로 계산한다', () => {
+  const p = planAt('여수시청', 14 * 60, { only: '여수엑스포', access: { 여수엑스포: 20 } })
+  assert.ok(p.ok)
+  assert.equal(p.best.station, '여수엑스포')
+  assert.ok(p.best.detour, '직접 지정한 우회 경로에는 경고용 detour 정보가 붙어야 한다')
+})
+
+test('우회 판정이 기존 추천을 건드리지 않는다 (수서·서울·포항)', () => {
+  assert.equal(planFor('삼성서울병원').best.station, '수서')
+  assert.equal(planFor('서울지방국세청').best.station, '서울')
+})
