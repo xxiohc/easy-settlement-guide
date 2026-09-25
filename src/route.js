@@ -26,7 +26,7 @@ const BUS_KMH        = 70   // 시외버스 고속도로 실효속도(정차·�
 const BUS_ROAD       = 1.25 // 직선거리 → 실제 도로거리 보정계수
 const BUS_WAIT       = 20   // 터미널 도착·대기
 const BUS_LOCAL      = 30   // 도착 터미널 → 목적지 시내 이동
-const BUS_ADVANTAGE  = 60   // 철도보다 이만큼 이상 빨라야 시외버스를 먼저 권한다(추정오차 여유)
+const BUS_ADVANTAGE  = 45   // 철도보다 이만큼 이상 빨라야 시외버스를 먼저 권한다(추정오차 여유)
 
 const KtxRoute = {
   timetable: null,

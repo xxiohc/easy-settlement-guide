@@ -7,12 +7,14 @@ const vm = require('node:vm')
 
 function loadApp() {
   const panel = { className: '', innerHTML: '' }
+  const form  = { className: '', innerHTML: '' }
   const stub = new Proxy(function () {}, {
     get: (t, k) => (k === Symbol.toPrimitive || k === 'then' ? undefined : stub),
     apply: () => stub,
     set: () => true,
   })
-  const document = new Proxy({ getElementById: id => (id === 'routePanel' ? panel : null) }, {
+  const els = { routePanel: panel, tripFormWrap: form }
+  const document = new Proxy({ getElementById: id => els[id] || null }, {
     get: (t, k) => (k in t ? t[k] : stub),
     set: () => true,
   })
@@ -29,7 +31,8 @@ function loadApp() {
   const state = evalIn('state')
   const stubPlan = plan => { context.__plan = plan; evalIn('computeRoutePlan = () => __plan') }
   const render = () => evalIn('renderRoutePanel()')
-  return { state, stubPlan, render, panel }
+  const renderForm = () => evalIn('renderTripFormPreview()')
+  return { state, stubPlan, render, renderForm, panel, form }
 }
 
 const PLAN = {
@@ -156,4 +159,41 @@ test('다녀온 출장에서도 버스가 빨랐다는 사실은 알린다', () 
 
 test('버스 요금이 운임표에 없으면 기차 기준 금액임을 밝힌다', () => {
   assert.ok(renderBusFaster('planned', '국민연금공단').includes('아래 금액은 기차 기준입니다'))
+})
+
+// ── 시외버스 구간의 출발지 (2026-09-25) ──────────────────────────────────────
+// 부산·울산·전주처럼 버스로 가는 구간은 마산역이 아니라 마산시외버스터미널에서 탄다.
+test('시외버스 구간 안내는 마산시외버스터미널에서 출발한다고 적는다', () => {
+  const app = loadApp()
+  Object.assign(app.state, { tripStatus: 'planned', startTime: '10:00', endTime: '17:00',
+                             place: '부산교육원', region: '부산' })
+  app.stubPlan({ skip: 'bus', busFare: { label: '부산', bus: 19600 } })
+  app.render()
+  assert.ok(app.panel.innerHTML.includes('마산시외버스터미널'), '출발 터미널이 안내에 없다')
+  assert.ok(!app.panel.innerHTML.includes('마산역'), '버스 구간에 마산역이 남아 있다')
+})
+
+test('버스 우세 배너의 출발지도 마산시외버스터미널이다', () => {
+  assert.ok(renderBusFaster('planned', '국민연금공단').includes('마산시외버스터미널'))
+})
+
+test('신청서 교통비 행은 버스 구간이면 마산시외버스터미널 ↔ 목적지로 적는다', () => {
+  const app = loadApp()
+  Object.assign(app.state, { tripStatus: 'planned', startTime: '10:00', endTime: '17:00',
+                             place: '부산교육원', region: '부산', days: 1, nights: 0 })
+  app.stubPlan({ skip: 'bus', busFare: { label: '부산', bus: 19600 } })
+  app.renderForm()
+  const html = app.form.innerHTML
+  assert.ok(html.includes('마산시외버스터미널 → 부산'), '가는 편 출발지가 터미널이 아니다')
+  assert.ok(html.includes('부산 → 마산시외버스터미널'), '오는 편 도착지가 터미널이 아니다')
+})
+
+test('KTX 구간 신청서 행은 그대로 마산 기준을 쓴다', () => {
+  const app = loadApp()
+  Object.assign(app.state, { tripStatus: 'planned', startTime: '10:00', endTime: '17:00',
+                             place: '대구시청', region: '대구', days: 1, nights: 0 })
+  app.stubPlan({ skip: 'online' })
+  app.renderForm()
+  assert.ok(app.form.innerHTML.includes('마산 → 동대구역'), 'KTX 구간 표기가 바뀌었다')
+  assert.ok(!app.form.innerHTML.includes('마산시외버스터미널'))
 })
