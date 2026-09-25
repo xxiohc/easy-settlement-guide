@@ -97,12 +97,11 @@ async function run(withDoc){
     if(!shown) return false; await e.click().catch(()=>{}); await p.waitForTimeout(500); return true }
 
   const script = [
-    ['카드6 교육비 납부함',        "[onclick=\"select6('paid')\"]"],
-    ['카드7 결제수단 카드',        "[onclick=\"select7PayMethod('card')\"]"],
-    ['카드7 카드영수증',           "[onclick=\"select7('card-receipt')\"]"],
+    ['카드6 카드로 결제했어요',    "[onclick=\"select6Method('card')\"]"],
+    ['카드6 카드영수증 확인',      "[onclick=\"select6Receipt('card-receipt')\"]"],
     ['카드8 8시간이하 질문',       "[onclick=\"setYN('isShortDayTrip', false)\"]", 'field-shortdaytrip'],
     ['카드8 삼성계열 아니오',      "[onclick=\"setYN('isMS', false)\"]"],
-    ['카드8 12시이전 질문',        "[onclick=\"setYN('before12', true)\"]", 'field-before12'],
+    ['카드8 12시이전 질문',        "[onclick=\"setYN('before12', true)\"]", 'field-daytrip'],
     ['카드8 숙소제공 아니오',      "[onclick=\"setYN('lodgingProvided', false)\"]"],
   ]
   for(const [label,sel,gate] of script){
