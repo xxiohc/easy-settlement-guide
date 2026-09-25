@@ -32,7 +32,7 @@ function loadApp() {
   const stubPlan = plan => { context.__plan = plan; evalIn('computeRoutePlan = () => __plan') }
   const render = () => evalIn('renderRoutePanel()')
   const renderForm = () => evalIn('renderTripFormPreview()')
-  return { state, stubPlan, render, renderForm, panel, form }
+  return { state, stubPlan, render, renderForm, panel, form, evalIn }
 }
 
 const PLAN = {
@@ -196,4 +196,61 @@ test('KTX 구간 신청서 행은 그대로 마산 기준을 쓴다', () => {
   app.renderForm()
   assert.ok(app.form.innerHTML.includes('마산 → 동대구역'), 'KTX 구간 표기가 바뀌었다')
   assert.ok(!app.form.innerHTML.includes('마산시외버스터미널'))
+})
+
+
+// ── 시외버스 고정 구간: 목포·여수·순천 (2026-09-25 지석초이 지시) ─────────────
+// 철도가 오송까지 올라갔다 되내려오는 구간이라 기차 역산을 아예 하지 않는다.
+function busOnlyApp(place, region, fares) {
+  const app = loadApp()
+  Object.assign(app.state, { tripStatus: 'planned', startTime: '10:00', endTime: '17:00',
+                             place, region: region || '', days: 1, nights: 0 })
+  if (fares) { app.evalIn('KtxRoute').fares = fares }
+  return app
+}
+
+test('목포·여수·순천은 computeRoutePlan 단계에서 시외버스로 고정된다', () => {
+  for (const [place, label] of [['목포시청', '목포'], ['여수시청', '여수'], ['순천대학교', '순천'], ['광양보건소', '순천']]) {
+    const app = busOnlyApp(place)
+    const r = app.evalIn('computeRoutePlan()')
+    assert.strictEqual(r.skip, 'busonly', `${place} 가 버스 고정으로 잡히지 않았다`)
+    assert.strictEqual(r.busOnly.label, label)
+  }
+})
+
+test('시외버스 고정 구간 안내는 기차를 왜 뺐는지 밝힌다', () => {
+  const app = busOnlyApp('목포시청', '목포',
+    { 목포: { station: '목포', path: ['마산', '오송', '목포'], transfers: 1, roundTrip: 127600 } })
+  app.render()
+  const html = app.panel.innerHTML
+  assert.ok(html.includes('시외버스로 갑니다'), '버스 고정 안내가 없다')
+  assert.ok(html.includes('기차는 돌아가는 경로라 제외'), '제외 사유가 없다')
+  assert.ok(html.includes('마산 → 오송 → 목포'), '운임표 철도 경로가 없다')
+  assert.ok(html.includes('127,600원'), '철도 왕복 운임이 없다')
+  assert.ok(html.includes('마산시외버스터미널'), '출발 터미널이 없다')
+  assert.ok(!html.includes('이 기차를 타세요'), '기차편 추천이 남아 있다')
+})
+
+test('시외버스 고정 구간은 요금이 운임표에 없다고 밝힌다', () => {
+  const app = busOnlyApp('여수시청', '여수')
+  app.render()
+  assert.ok(app.panel.innerHTML.includes('아직 운임표에 없어'))
+})
+
+test('시외버스 고정 구간 신청서는 터미널 ↔ 목적지 왕복 2행으로 적는다', () => {
+  const app = busOnlyApp('순천대학교', '순천')
+  app.renderForm()
+  const html = app.form.innerHTML
+  assert.ok(html.includes('마산시외버스터미널 → 순천'), '가는 편 행이 없다')
+  assert.ok(html.includes('순천 → 마산시외버스터미널'), '오는 편 행이 없다')
+})
+
+test('부산·울산·전주 등 기존 버스 구간과 KTX 구간은 그대로다', () => {
+  const app = loadApp()
+  Object.assign(app.state, { tripStatus: 'planned', startTime: '10:00', place: '부산교육원', region: '부산' })
+  const r = app.evalIn('computeRoutePlan()')
+  assert.strictEqual(r.skip, 'bus', '부산이 운임표 버스 구간에서 벗어났다')
+  const app2 = loadApp()
+  Object.assign(app2.state, { tripStatus: 'planned', startTime: '10:00', place: '대구시청', region: '대구' })
+  assert.strictEqual(app2.evalIn('computeRoutePlan()').skip, 'data', 'KTX 구간이 버스로 새어 나갔다')
 })
