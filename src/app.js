@@ -61,6 +61,21 @@ const state = {
 const ORIGIN_RAIL = '마산역'
 const ORIGIN_BUS  = '마산시외버스터미널'
 
+// 시외버스 고정 구간(전남 서·남부). 운임표상 철도 경로가 마산 → 오송(충북 청주) → 목포·순천·
+// 여수엑스포다 — 종착지보다 한참 북쪽까지 거슬러 올라갔다 되내려오고 환승까지 붙는다.
+// 비효율이 분명하므로 기차 역산을 아예 돌리지 않고 시외버스로 고정한다(2026-09-25 지석초이 지시).
+// railStation 은 '왜 뺐는지'를 운임표 경로·금액으로 밝히는 데만 쓴다.
+const BUS_ONLY_REGIONS = [
+  { keywords: ['목포'], label: '목포', railStation: '목포' },
+  { keywords: ['여수'], label: '여수', railStation: '여수엑스포' },
+  { keywords: ['순천', '광양'], label: '순천', railStation: '순천' },
+]
+
+function busOnlyRegion(place) {
+  if (!place) return null
+  return BUS_ONLY_REGIONS.find(r => r.keywords.some(k => place.includes(k))) || null
+}
+
 // ── KTX / 버스 운임표 (마산역·마산시외버스터미널 출발 왕복) ───────────────────
 // 금액·경로는 tools/build_fares.py 가 data/source 의 KORAIL 운임표에서 생성한다.
 // 직접 고치지 말 것 — 고치면 다음 생성 때 되돌아간다. 실제 값은 data/rates.json
@@ -983,7 +998,10 @@ function parseDocMeta(filename, text) {
     // 부산 (해운대구에 "대구" 포함되어 반드시 동대구보다 앞에 있어야 함)
     ['부산광역시|부산시?|부산교육원|해운대|동래|사하|금정', '부산'],
     ['전주시?|전라북도|전북', '전주'],
-    ['순천시?|광양시?|여수시?', '순천'],
+    // 시외버스 고정 구간 — 지역명을 합치지 않고 따로 잡는다(안내에 그 지명이 그대로 나온다)
+    ['순천시?|광양시?', '순천'],
+    ['여수시?', '여수'],
+    ['목포시?', '목포'],
     ['창원시?|마산|진해|창원특례시|삼성창원병원|성균관대.*창원|경상국립대.*창원', '창원'],
     ['진주시?', '진주'],
   ]
@@ -1472,7 +1490,7 @@ function updateDateBox(inputId, placeholderId) {
 // 출장 지역 자동완성 목록 (교통비 계산 기준 도시)
 const REGION_HINTS = [
   '서울', '오송', '대전', '동대구', '경주', '울산', '부산',
-  '전주', '순천', '창원', '진주', '천안', '제주',
+  '전주', '순천', '여수', '목포', '창원', '진주', '천안', '제주',
 ]
 
 // 카카오 장소 검색 디바운스 타이머
@@ -1577,7 +1595,8 @@ function guessRegionFromAddress(addr) {
     ['울산', '울산'], ['경주', '경주'],
     ['대구', '동대구'],
     // 시외버스 목적지
-    ['부산', '부산'], ['전주', '전주'], ['순천', '순천'],
+    ['부산', '부산'], ['전주', '전주'],
+    ['순천', '순천'], ['광양', '순천'], ['여수', '여수'], ['목포', '목포'],
     // 인근 지역
     ['창원', '창원'], ['진주', '진주'],
   ]
@@ -1809,7 +1828,7 @@ function prepareCard8() {
       ? `입력하신 교육 시간은 <strong>${fmtDur(endMin - startMin)}</strong>이에요. `
       : ''
     shortAutoEl.innerHTML = known +
-      (fare && fare.bus
+      ((fare && fare.bus) || busOnlyRegion(state.region || state.place)
         ? '시외버스 구간은 소요시간 자료가 없어 왕복 이동시간까지 자동으로 더하지 못해요 — 직접 골라주세요.'
         : '여기에 왕복 이동시간을 더해 8시간을 넘는지 골라주세요.')
     shortAutoEl.classList.toggle('hidden', !showShortDay)
@@ -2006,11 +2025,17 @@ function prepareCard9() {
     breakdown.push({ label: fareLabel, amount: fareAmt, note: routeNote })
     total += fareAmt
   } else if (state.region || state.place) {
-    const detour = routeDetour()
-    breakdown.push(detour
-      ? { label: '교통비 (시외버스)', amount: '직접 확인 필요',
-          note: `철도는 ${detour.hub}까지 올라갔다 되내려오는 우회 구간 · 시외버스 왕복 요금 확인 필요` }
-      : { label: '교통비', amount: '직접 확인 필요', note: '운임표에 없는 지역' })
+    const detour  = routeDetour()
+    const busOnly = busOnlyRegion(state.region || state.place)
+    if (busOnly) {
+      breakdown.push({ label: '교통비 (시외버스)', amount: '직접 확인 필요',
+        note: `${busOnly.label}은 시외버스 고정 구간 · 철도는 오송 경유로 돌아가 제외 · ${ORIGIN_BUS} 왕복 요금 확인 필요` })
+    } else {
+      breakdown.push(detour
+        ? { label: '교통비 (시외버스)', amount: '직접 확인 필요',
+            note: `철도는 ${detour.hub}까지 올라갔다 되내려오는 우회 구간 · 시외버스 왕복 요금 확인 필요` }
+        : { label: '교통비', amount: '직접 확인 필요', note: '운임표에 없는 지역' })
+    }
   }
 
   // 2. 일당 / 식사비 계산
@@ -2234,6 +2259,8 @@ function computeRoutePlan() {
   if (state.isJeju)   return { skip: 'jeju' }
   const busFare = getFare(state.region || state.place)
   if (busFare && busFare.bus) return { skip: 'bus', busFare }
+  const busOnly = busOnlyRegion(state.region || state.place)
+  if (busOnly) return { skip: 'busonly', busOnly }
   if (!KtxRoute.ready) return { skip: 'data' }
 
   const startMin = toMinutes(state.startTime)
@@ -2303,6 +2330,7 @@ function renderRoutePanel() {
   if (r.skip === 'bus') {
     return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. ${ORIGIN_BUS}에서 출발합니다. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
   }
+  if (r.skip === 'busonly') return show(busOnlyHtml(r.busOnly))
   if (r.skip === 'data')   return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
   if (r.skip === 'notime') {
     return hide(isDone
@@ -2428,6 +2456,31 @@ function detourBusHtml(d, dest, busEst) {
     <div class="route-step">기차로 가려면 <strong>${escapeHtml(d.hub)}역</strong>까지 올라갔다가 ${escapeHtml(d.dest)}역으로 다시 내려와야 합니다. ${escapeHtml(d.hub)}역은 도착역보다 ${d.northKm}km 북쪽입니다.</div>
     <div class="route-step">📏 직선 ${d.directKm}km를 ${d.railKm}km로 도는 경로(${d.ratio}배)라 추천에서 뺐습니다.</div>
     ${busEst ? `<div class="route-step">⏱ 시외버스 문 앞 소요 약 ${fmtDur(busEst.totalMin)} <strong>추정</strong> · 도로 ${busEst.roadKm}km · 터미널 대기 ${busEst.waitMin}분 + 도착지 시내 ${busEst.localMin}분 포함</div>` : ''}
+    ${fareLine}
+    <div class="route-note">시외버스는 시간표 자료가 없어 몇 시 차를 탈지는 역산하지 않습니다. 터미널 시간표를 직접 확인해 주세요.</div>`
+}
+
+// 시외버스 고정 구간(목포·여수·순천)에서 기차 역산 대신 띄우는 안내.
+// 철도 경로를 숨기지 않고 '왜 뺐는지'를 운임표 경로·금액으로 밝힌다 — 기차를 탄 경우의
+// 정산 근거를 사용자가 직접 확인할 수 있어야 하기 때문이다.
+function busOnlyHtml(b) {
+  const where = state.place || b.label
+  const bus   = getFare(state.region || state.place)
+  const rail  = (KtxRoute.fares && KtxRoute.fares[b.railStation]) || null
+  const via   = rail && rail.path ? rail.path.slice(1, -1) : []
+  const railLine = rail
+    ? `<div class="route-step">🚄 기차는 운임표 기준 <strong>마산 → ${escapeHtml(via.join(' → '))} → ${escapeHtml(b.railStation)}</strong> 경로입니다. ${escapeHtml(via[0] || '환승역')}은 ${escapeHtml(b.label)}보다 한참 북쪽이라, 올라갔다 되내려오는 만큼 시간이 더 걸립니다${rail.roundTrip ? ` (왕복 ${rail.roundTrip.toLocaleString()}원 · 환승 ${rail.transfers || 0}회)` : ''}.</div>`
+    : `<div class="route-step">🚄 기차는 오송까지 올라갔다 되내려오는 환승 경로라 추천에서 뺐습니다.</div>`
+  const fareLine = bus && bus.bus
+    ? `<div class="route-step">💳 시외버스 왕복 ${bus.bus.toLocaleString()}원 (${escapeHtml(bus.label)})</div>`
+    : `<div class="route-warn">이 구간 시외버스 요금은 아직 운임표에 없어 자동 계산되지 않습니다 — 실제 탑승 요금으로 정산하고, 관리자 화면에 등록하면 예상 금액에 잡힙니다.</div>`
+  return `
+    <div class="route-head">
+      <span class="route-head-title">🚌 이 구간은 시외버스로 갑니다</span>
+      <span class="route-head-sub">${escapeHtml(where)} · 기차는 돌아가는 경로라 제외</span>
+    </div>
+    <div class="route-step">${escapeHtml(b.label)}은 ${ORIGIN_BUS}에서 시외버스로 가는 구간이라 기차 시간표 역산을 하지 않습니다.</div>
+    ${railLine}
     ${fareLine}
     <div class="route-note">시외버스는 시간표 자료가 없어 몇 시 차를 탈지는 역산하지 않습니다. 터미널 시간표를 직접 확인해 주세요.</div>`
 }
@@ -2601,6 +2654,16 @@ function renderTripFormPreview() {
         </tr>
         <tr>
           <td class="tf-td">${dest} → ${origin}${viaBack}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+        </tr>`
+    } else if (busOnlyRegion(state.region || state.place)) {
+      const b = busOnlyRegion(state.region || state.place)
+      fareRows = `
+        <tr>
+          <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
+          <td class="tf-td">${ORIGIN_BUS} → ${b.label}&nbsp;&nbsp;직접 확인 후 입력 (시외버스 편)</td>
+        </tr>
+        <tr>
+          <td class="tf-td">${b.label} → ${ORIGIN_BUS}&nbsp;&nbsp;직접 확인 후 입력 (시외버스 편)</td>
         </tr>`
     } else if (state.region || state.place) {
       fareRows = `<tr>
