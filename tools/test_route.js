@@ -265,12 +265,24 @@ test('전주 국민연금공단은 철도 대신 시외버스를 먼저 권한�
   assert.ok(R.settlementFare(p), '정산 기준 운임이 남아 있어야 한다')
 })
 
-test('원주 건보공단·심평원도 시외버스가 빠른 구간으로 잡힌다', () => {
+// 2026-09-25 TAGO 실측으로 마산발 원주 직행 시외버스가 0편임이 확인돼, 버스 우세 배너를
+// 빼고 도착역을 서울역으로 고정했다. 원주역까지 환승해 내려가는 안내보다 문 앞이 이르고
+// 편도 운임도 싸다(48,600원 < 60,400원).
+test('원주 건보공단·심평원은 서울역 도착으로 고정되고 버스 배너를 띄우지 않는다', () => {
   for (const n of ['국민건강보험공단', '건강보험심사평가원']) {
     const p = planFor(n)
     assert.ok(p.ok, n)
-    assert.ok(p.busFaster, `${n}: 시외버스 우세가 잡히지 않았다`)
+    assert.equal(p.best.station, '서울', `${n}: 도착역 고정이 풀렸다`)
+    assert.equal(p.best.accessSrc, 'known', `${n}: 서울역→원주 이동시간이 추정값으로 돌아갔다`)
+    assert.equal(p.busFaster, null, `${n}: 직행 없는 구간에 버스 우세 배너가 붙었다`)
+    assert.equal(R.settlementFare(p).station, '서울')
   }
+})
+
+test('도착역이 고정된 기관도 사용자가 고른 역이 우선한다', () => {
+  const p = planFor('건강보험심사평가원', 14 * 60, { only: '원주', access: { 원주: 30 } })
+  assert.ok(p.ok)
+  assert.equal(p.best.station, '원주')
 })
 
 test('수도권·대전·오송 추천은 시외버스로 뒤집히지 않는다', () => {

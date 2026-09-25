@@ -66,6 +66,10 @@ def main():
             # 역→기관 대중교통 소요시간(분). 사람이 실제로 확인한 값만 넣는다.
             "accessOverride": prev.get(name, {}).get("accessOverride", {}),
         }
+        # 사람이 손으로 정한 판단값은 좌표를 다시 긁어도 그대로 살린다.
+        for key in ("railStation", "noDirectBus", "accessNote"):
+            if key in prev.get(name, {}):
+                row[key] = prev[name][key]
         rows.append(row)
         print(f"{name:22s} {row['matched']:24s} {row['lat']},{row['lon']}  {row['addr']}")
 

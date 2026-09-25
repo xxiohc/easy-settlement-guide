@@ -2342,6 +2342,11 @@ function renderRoutePanel() {
     ? `편도 ${b.fare.oneWay.toLocaleString()}원 (${b.fare.grade}) · 왕복 ${b.fare.roundTrip.toLocaleString()}원`
     : '운임표에 없는 역'
   const routeKind = b.transfers ? `${b.via.join('·')} 환승 ${b.transfers}회` : '직통'
+  // 도착역을 기관 행에서 고정한 곳(원주 등)은 역에서 목적지까지가 시내 이동이 아니라
+  // 또 한 번의 시외 이동이다. 그 135분이 무엇인지 화면에 그대로 밝힌다.
+  const accessNote = dest && dest.row && dest.row.accessNote
+    ? `<div class="route-note">${escapeHtml(dest.row.accessNote)}</div>`
+    : ''
   // 사용자가 도착역을 직접 고른 경우에만 우회 경로가 여기까지 온다(자동 추천에서는 걸러진다).
   const detourWarn = b.detour
     ? `<div class="route-warn">직접 고르신 ${escapeHtml(b.station)}역은 ${escapeHtml(b.detour.hub)}까지 올라갔다 되내려오는 경로예요 — 직선 ${b.detour.directKm}km를 ${b.detour.railKm}km로 돕니다. 시외버스가 빠를 수 있습니다.</div>`
@@ -2372,6 +2377,7 @@ function renderRoutePanel() {
       ${detourWarn}
       <div class="route-step">💳 ${fareLine}</div>
       <div class="route-step">🚶 ${escapeHtml(b.station)}역에서 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)})</div>
+      ${accessNote}
       ${accessFormHtml(b, plan)}
       <div class="route-note">운임표 2026년 9월 기준. 실제 탑승 편과 무관하게 이 구간 운임으로 정산합니다. 도착역이 다르면 위에서 바꿔 주세요.</div>`)
   }
@@ -2389,6 +2395,7 @@ function renderRoutePanel() {
     ${detourWarn}
     ${b.legs.map(legLine).join(waitLine)}
     <div class="route-step">🚶 ${escapeHtml(b.station)}역 ${fmtTime(b.arr)} 도착 → 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)}) → 현장 ${fmtTime(arriveVenue)} 도착</div>
+    ${accessNote}
     <div class="route-step">⏱ 시작 ${state.startTime}까지 여유 ${b.margin}분${b.tight ? ' <span class="route-tight">빠듯</span>' : ''} · 문 앞 총 소요 ${fmtDur(b.totalMin)}</div>
     ${plan.noBuffer ? '<div class="route-warn">권장 여유(10분)를 지키는 편이 없어 도착 직전에 닿는 편을 표시했습니다. 전날 이동도 함께 검토하세요.</div>' : ''}
     <div class="route-step">💳 ${fareLine}</div>

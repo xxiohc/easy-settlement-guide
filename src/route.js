@@ -288,18 +288,23 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
     return { ok: false, reason: 'near', originKm: Math.round(originKm) }
   }
 
+  // 도착역 고정. 사용자가 폴백 화면에서 직접 고른 역(only)이 1순위, 기관 마스터에 적어 둔
+  // railStation이 2순위다. 원주처럼 마산발 직행 시외버스가 없고 철도도 서울까지 올라가야 하는
+  // 곳은 역 선택을 계산에 맡기지 않고 기관 행에서 고정한다.
+  const pin = only || (destRow && destRow.railStation) || null
+
   // 후보역마다 접근시간을 먼저 구하고, 목적지에서 너무 먼 역은 버린다.
   // (예: 전주 국민연금공단을 대전역에서 내려 2시간 넘게 버스로 가는 조합을 추천하지 않는다)
   let scored = candidateStations(lat, lon)
     .map(st => ({ st, ai: accessInfo(st.name, st.km, destRow, access) }))
-  if (only) {
-    const pinned = scored.filter(x => x.st.name === only)
+  if (pin) {
+    const pinned = scored.filter(x => x.st.name === pin)
     if (pinned.length) scored = pinned
     else {
-      const s = KtxRoute.stations[only]
-      if (s && KtxRoute.fares[only]) {
-        const st = { name: only, km: haversineKm(lat, lon, s.lat, s.lon), ...s }
-        scored = [{ st, ai: accessInfo(only, st.km, destRow, access) }]
+      const s = KtxRoute.stations[pin]
+      if (s && KtxRoute.fares[pin]) {
+        const st = { name: pin, km: haversineKm(lat, lon, s.lat, s.lon), ...s }
+        scored = [{ st, ai: accessInfo(pin, st.km, destRow, access) }]
       }
     }
   }
@@ -308,9 +313,9 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
   const usable = scored.filter(x => x.ai.min <= minAccess + ACCESS_TOL)
   const cands = (usable.length ? usable : scored)
 
-  // 우회 경로(환승역이 목적지보다 한참 북쪽)는 추천 대상에서 뺀다. 다만 사용자가 도착역을
-  // 직접 지정했으면(only) 그 선택을 존중해 그대로 쓰고, 화면에만 우회 사실을 알린다.
-  const dropDetour = !only
+  // 우회 경로(환승역이 목적지보다 한참 북쪽)는 추천 대상에서 뺀다. 다만 도착역이 고정돼
+  // 있으면 그 선택을 존중해 그대로 쓰고, 화면에만 우회 사실을 알린다.
+  const dropDetour = !pin
   const detoursSeen = []
 
   const collect = buffer => {
@@ -402,10 +407,13 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
   }
 
   // 철도 경로가 성립해도 시외버스가 확실히 빠른 구간은 버스를 먼저 권한다. 마산에서
-  // 전라도·원주는 철도가 오송·서울까지 올라갔다 내려와, 우회 판정(ratio 2배)에 걸리지
-  // 않는 구간도 버스가 한 시간 이상 빠르다. 철도 안내와 기준 운임은 그대로 남겨 둔다 —
+  // 전라도는 철도가 오송까지 올라갔다 내려와, 우회 판정(ratio 2배)에 걸리지 않는 구간도
+  // 버스가 한 시간 이상 빠르다. 철도 안내와 기준 운임은 그대로 남겨 둔다 —
   // 실제로 기차를 타는 경우의 정산 근거가 사라지면 안 되기 때문이다.
-  const bus = busEstimate(lat, lon)
+  // busEstimate는 직선거리 추정이라 '직행 편성이 있는지'를 모른다. 그래서 마산발 직행이
+  // 없는 것으로 확인된 기관(noDirectBus)은 배너를 만들지 않는다 — 원주가 그 경우다.
+  // 2026-09-25 TAGO 실측: 마산 → 원주·목포·여수·순천·대전복합·동대구 직행 0편.
+  const bus = destRow && destRow.noDirectBus ? null : busEstimate(lat, lon)
   const busFaster = bus && bus.totalMin + BUS_ADVANTAGE <= best.travelMin
     ? { ...bus, railMin: best.travelMin, railStation: best.station, railVia: best.via || [],
         savedMin: best.travelMin - bus.totalMin }
