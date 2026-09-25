@@ -1,5 +1,5 @@
 import { chromium } from 'playwright-core'
-const BASE = 'http://localhost:8799/index.html'
+const BASE = process.env.BASE || 'http://localhost:8799/index.html'
 const DOC  = '/Users/jiseokchoi/ODDCHOI/workspace/09_교육, 출장 정산 가이드/app/test-docs/삼일아카데미_교육.pdf'
 const b = await chromium.launch()
 const out = []
