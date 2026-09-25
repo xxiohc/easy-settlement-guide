@@ -3329,6 +3329,49 @@ function fitPills(root = document) {
   })
 }
 
+// ── 줄바꿈 다듬기 ────────────────────────────────────────────────────────────
+// CSS word-break:keep-all 은 한글 어절만 지킨다. 사파리(아이폰)는 여는 괄호 뒤,
+// 숫자 사이 쉼표·콜론 뒤에서 여전히 줄을 끊어 "₩ 68,/400", "(/2026년으로" 같은
+// 조각을 만든다. U+2060(WORD JOINER)은 사파리가 무시한다(2026-09-26 실측) —
+// 끊기면 안 되는 토막만 <x-nb>(white-space:nowrap)로 감싼다. span 이 아니라 사용자 정의
+// 태그인 이유는, 기존 CSS의 `.final-check-text span { display:block }` 같은 선택자에 걸려
+// 감싼 토막이 블록이 돼 줄이 통째로 갈라졌기 때문이다(2026-09-26 실측).
+// 글자 자체는 건드리지 않으므로 innerText·복사본은 그대로다. 점검은 tools/wrap_scan.mjs.
+const TIGHT_NUM = String.raw`\d+(?:,\d{3})+`
+const TIGHT_TIME = String.raw`\d{1,2}:\d{2}(?:\s*~\s*\d{1,2}:\d{2})?`
+// 여는 괄호·원화기호·가운뎃점·닫는 괄호는 뒤 토막과 한 덩어리로 묶는다
+const TIGHT_RE = new RegExp(`[([{₩·)](?:${TIGHT_TIME}|${TIGHT_NUM}|\\S)|${TIGHT_TIME}|${TIGHT_NUM}`, 'g')
+const TIGHT_SKIP = /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION|CODE|PRE)$/
+
+function joinTightWords(root) {
+  const walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_TEXT)
+  const targets = []
+  let n
+  while ((n = walker.nextNode())) {
+    const p = n.parentElement
+    if (!p || TIGHT_SKIP.test(p.tagName) || p.tagName === 'X-NB') continue
+    const t = n.nodeValue
+    if (!t || t.length < 2) continue
+    TIGHT_RE.lastIndex = 0
+    if (TIGHT_RE.test(t)) targets.push(n)
+  }
+  targets.forEach(node => {
+    const t = node.nodeValue
+    const frag = document.createDocumentFragment()
+    let last = 0, m
+    TIGHT_RE.lastIndex = 0
+    while ((m = TIGHT_RE.exec(t))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(t.slice(last, m.index)))
+      const nb = document.createElement('x-nb')
+      nb.textContent = m[0]
+      frag.appendChild(nb)
+      last = m.index + m[0].length
+    }
+    if (last < t.length) frag.appendChild(document.createTextNode(t.slice(last)))
+    node.parentNode.replaceChild(frag, node)
+  })
+}
+
 let pillFitQueued = false
 let pillObserver = null
 
@@ -3340,6 +3383,7 @@ function queueFitPills() {
   requestAnimationFrame(() => {
     pillFitQueued = false
     pillObserver?.disconnect()
+    joinTightWords()
     fitPills()
     pillObserver?.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] })
   })
