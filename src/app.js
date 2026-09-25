@@ -56,7 +56,12 @@ const state = {
   formEditMode: false,  // 출장신청서 수정 패널 열림 여부
 }
 
-// ── KTX / 버스 운임표 (마산역 출발 왕복) ──────────────────────────────────────
+// 출발지 이름. 기차는 마산역에서, 시외버스는 마산시외버스터미널에서 탄다 — 부산·울산·전주처럼
+// 버스로 가는 구간에 '마산역 출발'이라고 적으면 실제로 갈 곳과 다른 장소를 안내하게 된다.
+const ORIGIN_RAIL = '마산역'
+const ORIGIN_BUS  = '마산시외버스터미널'
+
+// ── KTX / 버스 운임표 (마산역·마산시외버스터미널 출발 왕복) ───────────────────
 // 금액·경로는 tools/build_fares.py 가 data/source 의 KORAIL 운임표에서 생성한다.
 // 직접 고치지 말 것 — 고치면 다음 생성 때 되돌아간다. 실제 값은 data/rates.json
 // 에서 덮어쓰며, 아래 배열은 로드 실패 시 쓰는 같은 값의 사본이다.
@@ -1991,9 +1996,10 @@ function prepareCard9() {
     const fareAmt = useFirst ? fare.ktxFirst : (fare.ktxNormal ?? fare.bus ?? 0)
     const route = fareRouteText(fare)
     const oneWay = fareAmt / 2
+    const origin = fare.bus ? ORIGIN_BUS : ORIGIN_RAIL
     const routeNote = route
-      ? `마산역 → ${fare.label} · ${route} · 편도 ${oneWay.toLocaleString()}원 × 2회`
-      : `왕복 기준 · 마산역 → ${fare.label}`
+      ? `${origin} → ${fare.label} · ${route} · 편도 ${oneWay.toLocaleString()}원 × 2회`
+      : `왕복 기준 · ${origin} → ${fare.label}`
     const fareLabel = fare.bus
       ? `시외버스 (${fare.label})`
       : `KTX ${useFirst ? '특실' : '일반실'} (${fare.label})`
@@ -2295,7 +2301,7 @@ function renderRoutePanel() {
   if (r.skip === 'online') return hide('')
   if (r.skip === 'jeju')   return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
   if (r.skip === 'bus') {
-    return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
+    return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. ${ORIGIN_BUS}에서 출발합니다. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
   }
   if (r.skip === 'data')   return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
   if (r.skip === 'notime') {
@@ -2439,7 +2445,7 @@ function busFasterHtml(b) {
       <span class="route-head-title">🚌 이 구간은 시외버스가 빠릅니다</span>
       <span class="route-head-sub">버스 약 ${fmtDur(b.totalMin)} 추정 · 기차 약 ${fmtDur(b.railMin)} — 약 ${fmtDur(b.savedMin)} 단축</span>
     </div>
-    <div class="route-step">🚌 마산 터미널 → 목적지 도로 ${b.roadKm}km · 터미널 대기 ${b.waitMin}분 + 도착지 시내 ${b.localMin}분 포함</div>
+    <div class="route-step">🚌 ${ORIGIN_BUS} → 목적지 도로 ${b.roadKm}km · 터미널 대기 ${b.waitMin}분 + 도착지 시내 ${b.localMin}분 포함</div>
     <div class="route-step">🚄 기차는 ${b.railVia && b.railVia.length ? `${escapeHtml(b.railVia.join('·'))} 환승 ` : '직통 '}${escapeHtml(b.railStation)}역 경유라 문 앞까지 약 ${fmtDur(b.railMin)} 걸립니다.</div>
     ${fareLine}
     <div class="route-note">버스 소요시간은 직선 ${b.directKm}km에 도로 보정을 적용한 <strong>추정치</strong>이고 시간표 조회 결과가 아닙니다. 터미널 시간표를 직접 확인해 주세요. 기차로 가실 경우의 안내는 아래에 그대로 있습니다.</div>`
@@ -2582,6 +2588,7 @@ function renderTripFormPreview() {
       const fareAmt   = useFirst ? fare.ktxFirst : (fare.ktxNormal ?? fare.bus ?? 0)
       const half      = fareAmt / 2
       const modeLabel = fare.bus ? '시외버스' : `KTX(${useFirst ? '특실' : '일반'})`
+      const origin    = fare.bus ? ORIGIN_BUS : '마산'
       const dest      = fare.label
       const route     = fareRouteText(fare)
       const viaGo     = fare.transfers ? ` [${fare.path.slice(1, -1).join(' → ')} 환승]` : ''
@@ -2590,10 +2597,10 @@ function renderTripFormPreview() {
       fareRows = `
         <tr>
           <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
-          <td class="tf-td">마산 → ${dest}${viaGo}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+          <td class="tf-td">${origin} → ${dest}${viaGo}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
         </tr>
         <tr>
-          <td class="tf-td">${dest} → 마산${viaBack}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
+          <td class="tf-td">${dest} → ${origin}${viaBack}&nbsp;&nbsp;@ ${half.toLocaleString()} × 1회 × 1명 = ₩ ${half.toLocaleString()} (${modeLabel} 편)</td>
         </tr>`
     } else if (state.region || state.place) {
       fareRows = `<tr>

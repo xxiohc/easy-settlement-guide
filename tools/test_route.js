@@ -285,6 +285,16 @@ test('도착역이 고정된 기관도 사용자가 고른 역이 우선한다',
   assert.equal(p.best.station, '원주')
 })
 
+// 2026-09-25 버스 우세 눈금을 60분 → 45분으로 내렸다. 절감 45~59분 구간도 배너를 띄우고,
+// 44분 이하는 여전히 띄우지 않는다(추정오차 여유).
+test('버스 우세 눈금은 45분이다 — 49분 절감은 띄우고 44분 절감은 띄우지 않는다', () => {
+  const on  = planFor('국민연금공단', 14 * 60, { only: '전주', access: { 전주: 20 } })
+  const off = planFor('국민연금공단', 14 * 60, { only: '전주', access: { 전주: 15 } })
+  assert.equal(on.busFaster.savedMin, 49)
+  assert.ok(on.busFaster, '절감 49분이면 배너를 띄워야 한다')
+  assert.equal(off.busFaster, null, '절감 44분이면 배너를 띄우지 않아야 한다')
+})
+
 test('수도권·대전·오송 추천은 시외버스로 뒤집히지 않는다', () => {
   for (const n of ['삼성서울병원', '서울지방국세청', '보건복지부', '질병관리청', '대한병원협회']) {
     const p = planFor(n)
