@@ -2171,6 +2171,10 @@ function renderRoutePanel() {
     el.innerHTML = html
   }
 
+  // 다녀온 출장은 몇 시 기차를 탈지 추천받을 필요가 없다. 도착역·운임은 정산 금액의
+  // 근거이므로 그대로 두고, 탈 열차·귀가편·대안 추천만 뺀다.
+  const isDone = state.tripStatus === 'done'
+
   const r = computeRoutePlan()
   if (r.skip === 'online') return hide('')
   if (r.skip === 'jeju')   return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
@@ -2179,11 +2183,13 @@ function renderRoutePanel() {
   }
   if (r.skip === 'data')   return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
   if (r.skip === 'notime') {
-    return hide('🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시각)')
+    return hide(isDone
+      ? '🚄 교육 시작시각을 넣으면 도착역과 정산 기준 운임을 계산해 드려요. (정보 확인 화면 → 교육 시각)'
+      : '🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시각)')
   }
   if (r.skip === 'needmanual') {
     el.className = 'route-panel route-panel-bare'
-    el.innerHTML = `<div class="route-empty">🚄 출장 장소를 검색해서 고르면 도착역과 기차편을 자동으로 계산해 드려요.
+    el.innerHTML = `<div class="route-empty">🚄 출장 장소를 검색해서 고르면 도착역과 ${isDone ? '정산 기준 운임' : '기차편'}을 자동으로 계산해 드려요.
       검색이 안 되는 곳이면 아래에서 내릴 역과 이동시간을 직접 넣어 주세요.</div>
       ${manualPickHtml()}`
     return
@@ -2196,6 +2202,10 @@ function renderRoutePanel() {
     return hide(`🚗 목적지가 마산역에서 직선 ${plan.originKm}km 거리라 기차를 탈 구간이 아니에요.`)
   }
   if (!plan.ok) {
+    if (isDone) {
+      return show(`<div class="route-head"><span class="route-head-title">🚄 당일 출발로는 시작시각을 못 맞추는 구간이에요</span></div>
+        <div class="route-warn">시작시각 ${state.startTime}에 닿는 당일 열차가 없는 구간입니다. 전날 이동했다면 추가 일당·숙박비가 정산 대상이에요.</div>`)
+    }
     const prev = dest ? planPreviousDay({ lat: dest.lat, lon: dest.lon, dow,
       destRow: dest.row || null, access: state.accessOverride }) : null
     const prevHtml = prev && prev.options.length
@@ -2228,6 +2238,18 @@ function renderRoutePanel() {
            <div class="route-alt">${b.station}역 ${fmtTime(plan.ret.leg.dep)} 출발 → 마산 ${fmtTime(plan.ret.leg.arr)} 도착 · ${plan.ret.leg.no}${plan.ret.next ? ` (다음 편 ${fmtTime(plan.ret.next.dep)})` : ''}</div>`
         : `<div class="route-alt-title">귀가편</div><div class="route-alt">종료시각 이후 마산 직통 편이 없어요 — 숙박 또는 환승 확인이 필요합니다.</div>`)
     : ''
+
+  if (isDone) {
+    return show(`
+      <div class="route-head">
+        <span class="route-head-title">🚄 정산 기준 — 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
+        <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} 기준 운임</span>
+      </div>
+      <div class="route-step">💳 ${fareLine}</div>
+      <div class="route-step">🚶 ${escapeHtml(b.station)}역에서 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)})</div>
+      ${accessFormHtml(b, plan)}
+      <div class="route-note">운임표 2026년 9월 기준. 실제 탑승 편과 무관하게 이 구간 운임으로 정산합니다. 도착역이 다르면 위에서 바꿔 주세요.</div>`)
+  }
 
   show(`
     <div class="route-head">
