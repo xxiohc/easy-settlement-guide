@@ -1207,8 +1207,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   color: var(--subtle);
 }
 
-/* ── 서울 12시 이전 보너스 안내 ── */
-.before12-bonus-note {
+/* ── 전날 이동 보너스 안내 ── */
+.prev-day-bonus-note {
   margin-top: 12px;
   padding: 11px 14px;
   background: #eef6ff;
@@ -2437,8 +2437,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   font-weight: 500;
 }
 
-/* 서울 12시 이전 추가 안내 */
-.seoul-before12-hint {
+/* 전날 이동 추가 안내 */
+.prev-day-hint {
   margin-bottom: 12px;
   padding: 14px 16px;
   background: #eef6ff;

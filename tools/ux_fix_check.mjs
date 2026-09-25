@@ -54,6 +54,10 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
         (await p.textContent('#shortday-auto')||'').trim().slice(0,60))
   await p.click('#field-shortdaytrip .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
   await p.click('#field-rank .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
+  // 부산은 시외버스 구간이라 역산이 안 된다 — 전날 이동을 직접 묻는 갈래(④)
+  check('④ 역산 불가 구간은 전날이동을 08:30 기준으로 직접 묻는다',
+        await vis(p,'#field-daytrip') && (await p.evaluate(()=>state.prevDayMove)) === null)
+  await p.click('#field-daytrip .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
   await p.click('#ctaNext8'); await p.waitForTimeout(800)
   check('A 카드9 도달', await active(p) === 'card-9')
   check('⑨ 다녀온 출장 버튼 문구', (await p.textContent('#card9-next-btn')).includes('내용 확인'),
@@ -89,9 +93,9 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   check('⑧ 카드6 → 카드8 직행(카드7 없음)', await active(p) === 'card-8')
   const rt = await p.evaluate(()=>state.receiptType)
   check('⑧ 세금계산서 선택이 state에 반영', rt === 'tax-invoice', `receiptType=${rt}`)
-  check('⑥ 서울 12시 질문 자동판정 안내 노출', await vis(p,'#daytrip-auto'), (await p.textContent('#daytrip-auto')||'').trim().slice(0,70))
-  const b12 = await p.evaluate(()=>state.before12)
-  check('⑥ 09:30 → 12시 이전으로 자동 선택', b12 === true, `before12=${b12}`)
+  check('⑥ 전날이동 질문 자동판정 안내 노출', await vis(p,'#daytrip-auto'), (await p.textContent('#daytrip-auto')||'').trim().slice(0,70))
+  const pdm = await p.evaluate(()=>state.prevDayMove)
+  check('⑥ 서울 09:30 시작 → 전날 이동 자동 인정', pdm === true, `prevDayMove=${pdm}`)
   // 뒤로가기: 카드8 → 카드6
   await p.click('#card-8 .back-footer-btn'); await p.waitForTimeout(600)
   check('⑧ 카드8 뒤로 → 카드6', await active(p) === 'card-6')

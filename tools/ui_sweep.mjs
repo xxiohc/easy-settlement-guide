@@ -101,7 +101,7 @@ async function run(withDoc){
     ['카드6 카드영수증 확인',      "[onclick=\"select6Receipt('card-receipt')\"]"],
     ['카드8 8시간이하 질문',       "[onclick=\"setYN('isShortDayTrip', false)\"]", 'field-shortdaytrip'],
     ['카드8 삼성계열 아니오',      "[onclick=\"setYN('isMS', false)\"]"],
-    ['카드8 12시이전 질문',        "[onclick=\"setYN('before12', true)\"]", 'field-daytrip'],
+    ['카드8 전날이동 질문',        "[onclick=\"setYN('prevDayMove', true)\"]", 'field-daytrip'],
     ['카드8 숙소제공 아니오',      "[onclick=\"setYN('lodgingProvided', false)\"]"],
   ]
   for(const [label,sel,gate] of script){
