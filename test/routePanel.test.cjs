@@ -117,3 +117,43 @@ test('우회 구간 요금이 운임표에 있으면 그 금액을 보여준다'
   assert.ok(html.includes('19,600원'))
   assert.ok(!html.includes('아직 운임표에 없어'))
 })
+
+// ── 시외버스가 빠른 구간 배너 ────────────────────────────────────────────────
+const BUS_FASTER = {
+  ...PLAN,
+  busFaster: { totalMin: 205, railMin: 282, savedMin: 77, directKm: 145, roadKm: 181,
+               waitMin: 20, localMin: 30, railStation: '전주', railVia: ['오송'] },
+}
+
+function renderBusFaster(tripStatus, place) {
+  const app = loadApp()
+  Object.assign(app.state, { tripStatus, startTime: '14:00', endTime: '17:00', place, region: '' })
+  app.stubPlan({ manual: false, dow: 1, dest: { label: place, proxy: false, row: null }, plan: BUS_FASTER })
+  app.render()
+  return app.panel.innerHTML
+}
+
+test('시외버스가 빠른 구간은 배너로 먼저 알린다', () => {
+  const html = renderBusFaster('planned', '국민연금공단')
+  assert.ok(html.includes('시외버스가 빠릅니다'))
+  assert.ok(html.includes('1시간 17분'), '단축시간이 표시되지 않았다')
+  assert.ok(html.indexOf('시외버스가 빠릅니다') < html.indexOf('이 기차를 타세요'), '버스 안내가 기차 안내보다 위에 와야 한다')
+})
+
+test('버스가 빨라도 기차 안내와 기준 운임은 지우지 않는다', () => {
+  const html = renderBusFaster('planned', '국민연금공단')
+  assert.ok(html.includes('이 기차를 타세요'))
+  assert.ok(html.includes('43,000원'), '기차 기준 운임이 사라졌다')
+  assert.ok(html.includes('기차로 가실 경우'))
+})
+
+test('다녀온 출장에서도 버스가 빨랐다는 사실은 알린다', () => {
+  const html = renderBusFaster('done', '국민연금공단')
+  assert.ok(html.includes('시외버스가 빠릅니다'))
+  assert.ok(html.includes('43,000원'))
+  assert.ok(!html.includes('이 기차를 타세요'))
+})
+
+test('버스 요금이 운임표에 없으면 기차 기준 금액임을 밝힌다', () => {
+  assert.ok(renderBusFaster('planned', '국민연금공단').includes('아래 금액은 기차 기준입니다'))
+})

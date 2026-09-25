@@ -1976,10 +1976,14 @@ function prepareCard9() {
     }
   } else if (rf) {
     const kind = rf.transfers ? `${rf.via.join('·')} 환승 ${rf.transfers}회` : '직통'
+    const bf = routeBusFaster()
+    const busNote = bf
+      ? ` · 시외버스가 약 ${fmtDur(bf.savedMin)} 빠른 구간 — 버스로 다녀오셨다면 실제 버스 요금으로 정산`
+      : ''
     breakdown.push({
       label: `KTX ${rf.grade} (${rf.station}역)`,
       amount: rf.roundTrip,
-      note: `마산역 ${fmtTime(rf.dep)} 출발 · ${kind} · 편도 ${rf.oneWay.toLocaleString()}원 × 2회`,
+      note: `마산역 ${fmtTime(rf.dep)} 출발 · ${kind} · 편도 ${rf.oneWay.toLocaleString()}원 × 2회${busNote}`,
     })
     total += rf.roundTrip
   } else if (fare) {
@@ -2264,6 +2268,13 @@ function routeDetour() {
   return r.plan.reason === 'detour' ? r.plan.detour : null
 }
 
+// 철도가 성립하지만 시외버스가 확실히 빠른 구간. 화면 안내와 정산 비고가 같은 말을 하도록 쓴다.
+function routeBusFaster() {
+  const r = computeRoutePlan()
+  if (!r || r.skip || !r.plan || !r.plan.ok) return null
+  return r.plan.busFaster || null
+}
+
 function renderRoutePanel() {
   const el = document.getElementById('routePanel')
   if (!el) return
@@ -2306,7 +2317,7 @@ function renderRoutePanel() {
   if (!plan.ok && plan.reason === 'near') {
     return hide(`🚗 목적지가 마산역에서 직선 ${plan.originKm}km 거리라 기차를 탈 구간이 아니에요.`)
   }
-  if (!plan.ok && plan.reason === 'detour') return show(detourBusHtml(plan.detour, dest))
+  if (!plan.ok && plan.reason === 'detour') return show(detourBusHtml(plan.detour, dest, plan.bus))
   if (!plan.ok) {
     if (isDone) {
       return show(`<div class="route-head"><span class="route-head-title">🚄 당일 출발로는 시작시각을 못 맞추는 구간이에요</span></div>
@@ -2324,6 +2335,8 @@ function renderRoutePanel() {
   }
 
   const b = plan.best
+  const busTop = plan.busFaster ? busFasterHtml(plan.busFaster) : ''
+  const railHead = plan.busFaster ? '기차로 가실 경우 — ' : ''
   const arriveVenue = b.arr + b.access
   const fareLine = b.fare
     ? `편도 ${b.fare.oneWay.toLocaleString()}원 (${b.fare.grade}) · 왕복 ${b.fare.roundTrip.toLocaleString()}원`
@@ -2351,8 +2364,9 @@ function renderRoutePanel() {
 
   if (isDone) {
     return show(`
+      ${busTop}
       <div class="route-head">
-        <span class="route-head-title">🚄 정산 기준 — 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
+        <span class="route-head-title">🚄 ${railHead}정산 기준 — 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
         <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} 기준 운임</span>
       </div>
       ${detourWarn}
@@ -2363,8 +2377,9 @@ function renderRoutePanel() {
   }
 
   show(`
+    ${busTop}
     <div class="route-head">
-      <span class="route-head-title">🚄 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
+      <span class="route-head-title">🚄 ${railHead}마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
       <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} ${state.startTime} 시작 기준 역산</span>
     </div>
     <div class="route-pick">
@@ -2386,7 +2401,7 @@ function renderRoutePanel() {
 // 철도가 종착지보다 북쪽으로 올라갔다 되내려오는 구간(여수·순천·목포 등)에서 띄우는 안내.
 // KTX 편을 추천하는 대신 시외버스로 돌린다. 요금은 운임표에 등록된 값만 쓰고, 없으면
 // 없다고 밝힌다 — 근거 없는 금액을 정산서에 올리지 않기 위해서다.
-function detourBusHtml(d, dest) {
+function detourBusHtml(d, dest, busEst) {
   const where = (dest && dest.label) || state.place || '목적지'
   const bus   = getFare(state.region || state.place)
   const fareLine = bus && bus.bus
@@ -2399,8 +2414,28 @@ function detourBusHtml(d, dest) {
     </div>
     <div class="route-step">기차로 가려면 <strong>${escapeHtml(d.hub)}역</strong>까지 올라갔다가 ${escapeHtml(d.dest)}역으로 다시 내려와야 합니다. ${escapeHtml(d.hub)}역은 도착역보다 ${d.northKm}km 북쪽입니다.</div>
     <div class="route-step">📏 직선 ${d.directKm}km를 ${d.railKm}km로 도는 경로(${d.ratio}배)라 추천에서 뺐습니다.</div>
+    ${busEst ? `<div class="route-step">⏱ 시외버스 문 앞 소요 약 ${fmtDur(busEst.totalMin)} <strong>추정</strong> · 도로 ${busEst.roadKm}km · 터미널 대기 ${busEst.waitMin}분 + 도착지 시내 ${busEst.localMin}분 포함</div>` : ''}
     ${fareLine}
     <div class="route-note">시외버스는 시간표 자료가 없어 몇 시 차를 탈지는 역산하지 않습니다. 터미널 시간표를 직접 확인해 주세요.</div>`
+}
+
+// 철도로도 갈 수 있지만 시외버스가 확실히 빠른 구간(마산 → 전라도·원주 등)에서
+// 철도 안내 위에 얹는 배너. 철도 안내와 기준 운임은 아래에 그대로 남긴다 —
+// 실제로 기차를 탄 경우의 정산 근거를 없애지 않기 위해서다.
+function busFasterHtml(b) {
+  const fare = getFare(state.region || state.place)
+  const fareLine = fare && fare.bus
+    ? `<div class="route-step">💳 시외버스 왕복 ${fare.bus.toLocaleString()}원 (${escapeHtml(fare.label)})</div>`
+    : `<div class="route-warn">이 구간 시외버스 요금은 운임표에 없어 자동 계산되지 않습니다 — 버스로 다녀오셨다면 실제 요금으로 정산하세요. 아래 금액은 기차 기준입니다.</div>`
+  return `
+    <div class="route-head">
+      <span class="route-head-title">🚌 이 구간은 시외버스가 빠릅니다</span>
+      <span class="route-head-sub">버스 약 ${fmtDur(b.totalMin)} 추정 · 기차 약 ${fmtDur(b.railMin)} — 약 ${fmtDur(b.savedMin)} 단축</span>
+    </div>
+    <div class="route-step">🚌 마산 터미널 → 목적지 도로 ${b.roadKm}km · 터미널 대기 ${b.waitMin}분 + 도착지 시내 ${b.localMin}분 포함</div>
+    <div class="route-step">🚄 기차는 ${b.railVia && b.railVia.length ? `${escapeHtml(b.railVia.join('·'))} 환승 ` : '직통 '}${escapeHtml(b.railStation)}역 경유라 문 앞까지 약 ${fmtDur(b.railMin)} 걸립니다.</div>
+    ${fareLine}
+    <div class="route-note">버스 소요시간은 직선 ${b.directKm}km에 도로 보정을 적용한 <strong>추정치</strong>이고 시간표 조회 결과가 아닙니다. 터미널 시간표를 직접 확인해 주세요. 기차로 가실 경우의 안내는 아래에 그대로 있습니다.</div>`
 }
 
 function getFare(place) {
