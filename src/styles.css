@@ -1665,6 +1665,20 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   background: #f7f8fa;
 }
 
+/* 알약 배지는 두 줄로 접히지 않는다. 폭이 모자라면 fitPills()가 글자를 줄인다. */
+.alt-tag,
+.auto-badge,
+.pending-badge,
+.doc-badge-jeju,
+.doc-badge-shortday,
+.duration-tag,
+.duration-badge,
+.sub-badge,
+.tf-post-badge {
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .alt-tag {
   display: inline-block;
   margin-top: 4px;
@@ -1674,6 +1688,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   background: #fef3c7;
   border-radius: 20px;
   padding: 2px 8px;
+}
+
+/* .choice-btn span(13px·block)이 .alt-tag보다 선택자가 세서 배지가 한 줄 설명글
+   크기로 커지고 칸 전체로 늘어나 있었다. 배지 모양을 되찾는다. */
+.choice-btn span.alt-tag {
+  display: inline-block;
+  width: fit-content;
+  font-size: 11px;
 }
 
 /* ── Card 7: 납부 방식 서브 섹션 ── */
