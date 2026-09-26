@@ -3110,3 +3110,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 .ra-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-top: 3px; }
 .ra-hint { font-size: 12px; color: var(--muted); }
+
+/* 그날 구간 직통 열차 목록(앱 시간표) */
+.kt-list { margin-top: 6px; }
+.kt-list summary { cursor: pointer; color: var(--primary); font-size: 12px; font-weight: 600; }
+.kt-table { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.kt-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.kt-table td { padding: 5px 6px; border-bottom: 1px solid #f2f4f6; color: var(--ink); white-space: nowrap; }
+.kt-row.is-picked td { background: var(--primary-soft); font-weight: 700; }
+.kt-row.is-earlier td { background: #f7f8fa; }
+.kt-table em { font-style: normal; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--primary); }
+.kt-note { margin-top: 4px; font-size: 11px; color: var(--muted); }
