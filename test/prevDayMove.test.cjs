@@ -70,18 +70,23 @@ function run(plan, over = {}) {
 
 const planAt = dep => ({ manual: false, dow: 3, dest: {}, plan: { ok: true, best: { dep, station: '수서' }, alternatives: [], ret: null } })
 
-test('① 역산 출발이 08:30보다 이르면 전날 이동을 자동 인정한다', () => {
+// 역산이 되면 사람에게 묻지 않는다(2026-09-26 지석초이 승인) — 판정은 카드4 시작시각 아래에 이미 보였다.
+test('① 역산 출발이 08:30보다 이르면 전날 이동을 자동 인정하고 묻지 않는다', () => {
   const app = run(planAt(7 * 60 + 33))
   assert.equal(app.state.prevDayMove, true)
-  assert.equal(app.el('field-daytrip').classList.contains('hidden'), false)
-  assert.match(app.el('daytrip-auto').innerHTML, /07:33/)
+  assert.equal(app.state.prevDayAuto, true)
+  assert.equal(app.el('field-daytrip').classList.contains('hidden'), true)
 })
 
-test('② 역산 출발이 08:30 이후면 자동 미인정한다', () => {
+test('② 역산 출발이 08:30 이후면 자동 미인정하고 묻지 않는다', () => {
   const app = run(planAt(9 * 60 + 21))
   assert.equal(app.state.prevDayMove, false)
-  assert.equal(app.el('field-daytrip').classList.contains('hidden'), false)
-  assert.match(app.el('daytrip-auto').innerHTML, /09:21/)
+  assert.equal(app.el('field-daytrip').classList.contains('hidden'), true)
+})
+
+test('08:30 경계 — 08:30 정각 출발은 전날 이동이 아니다', () => {
+  const app = run(planAt(8 * 60 + 30))
+  assert.equal(app.state.prevDayMove, false)
 })
 
 test('③ 당일 도착 열차가 없으면 묻지 않고 전날 이동으로 확정한다', () => {
@@ -110,7 +115,29 @@ test('비서울 출장도 판정 대상이다 — 지역 게이트가 남아 있
   const app = run(planAt(6 * 60 + 35), { region: '원주', place: '건강보험심사평가원' })
   assert.equal(app.state.isSeoul, false)
   assert.equal(app.state.prevDayMove, true)
+  assert.equal(app.el('field-daytrip').classList.contains('hidden'), true)
+})
+
+test('제주는 항공편이라 역산하지 않고 직접 묻는다', () => {
+  const app = run({ skip: 'jeju' }, { region: '제주', place: '제주시', isJeju: true })
+  assert.equal(app.state.prevDayMove, null)
   assert.equal(app.el('field-daytrip').classList.contains('hidden'), false)
+})
+
+test('자동 판정 뒤 역산이 안 되는 장소로 바뀌면 자동 답을 비우고 다시 묻는다', () => {
+  const app = run(planAt(7 * 60 + 33))
+  assert.equal(app.state.prevDayMove, true)
+  app.stubPlan({ skip: 'bus', busFare: { label: '부산', bus: 20000 } })
+  app.prepare()
+  assert.equal(app.state.prevDayMove, null)
+  assert.equal(app.el('field-daytrip').classList.contains('hidden'), false)
+})
+
+test('사람이 답한 값은 다시 들어와도 지우지 않는다', () => {
+  const app = run({ skip: 'bus', busFare: { label: '부산', bus: 20000 } }, { region: '부산', place: '부산시청' })
+  app.setYN('prevDayMove', true)
+  app.prepare()
+  assert.equal(app.state.prevDayMove, true)
 })
 
 test('전날 이동이 인정되면 8시간 이하 당일 출장 질문은 뜨지 않는다', () => {

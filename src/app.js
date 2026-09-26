@@ -42,6 +42,7 @@ const state = {
   isShortDayTrip: null, // true | false  (교육+이동 8h 이하 당일 출장)
   isDayTrip: null,
   prevDayMove: null,
+  prevDayAuto: false,   // prevDayMove를 역산이 정했는지(사람이 답한 게 아니면 true)
   lodgingProvided: null,
   mealProvided: null,
   hasPlane: null,
@@ -244,6 +245,17 @@ function validateCard4() {
       regionEl?.classList.add('input-error')
     } else {
       regionEl?.classList.remove('input-error')
+    }
+  }
+
+  // 4-1. 첫날 교육 시작시각 — 전날 이동(1박+1일) 판정의 근거라 오프라인이면 필수. 제주는 항공이라 역산하지 않는다.
+  if (!state.isOnline && !state.isJeju) {
+    onTimeChange()
+    if (!state.startTime) {
+      errs.push({ id: 'field-time', label: '첫날 교육 시작시각' })
+      document.getElementById('field-time')?.classList.add('field-error')
+    } else {
+      document.getElementById('field-time')?.classList.remove('field-error')
     }
   }
 
@@ -1334,8 +1346,8 @@ function selectOnlineMode(isOnline) {
 
   // 기차 역산 안내는 탈 기차를 추천할 때만 의미가 있다 — 온라인 교육과
   // 이미 다녀온 출장에서는 숨긴다(다녀온 출장은 routePanel도 추천을 빼고 그린다).
-  document.getElementById('time-ktx-hint')
-    ?.classList.toggle('hidden', isOnline || state.tripStatus === 'done')
+  document.getElementById('time-ktx-hint')?.classList.toggle('hidden', isOnline)
+  renderPrevDayVerdict()
 
   // 온라인이면 "출장"이 아니라 "교육"이다 — 라벨·자리표시를 맞춘다
   const labelTitle  = document.getElementById('label-title')
@@ -1389,8 +1401,7 @@ function prepareCard4WithMeta() {
     // 넘어가면 아래 토글이 비어 있어 "교육/등록비 유무 선택" 오류로 막혔다.
     selectFeePresence(true)
   }
-  if (meta.startTime) setAutofilled('input-starttime', snapTo10(meta.startTime))
-  if (meta.startTime) onTimeChange()
+  if (meta.startTime) setStartTime(snapTo10(meta.startTime), true)
   if (meta.venue && !state.place) setAutofilled('input-place', meta.venue)
 
   // 확인 뷰 메시지
@@ -1421,6 +1432,12 @@ function showCard4InputMode() {
   document.getElementById('fee-subhint').textContent = '사전납입 · 회원병원 기준 금액으로 입력해주세요'
   // 직접 입력 시 기본값: 오프라인
   selectOnlineMode(false)
+}
+
+// 데스크톱 크롬은 날짜 칸 본문을 눌러도 달력을 열지 않는다(투명 입력이라 아무 일도 없어 보였다).
+// 클릭은 그대로 네이티브 입력이 받고, 되는 브라우저에서만 달력을 추가로 연다 — 사파리는 조용히 무시한다.
+function openDatePicker(el) {
+  try { el.showPicker?.() } catch { /* 이미 열려 있거나 미지원 */ }
 }
 
 function periodWithYear(meta) {
@@ -1468,6 +1485,7 @@ function onDateChange() {
   // 시작일 쪽에는 max 를 걸지 않는다 — 일정을 통째로 뒤로 옮길 때 막혀버린다.
   const endEl = document.getElementById('input-end')
   if (endEl) endEl.min = start || ''
+  renderPrevDayVerdict()
 
   const tag = document.getElementById('duration-tag')
   if (start && end) {
@@ -1533,6 +1551,7 @@ function onPlaceInput() {
   state.placeLon = null
   state.accessOverride = {}
   state.pinStation = null
+  renderPrevDayVerdict()
 
   const suggest = document.getElementById('placeSuggest')
 
@@ -1610,7 +1629,9 @@ function selectPlace(name, addr, lat, lon) {
       document.getElementById('regionSuggest').classList.add('hidden')
     }
   }
+  clearCard4Error('input-region')
   updateDocStrip()
+  renderPrevDayVerdict()
 }
 
 // 주소 문자열에서 운임표 기준 지역명 추출
@@ -1645,6 +1666,7 @@ function onRegionInput() {
 
   document.getElementById('jeju-hint').classList.toggle('hidden', !state.isJeju)
   updateDocStrip()
+  renderPrevDayVerdict()
 
   // 자동완성
   const suggest = document.getElementById('regionSuggest')
@@ -1672,7 +1694,9 @@ function selectRegion(region) {
   state.isJeju  = region.includes('제주')
   state.isSeoul = region.includes('서울') || region.includes('여의도')
   document.getElementById('jeju-hint').classList.toggle('hidden', !state.isJeju)
+  clearCard4Error('input-region')
   updateDocStrip()
+  renderPrevDayVerdict()
 }
 
 // 교육비 유무 선택
@@ -1773,44 +1797,107 @@ function confirmCard6NotPaid() {
 // (2026-09-25 지석초이 승인). 역산이 되는 구간은 앱이 자동으로 답을 정한다.
 const WORK_START_MIN = 8 * 60 + 30
 
+// 역산으로 답이 정해지는지 한 곳에서 판정한다. 카드4 즉시 판정·카드8 질문 여부·카드9 근거가
+// 모두 이 결과를 쓴다. auto 가 true 면 사람에게 묻지 않는다(2026-09-26 지석초이 승인) —
+// 판정이 실제와 다르면 예/아니요를 뒤집는 대신 시작시각(등록 시각 등)을 고친다.
+function judgePrevDayMove() {
+  if (state.isOnline) return { auto: true, move: false, kind: 'na' }
+  // 제주는 항공편이라 기차 역산을 하지 않는다 — 전날 이동 여부는 사람에게 묻는다
+  if (state.isJeju) return { auto: false, kind: 'jeju' }
+  const r = computeRoutePlan()
+  if (!r) return { auto: false, kind: 'unknown' }
+  if (r.skip === 'notime') return { auto: false, kind: 'notime' }
+  if (r.skip === 'bus' || r.skip === 'busonly') return { auto: false, kind: 'bus' }
+  if (r.skip === 'needmanual') return { auto: false, kind: 'noplace' }
+  if (r.skip) return { auto: false, kind: 'unknown' }
+  const plan = r.plan
+  if (plan && plan.ok && plan.best) {
+    const b = plan.best
+    return { auto: true, move: b.dep < WORK_START_MIN, kind: 'train', best: b, dest: r.dest }
+  }
+  if (plan && plan.reason === 'no-train') return { auto: true, move: true, kind: 'no-train' }
+  if (plan && plan.reason === 'near')     return { auto: true, move: false, kind: 'near' }
+  if (plan && plan.reason === 'detour')   return { auto: false, kind: 'bus' }
+  return { auto: false, kind: 'unknown' }
+}
+
+function prevDayBasisText(j) {
+  if (j.kind === 'train') {
+    const b = j.best
+    return `첫날 ${state.startTime} 시작 → 마산역 ${fmtTime(b.dep)} 출발 → ${b.station}역 ${fmtTime(b.arr)} 도착 → 대중교통 약 ${b.access}분`
+  }
+  if (j.kind === 'no-train') return `첫날 ${state.startTime} 시작에 닿는 당일 열차가 없어요`
+  return ''
+}
+
+function prevDayBonusAmount() { return DAILY_RATE + LODGING_RATE }
+
+// 카드4 시작시각 칸 바로 아래 판정 박스
+function renderPrevDayVerdict() {
+  const el = document.getElementById('prevday-verdict')
+  if (!el) return
+  const place  = document.getElementById('input-place')?.value.trim()
+  const region = document.getElementById('input-region')?.value.trim()
+  if (place != null) state.place = place
+  if (region != null) state.region = region
+  const hide = () => { el.classList.add('hidden'); el.innerHTML = '' }
+  if (state.isOnline || state.isJeju || !state.startTime || !(state.place || state.region)) return hide()
+
+  const j = judgePrevDayMove()
+  const bonus = prevDayBonusAmount().toLocaleString()
+  const plus = `숙박 1박 ${LODGING_RATE.toLocaleString()}원 + 일당 1일 ${DAILY_RATE.toLocaleString()}원 = <strong>+${bonus}원</strong>`
+  let cls = 'is-info', html = ''
+  if (j.kind === 'train' && j.move) {
+    cls = 'is-yes'
+    html = `<strong>✅ 전날 이동 인정</strong><span>${escapeHtml(prevDayBasisText(j))}</span>
+      <span>마산역 출발이 출근시각 08:30보다 일러요 → ${plus}</span>`
+  } else if (j.kind === 'train') {
+    cls = 'is-no'
+    html = `<strong>당일 이동</strong><span>${escapeHtml(prevDayBasisText(j))}</span>
+      <span>마산역 ${fmtTime(j.best.dep)} 출발이면 돼요(08:30 이후) → 전날 이동 대상이 아니에요</span>`
+  } else if (j.kind === 'no-train') {
+    cls = 'is-yes'
+    html = `<strong>✅ 전날 이동 인정</strong><span>${escapeHtml(prevDayBasisText(j))}</span><span>${plus}</span>`
+  } else if (j.kind === 'near') {
+    cls = 'is-no'
+    html = `<strong>당일 이동</strong><span>마산역 인근이라 기차 역산 대상이 아니에요</span>`
+  } else if (j.kind === 'bus') {
+    html = `<strong>역산 불가 — 시외버스 구간</strong><span>버스 시간표 자료가 없어요. 전날 이동 여부는 다음 '추가 확인'에서 여쭤볼게요.</span>`
+  } else if (j.kind === 'noplace') {
+    html = `<strong>장소를 목록에서 골라 주세요</strong><span>출장 장소를 검색해 목록에서 고르면 몇 시 기차를 타야 하는지 바로 계산해요. 못 찾으면 다음 '추가 확인'에서 여쭤볼게요.</span>`
+  } else {
+    return hide()
+  }
+  el.className = `prevday-verdict ${cls}`
+  el.innerHTML = html
+}
+
 function applyPrevDayMove() {
   const autoEl = document.getElementById('daytrip-auto')
-  const setNote = html => {
-    if (!autoEl) return
-    autoEl.innerHTML = html
+  if (autoEl) autoEl.classList.add('hidden')
+  const j = judgePrevDayMove()
+
+  if (j.auto) {
+    state.prevDayMove = j.kind === 'na' ? null : j.move
+    state.prevDayAuto = true
+    return { mode: j.kind === 'near' ? 'skip' : j.kind === 'no-train' ? 'forced' : 'auto', judgment: j }
+  }
+
+  // 자동으로 골라 뒀던 답이 남아 있으면 사람이 새로 답하게 비운다
+  if (state.prevDayAuto) {
+    state.prevDayMove = null
+    state.prevDayAuto = false
+    document.querySelectorAll('#field-daytrip .yn-btn').forEach(b => b.classList.remove('selected'))
+  }
+  if (autoEl && state.startTime) {
+    autoEl.innerHTML = `입력하신 첫날 교육 시작시각은 <strong>${escapeHtml(state.startTime)}</strong>이에요. ` +
+      (j.kind === 'bus' ? '시외버스 구간이라 자동 역산을 못 해요 — '
+        : j.kind === 'jeju' ? '제주는 항공편이라 자동 역산을 못 해요 — '
+        : '장소 좌표를 몰라 자동 역산을 못 해요 — ') +
+      '여기에 맞추려면 08:30 전에 나서야 했는지 골라주세요.'
     autoEl.classList.remove('hidden')
   }
-  if (autoEl) autoEl.classList.add('hidden')
-
-  const r = computeRoutePlan()
-  const plan = r && !r.skip ? r.plan : null
-
-  if (plan && plan.ok && plan.best) {
-    const early = plan.best.dep < WORK_START_MIN
-    if (state.prevDayMove === null) setYN('prevDayMove', early)
-    setNote(early
-      ? `역산하면 마산역 <strong>${fmtTime(plan.best.dep)}</strong> 출발이라 출근시각 08:30보다 일러요. 전날 이동으로 골라 뒀어요 — 다르면 아래에서 바꾸세요.`
-      : `역산하면 마산역 <strong>${fmtTime(plan.best.dep)}</strong> 출발이라 출근시각 08:30 이후예요. 당일 이동으로 골라 뒀어요 — 다르면 아래에서 바꾸세요.`)
-    return { mode: 'ask' }
-  }
-
-  // 당일 도착할 열차가 아예 없으면 선택지가 없다 — 묻지 않고 확정한다.
-  if (plan && !plan.ok && plan.reason === 'no-train') {
-    state.prevDayMove = true
-    return { mode: 'forced' }
-  }
-  // 마산역 인근이라 기차를 타지 않는 구간은 전날 이동이 성립하지 않는다.
-  if (plan && !plan.ok && plan.reason === 'near') {
-    state.prevDayMove = false
-    return { mode: 'skip' }
-  }
-
-  // 시외버스·제주·좌표 미상: 역산이 안 되니 직접 묻는다.
-  const startMin = toMinutes(state.startTime)
-  if (startMin != null) {
-    setNote(`입력하신 교육 시작시각은 <strong>${escapeHtml(state.startTime)}</strong>이에요. 여기에 맞추려면 08:30 전에 나서야 했는지 골라주세요.`)
-  }
-  return { mode: 'ask' }
+  return { mode: 'ask', judgment: j }
 }
 
 // ── CARD 8: 추가 확인 준비 ───────────────────────────────────────────────────
@@ -1920,6 +2007,7 @@ function goFromCard8() {
 // Y/N 버튼 선택 + 조건부 필드 show/hide
 function setYN(field, val) {
   state[field] = val
+  if (field === 'prevDayMove') state.prevDayAuto = false
 
   // 전날 이동이 붙으면 당일 출장이 아니다 — 8시간 질문을 숨기고 답을 비운다.
   if (field === 'prevDayMove') {
@@ -2163,32 +2251,51 @@ function prepareCard9() {
     const show = state.prevDayMove === true
     prevDayHintEl.classList.toggle('hidden', !show)
     if (show) {
+      const j = judgePrevDayMove()
+      const basis = j.auto ? prevDayBasisText(j) : '추가 확인에서 직접 답하신 내용 기준'
       prevDayHintEl.innerHTML = `
         <div class="seoul-hint-title">✅ 전날 이동 적용됨</div>
         <div class="seoul-hint-body">
+          ${basis ? `<div class="seoul-hint-basis">${escapeHtml(basis)}</div>` : ''}
           전날 이동 기준으로 아래 금액이 <strong>추가</strong>됐어요
           <div class="seoul-hint-items">
-            <span>📅 일당 +1일</span><span class="seoul-hint-amt">+35,000원</span>
+            <span>📅 일당 +1일</span><span class="seoul-hint-amt">+${DAILY_RATE.toLocaleString()}원</span>
           </div>
           <div class="seoul-hint-items">
-            <span>🏨 숙박비 +1박</span><span class="seoul-hint-amt">+100,000원</span>
+            <span>🏨 숙박비 +1박</span><span class="seoul-hint-amt">+${LODGING_RATE.toLocaleString()}원</span>
           </div>
         </div>`
     }
   }
 }
 
+// 시·분 두 칸으로만 받는다 — 분은 10분 단위 선택지뿐이라 역산 기준이 늘 10분 단위다.
 function onTimeChange() {
-  // 입력칸은 10분 단위(step=600)지만 직접 타이핑하면 1분 값도 들어온다 — 내림으로 맞춘다.
-  // 내림이라 역산 여유가 줄지 않는다(더 이른 기차를 고른다).
-  const el = document.getElementById('input-starttime')
-  if (el && el.value) {
-    const snapped = snapTo10(el.value)
-    if (snapped !== el.value) el.value = snapped
-  }
-  state.startTime = el?.value || ''
-  el?.classList.toggle('is-empty', !state.startTime)
-  state.endTime   = ''  // 종료시각 입력칸 제거 (2026-09-26) — 귀가편 역산은 쓰지 않는다
+  const hourEl = document.getElementById('input-starthour')
+  const minEl  = document.getElementById('input-startmin')
+  if (hourEl?.value && !minEl.value) minEl.value = '00'
+  state.startTime = hourEl?.value && minEl?.value ? `${hourEl.value}:${minEl.value}` : ''
+  const hidden = document.getElementById('input-starttime')
+  if (hidden) hidden.value = state.startTime
+  state.endTime = ''  // 종료시각 입력칸 제거 (2026-09-26) — 귀가편 역산은 쓰지 않는다
+  if (state.startTime) clearCard4Error('field-time')
+  renderPrevDayVerdict()
+}
+
+// 공문에서 읽은 시각을 두 칸에 나눠 넣는다. 선택지 밖(05~22시)이면 비워 두고 사람이 고르게 한다.
+function setStartTime(hhmm, autofilled) {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '')
+  const hourEl = document.getElementById('input-starthour')
+  const minEl  = document.getElementById('input-startmin')
+  if (!hourEl || !minEl) return
+  const hasHour = m && [...hourEl.options].some(o => o.value === m[1])
+  hourEl.value = hasHour ? m[1] : ''
+  minEl.value  = hasHour ? m[2] : ''
+  ;[hourEl, minEl].forEach(el => {
+    el.classList.toggle('input-autofilled', !!(autofilled && hasHour))
+    el.addEventListener('change', () => el.classList.remove('input-autofilled'), { once: true })
+  })
+  onTimeChange()
 }
 
 // 'HH:MM' → 10분 단위로 내린 'HH:MM'
@@ -3215,10 +3322,10 @@ function restartFlow() {
     isMS: null, isShortDayTrip: null, isDayTrip: null, prevDayMove: null,
     lodgingProvided: null, mealProvided: null, hasPlane: null, hasShuttle: null,
     startTime: '', endTime: '', placeLat: null, placeLon: null,
-    accessOverride: {}, pinStation: null, fareOverride: null,
+    accessOverride: {}, pinStation: null, fareOverride: null, prevDayAuto: false,
   })
   // 폼 초기화
-  ;['input-title','input-start','input-end','input-starttime','input-place','input-region','input-fee','input-dept','input-name'].forEach(id => {
+  ;['input-title','input-start','input-end','input-starthour','input-startmin','input-starttime','input-place','input-region','input-fee','input-dept','input-name'].forEach(id => {
     const el = document.getElementById(id)
     if (el) el.value = ''
   })

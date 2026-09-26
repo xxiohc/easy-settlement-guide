@@ -40,7 +40,7 @@ const FILL = () => {
     e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})) }
   set('input-title','의료기관 교육담당자 역량강화 연수 과정')
   set('input-start','2026-10-12'); set('input-end','2026-10-14')
-  set('input-starttime','14:00')
+  window.setStartTime && setStartTime('14:00')
   set('input-place','삼성서울병원'); set('input-region','서울')
   window.selectFeePresence && selectFeePresence(true)
   set('input-fee','330,000')

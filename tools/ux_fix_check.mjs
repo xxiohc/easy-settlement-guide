@@ -21,9 +21,14 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.click('[data-choice="done"]'); await p.waitForTimeout(400)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
   check('A 카드4 도달', await active(p) === 'card-4')
+  // 데스크톱 크롬은 날짜 칸을 눌러도 달력이 안 열렸다 — 클릭이 showPicker 로 이어지는지 본다
+  await p.evaluate(()=>{ window.__picker=0; HTMLInputElement.prototype.showPicker = function(){ window.__picker++ } })
+  await p.click('#start-box'); await p.waitForTimeout(150)
+  check('⑫ 날짜 칸 클릭 → 달력 열기 호출', (await p.evaluate(()=>window.__picker)) > 0)
+  await p.keyboard.press('Escape')
   await p.fill('#input-title','전산세무회계 실무교육')
   await p.fill('#input-start','2026-10-12'); await p.fill('#input-end','2026-10-12')
-  await p.fill('#input-starttime','09:30')
+  await p.selectOption('#input-starthour','09'); await p.selectOption('#input-startmin','30')
   await p.fill('#input-region','부산'); await p.waitForTimeout(300)
   // ① 온라인 → 없어요 버튼이 남아 있는가
   await p.click('#modeBtn-online'); await p.waitForTimeout(200)
@@ -79,8 +84,16 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
   await p.fill('#input-title','의료기관 평가 연수')
   await p.fill('#input-start','2026-10-12'); await p.fill('#input-end','2026-10-13')
-  await p.fill('#input-starttime','09:30')
+  await p.selectOption('#input-starthour','09'); await p.selectOption('#input-startmin','30')
   await p.fill('#input-region','서울'); await p.waitForTimeout(300)
+  const vd = (await p.textContent('#prevday-verdict').catch(()=>'')) || ''
+  check('⑩ 시작시각·지역을 넣으면 카드4에서 바로 전날 이동 판정', await vis(p,'#prevday-verdict') && vd.includes('전날 이동 인정') && vd.includes('135,000'), vd.replace(/\s+/g,' ').trim().slice(0,90))
+  // 시각을 비우고 다음 → 필수 오류
+  await p.selectOption('#input-starthour',''); await p.selectOption('#input-startmin','')
+  await p.click('#feeBtn-yes'); await p.waitForTimeout(200)
+  await p.fill('#input-fee','510000'); await p.click('#ctaNext4'); await p.waitForTimeout(500)
+  check('⑪ 오프라인은 첫날 시작시각이 필수', await active(p) === 'card-4' && (await p.textContent('#c4-err-banner')).includes('시작시각'))
+  await p.selectOption('#input-starthour','09'); await p.selectOption('#input-startmin','30')
   await p.click('#feeBtn-yes'); await p.waitForTimeout(200)
   await p.fill('#input-fee','510000'); await p.waitForTimeout(200)
   await p.click('#ctaNext4'); await p.waitForTimeout(700)
@@ -93,7 +106,7 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   check('⑧ 카드6 → 카드8 직행(카드7 없음)', await active(p) === 'card-8')
   const rt = await p.evaluate(()=>state.receiptType)
   check('⑧ 세금계산서 선택이 state에 반영', rt === 'tax-invoice', `receiptType=${rt}`)
-  check('⑥ 전날이동 질문 자동판정 안내 노출', await vis(p,'#daytrip-auto'), (await p.textContent('#daytrip-auto')||'').trim().slice(0,70))
+  check('⑥ 역산되는 구간은 카드8에서 전날이동을 다시 묻지 않는다', !(await vis(p,'#field-daytrip')))
   const pdm = await p.evaluate(()=>state.prevDayMove)
   check('⑥ 서울 09:30 시작 → 전날 이동 자동 인정', pdm === true, `prevDayMove=${pdm}`)
   // 뒤로가기: 카드8 → 카드6

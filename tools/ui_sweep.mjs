@@ -57,11 +57,13 @@ async function run(withDoc){
     const got=await p.inputValue('#'+id).catch(()=>null)
     log(P,label, got===v?'PASS':'FAIL', `값=${got}`)
   }
-  for(const [id,label,v] of [['input-starttime','교육 시작시각','14:00']]){
-    await p.fill('#'+id, v).catch(()=>{}); await p.waitForTimeout(250)
-    const got=await p.inputValue('#'+id).catch(()=>null)
-    log(P,label, got===v?'PASS':'FAIL', `값=${got}`)
-  }
+  // 교육 시작시각은 시·분(10분 단위) 선택 두 칸이다
+  await p.selectOption('#input-starthour','14').catch(()=>{}); await p.waitForTimeout(150)
+  await p.selectOption('#input-startmin','00').catch(()=>{}); await p.waitForTimeout(250)
+  { const got = await p.evaluate(()=>state.startTime)
+    log(P,'교육 시작시각(시·분 선택)', got==='14:00'?'PASS':'FAIL', `state.startTime=${got}`) }
+  { const opts = await p.$$eval('#input-startmin option', os=>os.map(o=>o.value).filter(Boolean).join(','))
+    log(P,'분 선택지 10분 단위', opts==='00,10,20,30,40,50'?'PASS':'FAIL', opts) }
   // 토글 버튼들
   for(const [sel,label,active] of [['#modeBtn-offline','교육형태 오프라인',true],['#modeBtn-online','교육형태 온라인',true],['#modeBtn-offline','교육형태 오프라인 복귀',true],['#feeBtn-yes','교육비 있음',true],['#feeBtn-no','교육비 없음',true],['#feeBtn-yes','교육비 있음 복귀',true]]){
     const el = await p.$(sel)
