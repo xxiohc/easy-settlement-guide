@@ -1801,107 +1801,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 
 /* ── Card 4: 출장 정보 확인 ── */
-.confirm-summary {
-  background: var(--primary-soft);
-  border: 1.5px solid #dbeeff;
-  border-radius: 16px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.confirm-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.confirm-row-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #2563eb;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  min-width: 56px;
-}
-
-.confirm-row-val {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1d4ed8;
-  letter-spacing: -0.01em;
-}
-
-.confirm-fee-q {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  background: #fffbea;
-  border: 1.5px solid #fde68a;
-  border-radius: 14px;
-  margin-bottom: 16px;
-}
-
-/* 아이콘 + 텍스트 가로 행 */
-.fee-q-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.fee-q-icon {
-  font-size: 22px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.fee-q-text strong {
-  display: block;
-  font-size: 15px;
-  font-weight: 600;
-  color: #92400e;
-  margin-bottom: 3px;
-}
-
-.fee-q-text span {
-  font-size: 13px;
-  color: #b45309;
-}
-
-/* 예/아니요 버튼 행 */
-.fee-confirm-btns {
-  display: flex;
-  gap: 8px;
-}
-
-.fee-confirm-btn {
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 13.5px;
-  font-weight: 600;
-  border: 1.5px solid;
-  transition: background 0.15s, transform 0.1s;
-}
-.fee-confirm-btn:active { transform: scale(0.97); }
-
-.fee-confirm-yes {
-  background: #fef3c7;
-  color: #92400e;
-  border-color: #f59e0b;
-}
-.fee-confirm-yes:hover { background: #fde68a; }
-
-.fee-confirm-no {
-  background: #f5f6f8;
-  color: #6b7684;
-  border-color: #e0e4ea;
-}
-.fee-confirm-no:hover { background: #edf0f3; }
-
 .info-fields-wrap {
   display: flex;
   flex-direction: column;
@@ -2919,6 +2818,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 /* ── 교육 시각 입력 ───────────────────────────────────────────────────────── */
 .time-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2928,6 +2828,31 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   flex: 1;
   min-width: 0;
   text-align: center;
+}
+
+/* 사파리는 빈 time 칸에도 '오후 12:30' 같은 시각을 진하게 그려 입력된 것처럼 보인다 */
+.time-input.is-empty { color: transparent; }
+.time-input.is-empty::-webkit-datetime-edit { color: transparent; }
+.time-empty-label {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 15px;
+  pointer-events: none;
+}
+.time-input.is-empty + .time-empty-label { display: flex; }
+.time-input.is-empty:focus + .time-empty-label { display: none; }
+.time-input.is-empty:focus,
+.time-input.is-empty:focus::-webkit-datetime-edit { color: inherit; }
+
+.date-warn {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c2410c;
 }
 
 .time-sep {
