@@ -1502,38 +1502,103 @@ function prepareCard4Online() {
 }
 
 // 자동채우기 하이라이트 helper
-function setAutofilled(id, value) {
+// ── CARD 4: 출장 정보 확인 ────────────────────────────────────────────────────
+// 새 공문을 올리면 그 공문 기준으로 칸을 전부 다시 채운다. 공문에 없는 칸은 비운다 —
+// 예전에는 '값이 없을 때만' 채워서, 먼저 입력한 장소(강북삼성병원)·시각(12:10)이나 앞서 올린
+// 공문의 13:00이 그대로 남아 이번 공문의 값처럼 보였다(2026-09-26 지석초이 제보).
+// 같은 공문으로 카드4에 다시 들어올 때는 사용자가 고친 값을 지키려고 한 번만 적용한다.
+function setDocField(id, value) {
   const el = document.getElementById(id)
-  if (!el || !value) return
-  el.value = value
-  el.classList.add('input-autofilled')
-  // 사용자가 수정하면 하이라이트 제거
-  el.addEventListener('input', () => el.classList.remove('input-autofilled'), { once: true })
+  if (!el) return
+  el.value = value || ''
+  el.classList.toggle('input-autofilled', !!value)
+  if (value) el.addEventListener('input', () => el.classList.remove('input-autofilled'), { once: true })
 }
 
-// ── CARD 4: 출장 정보 확인 ────────────────────────────────────────────────────
+// 시작시각은 필수다. 공문에서 못 읽었으면 모른다고 말하고 직접 고르게 한다.
+const TIME_HINT_DEFAULT = '등록·오리엔테이션이 먼저 있으면 그 시각으로 골라 주세요.'
+function renderTimeHint(meta) {
+  const el = document.getElementById('time-ktx-hint')
+  if (!el) return
+  const missing = !!meta && !meta.startTime
+  el.textContent = missing
+    ? '⚠️ 공문에서 시작시각을 찾지 못했어요. 첫날 교육(등록) 시작시각을 직접 골라 주세요.'
+    : meta ? `📄 공문에서 읽은 시각이에요. ${TIME_HINT_DEFAULT}` : TIME_HINT_DEFAULT
+  el.classList.toggle('is-warn', missing)
+}
+
+// 공문에서 읽은 장소는 글자뿐이라 좌표가 없다. 좌표가 없으면 역산이 '지역 대표역' 기준이 돼
+// 현장까지 이동시간이 근거 없는 값이 됐다(서울역→서울역). 카카오 장소 검색으로 좌표를 찾아 둔다.
+// 이름 → 괄호 안 주소 → 전체 순으로 찾고, 찾은 곳은 화면에 밝혀 사람이 확인하게 한다.
+async function geocodeDocVenue(venue) {
+  const note = document.getElementById('place-geo-note')
+  if (note) { note.textContent = ''; note.classList.add('hidden') }
+  if (!venue || !KAKAO_API_KEY) return
+  const inParen = (venue.match(/\(([^)]+)\)/) || [])[1] || ''
+  const queries = [venue.replace(/\s*\(.*$/, ''), inParen, venue].map(q => q.trim()).filter((q, i, a) => q.length >= 2 && a.indexOf(q) === i)
+  for (const q of queries) {
+    try {
+      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=1`,
+        { headers: { Authorization: `KakaoAK ${KAKAO_API_KEY}` } })
+      const d = ((await res.json()).documents || [])[0]
+      if (!d) continue
+      if (state.place !== venue) return  // 그사이 사용자가 장소를 바꿨다
+      state.placeLat = Number(d.y) || null
+      state.placeLon = Number(d.x) || null
+      if (note) {
+        note.textContent = `📍 카카오 지도 위치: ${d.place_name} · ${d.road_address_name || d.address_name || ''} — 다르면 장소를 다시 검색해 고르세요.`
+        note.classList.remove('hidden')
+      }
+      renderPrevDayVerdict()
+      return
+    } catch (e) {
+      console.warn('공문 장소 좌표 검색 실패:', e)
+      return
+    }
+  }
+}
+
+function resetFeePresence() {
+  state.hasFee = null
+  state.fee = 0
+  state.feeStatus = null
+  document.getElementById('feeBtn-yes')?.classList.remove('selected-yes')
+  document.getElementById('feeBtn-no')?.classList.remove('selected-no')
+  document.getElementById('feeAmountWrap')?.classList.add('hidden')
+  document.getElementById('feeNoneMsg')?.classList.add('hidden')
+  setDocField('input-fee', '')
+  document.getElementById('fee-subhint').textContent = '사전납입 · 회원병원 기준 금액으로 입력해주세요'
+}
+
 function prepareCard4WithMeta() {
   const meta = state.parsedMeta
-  if (!meta) return
+  if (!meta || state.appliedMeta === meta) return
+  state.appliedMeta = meta
 
-  // 자동 채우기 (음영 하이라이트 포함)
-  if (meta.title)     setAutofilled('input-title', meta.title)
-  if (meta.startDate) setAutofilled('input-start', meta.startDate)
-  if (meta.endDate)   setAutofilled('input-end', meta.endDate)
-  if (meta.startDate && meta.endDate) onDateChange()
-  if (meta.destination) {
-    setAutofilled('input-region', meta.destination)
-    onRegionInput()
-  }
+  setDocField('input-title', meta.title)
+  setDocField('input-start', meta.startDate)
+  setDocField('input-end', meta.endDate)
+  onDateChange()
+  setDocField('input-region', meta.destination)
+  onRegionInput()
+  document.getElementById('regionSuggest')?.classList.add('hidden')
+  setDocField('input-place', meta.venue)
+  state.place = meta.venue || ''
+  state.placeLat = null
+  state.placeLon = null
+  state.accessOverride = {}
+  state.pinStation = null
+  setStartTime(meta.startTime ? snapTo10(meta.startTime) : '', !!meta.startTime)
+  renderTimeHint(meta)
+  geocodeDocVenue(meta.venue)
   if (meta.registration) {
-    setAutofilled('input-fee', meta.registration.toLocaleString())
+    setDocField('input-fee', meta.registration.toLocaleString())
     state.fee = meta.registration
-    // 금액을 인식했으면 "있어요"까지 미리 골라 둔다. 예전에는 위쪽 확인 배너만 보고
-    // 넘어가면 아래 토글이 비어 있어 "교육/등록비 유무 선택" 오류로 막혔다.
+    // 금액을 인식했으면 "있어요"까지 미리 골라 둔다
     selectFeePresence(true)
+  } else {
+    resetFeePresence()
   }
-  if (meta.startTime) setStartTime(snapTo10(meta.startTime), true)
-  if (meta.venue && !state.place) setAutofilled('input-place', meta.venue)
 
   // 확인 뷰 메시지
   if (meta.periodDisplay && meta.days) {
@@ -1561,6 +1626,7 @@ function showCard4InputMode() {
   document.getElementById('c4-confirm-view').classList.add('hidden')
   document.getElementById('c4-input-view').classList.remove('hidden')
   document.getElementById('fee-subhint').textContent = '사전납입 · 회원병원 기준 금액으로 입력해주세요'
+  renderTimeHint(null)
   // 직접 입력 시 기본값: 오프라인
   selectOnlineMode(false)
 }
@@ -1682,6 +1748,7 @@ function onPlaceInput() {
   state.placeLon = null
   state.accessOverride = {}
   state.pinStation = null
+  document.getElementById('place-geo-note')?.classList.add('hidden')
   renderPrevDayVerdict()
 
   const suggest = document.getElementById('placeSuggest')
@@ -1963,6 +2030,25 @@ function prevDayBasisText(j) {
 
 function prevDayBonusAmount() { return DAILY_RATE + LODGING_RATE }
 
+// 역→현장 이동. 추정값은 직선거리로 잡은 값이라 그렇게 밝히고, 실제 경로는 카카오맵에서 연다
+// (카카오는 앱에서 쓸 대중교통 길찾기 API를 공개하지 않는다 — 2026-09-26 확인).
+function kakaoRouteUrl(mode, fromName, from, toName, to) {
+  // 링크 형식이 '이름,위도,경도'라 이름 속 쉼표·괄호 설명은 뺀다
+  const pt = (n, p) => `${encodeURIComponent(n.replace(/\s*\(.*$/, '').replace(/,/g, ' ').trim())},${p.lat},${p.lon}`
+  return `https://map.kakao.com/link/by/${mode}/${pt(fromName, from)}/${pt(toName, to)}`
+}
+function accessLine(b, dest) {
+  if (!dest || dest.proxy) return `${escapeHtml(b.station)}역 기준 계산 — 장소를 검색 목록에서 고르면 현장까지 실제 거리로 계산해요`
+  const basis = b.accessSrc === 'est' ? `추정 · 역에서 직선 ${b.stationKm}km 기준`
+    : b.accessSrc === 'known' ? '확인값' : '직접 입력'
+  const st = KtxRoute.stations && KtxRoute.stations[b.station]
+  const links = st && dest && Number.isFinite(dest.lat)
+    ? ` <a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', b.station + '역', st, dest.label || '목적지', dest)}">대중교통 경로 ↗</a>` +
+      ` <a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', b.station + '역', st, dest.label || '목적지', dest)}">택시 경로 ↗</a>`
+    : ''
+  return `대중교통 약 ${b.access}분(${basis})${links}`
+}
+
 // 카드4 첫날 이동 안내 패널(넓은 화면은 오른쪽 여백). 탈 기차 시각과 전날 이동 판정을 한눈에 보인다.
 function renderPrevDayVerdict() {
   const el = document.getElementById('prevday-verdict')
@@ -2001,7 +2087,7 @@ function renderPrevDayVerdict() {
     })
     rows.push(`<li><span class="ra-t">${fmtTime(b.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(b.station)}역 도착</span></li>`)
     rows.push(`<li><span class="ra-t">${fmtTime(b.arr + b.access)}</span><span class="ra-dot"></span>
-      <span>현장 도착<span class="ra-sub">대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)})</span></span></li>`)
+      <span>현장 도착<span class="ra-sub">${accessLine(b, j.dest)}</span></span></li>`)
     rows.push(`<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`)
     const verdict = j.move
       ? `<div class="ra-verdict is-yes"><span>전날 이동 인정</span><b>${bonus}</b></div>
@@ -2438,6 +2524,8 @@ function onTimeChange() {
   state.startTime = hourEl?.value && minEl?.value ? `${hourEl.value}:${minEl.value}` : ''
   const hidden = document.getElementById('input-starttime')
   if (hidden) hidden.value = state.startTime
+  hourEl?.classList.toggle('is-empty', !hourEl.value)
+  minEl?.classList.toggle('is-empty', !minEl.value)
   state.endTime = ''  // 종료시각 입력칸 제거 (2026-09-26) — 귀가편 역산은 쓰지 않는다
   if (state.startTime) clearCard4Error('field-time')
   renderPrevDayVerdict()
@@ -3483,7 +3571,7 @@ function restartFlow() {
     isMS: null, isShortDayTrip: null, isDayTrip: null, prevDayMove: null,
     lodgingProvided: null, mealProvided: null, hasPlane: null, hasShuttle: null,
     startTime: '', endTime: '', placeLat: null, placeLon: null,
-    accessOverride: {}, pinStation: null, fareOverride: null, prevDayAuto: false,
+    accessOverride: {}, pinStation: null, fareOverride: null, prevDayAuto: false, appliedMeta: null,
   })
   // 폼 초기화
   ;['input-title','input-start','input-end','input-starthour','input-startmin','input-starttime','input-place','input-region','input-fee','input-dept','input-name'].forEach(id => {
@@ -3491,6 +3579,7 @@ function restartFlow() {
     if (el) el.value = ''
   })
   onTimeChange()
+  renderTimeHint(null)
   document.getElementById('fee-subhint').textContent = '사전납입 · 회원병원 기준 금액으로 입력해주세요'
   document.getElementById('duration-tag')?.classList.add('hidden')
   document.getElementById('date-warn')?.classList.add('hidden')
