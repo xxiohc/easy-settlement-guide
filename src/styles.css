@@ -2384,45 +2384,28 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   font-weight: 500;
 }
 
-/* 전날 이동 추가 안내 */
+/* 전날 이동 안내 — 총액 바로 아래 */
 .prev-day-hint {
-  margin-bottom: 12px;
+  margin: 0 0 12px;
   padding: 14px 16px;
   background: #eef6ff;
-  border: 2px solid #3182f6;
-  border-radius: 12px;
+  border: 1.5px solid #bcd8ff;
+  border-radius: 14px;
   font-size: 13px;
   color: var(--ink);
-  line-height: 1.6;
+  line-height: 1.55;
 }
-
-.seoul-hint-title {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #1b64da;
-  margin-bottom: 8px;
-}
-
-.seoul-hint-body {
-  font-size: 13px;
-  color: var(--subtle);
-}
-
-.seoul-hint-items {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 6px;
-  padding: 6px 10px;
-  background: #fff;
-  border-radius: 8px;
-  font-size: 13px;
-}
-
-.seoul-hint-amt {
-  font-weight: 700;
-  color: #1b64da;
-}
+.pd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 15px; font-weight: 700; color: #1b64da; }
+.pd-head b { font-size: 17px; white-space: nowrap; }
+.pd-days { display: flex; align-items: stretch; gap: 8px; margin-top: 10px; }
+.pd-day { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: #fff; border-radius: 10px; font-size: 13px; }
+.pd-day.is-prev { outline: 1.5px dashed #7fb3ff; }
+.pd-date { font-weight: 700; font-size: 14px; color: var(--ink); }
+.pd-arrow { align-self: center; color: #7fb3ff; font-weight: 700; }
+.pd-why { margin-top: 10px; color: var(--subtle); }
+.pd-why b { color: var(--ink); }
+.pd-sum { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.pd-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #eef6ff; color: #1b64da; font-size: 11px; font-weight: 700; vertical-align: 2px; white-space: nowrap; }
 
 .amount-note {
   display: flex;
@@ -2871,7 +2854,9 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   background: #f2f4f6; color: var(--ink);
 }
 .ra-verdict b { font-size: 17px; white-space: nowrap; }
-.ra-verdict.is-yes { background: #ecfdf3; color: #047857; }
+.ra-verdict.is-go { background: var(--primary-soft); color: var(--primary); }
+.ra-verdict.is-go { flex-direction: column; align-items: flex-start; gap: 2px; }
+.ra-verdict.is-go span { font-size: 12.5px; font-weight: 600; }
 .ra-verdict.is-info { background: #fff7ed; color: #c2410c; }
 .ra-why { margin: 8px 2px 0; color: var(--subtle); font-size: 12.5px; }
 .ra-timeline { list-style: none; margin: 14px 0 0; padding: 0; }
@@ -2896,8 +2881,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .ra-timeline li.is-train .ra-dot::before { border-color: var(--primary); background: var(--primary); }
 .ra-timeline li.is-goal .ra-dot::before { border-color: #047857; background: #047857; }
 .ra-timeline .ra-sub { display: block; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.ra-sum { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--subtle); font-size: 12.5px; }
-.ra-rule { margin-top: 10px; color: var(--muted); font-size: 12px; }
 
 @media (min-width: 1480px) {
   #card-4 .info-fields-wrap { position: relative; }
@@ -2912,7 +2895,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   #card-4 .route-aside-inner { position: sticky; top: 112px; }
 }
 
-.seoul-hint-basis { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 
 #time-ktx-hint.is-warn { color: #c2410c; font-weight: 600; }
 

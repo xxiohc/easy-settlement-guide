@@ -2026,17 +2026,6 @@ function judgePrevDayMove() {
   return { auto: false, kind: 'unknown' }
 }
 
-function prevDayBasisText(j) {
-  if (j.kind === 'train') {
-    const b = j.best
-    return `첫날 ${state.startTime} 시작 → 마산역 ${fmtTime(b.dep)} 출발 → ${b.station}역 ${fmtTime(b.arr)} 도착 → 대중교통 약 ${b.access}분`
-  }
-  if (j.kind === 'no-train') return `첫날 ${state.startTime} 시작에 닿는 당일 열차가 없어요`
-  return ''
-}
-
-function prevDayBonusAmount() { return DAILY_RATE + LODGING_RATE }
-
 // 역→현장 이동. 추정값은 직선거리로 잡은 값이라 그렇게 밝히고, 실제 경로는 카카오맵에서 연다
 // (카카오는 앱에서 쓸 대중교통 길찾기 API를 공개하지 않는다 — 2026-09-26 확인).
 function kakaoRouteUrl(mode, fromName, from, toName, to) {
@@ -2095,7 +2084,7 @@ function transitDetailHtml(route) {
 
 function accessLine(b, dest) {
   if (!dest || dest.proxy) return `${escapeHtml(b.station)}역 기준 계산 — 장소를 검색 목록에서 고르면 현장까지 실제 거리로 계산해요`
-  const basis = b.accessSrc === 'est' ? `추정 · 역에서 직선 ${b.stationKm}km 기준`
+  const basis = b.accessSrc === 'est' ? `추정 · 역에서 <x-nb>직선 ${b.stationKm}km</x-nb> 기준`
     : b.accessSrc === 'transit' ? '서울시 대중교통 조회'
     : b.accessSrc === 'known' ? '확인값' : '직접 입력'
   const st = KtxRoute.stations && KtxRoute.stations[b.station]
@@ -2107,7 +2096,8 @@ function accessLine(b, dest) {
   return `대중교통 약 ${b.access}분(${basis})${links}${transitDetailHtml(b.accessRoute)}`
 }
 
-// 카드4 첫날 이동 안내 패널(넓은 화면은 오른쪽 여백). 탈 기차 시각과 전날 이동 판정을 한눈에 보인다.
+// 카드4 첫날 이동 안내 패널(넓은 화면은 오른쪽 여백). '어떻게 가는지'만 안내하고, 전날 이동 인정·추가 금액은
+// 예상 금액 화면에서 알린다(2026-09-26 지석초이). 탈 기차 시각과 전날 이동 판정을 한눈에 보인다.
 function renderPrevDayVerdict() {
   const el = document.getElementById('prevday-verdict')
   const aside = document.getElementById('route-aside')
@@ -2119,7 +2109,6 @@ function renderPrevDayVerdict() {
 
   const off = state.isOnline || state.isJeju
   aside.classList.toggle('is-off', off)
-  const RULE = `<div class="ra-rule">마산역 출발이 출근시각 08:30보다 이르면 전날 이동 — 숙박 1박 ${LODGING_RATE.toLocaleString()}원 + 일당 1일 ${DAILY_RATE.toLocaleString()}원이 추가돼요.</div>`
   const head = '<div class="ra-head">🚄 첫날 이동 안내</div>'
   const show = (html, hasResult) => {
     el.innerHTML = head + html
@@ -2127,12 +2116,10 @@ function renderPrevDayVerdict() {
   }
   if (off) return show('', false)
   if (!state.startTime || !(state.place || state.region)) {
-    return show(`<div class="ra-why">첫날 교육 시작시각과 장소를 넣으면 몇 시 기차를 타야 하는지, 전날 이동이 되는지 여기서 바로 보여드려요.</div>${RULE}`, false)
+    return show(`<div class="ra-why">첫날 교육 시작시각과 장소를 넣으면 몇 시 기차를 타야 하는지 여기서 바로 보여드려요.</div>`, false)
   }
 
   const j = judgePrevDayMove()
-  const bonus = `+${prevDayBonusAmount().toLocaleString()}원`
-  const sum = `<div class="ra-sum">숙박 1박 ${LODGING_RATE.toLocaleString()}원 + 일당 1일 ${DAILY_RATE.toLocaleString()}원</div>`
   if (j.kind === 'train') {
     const b = j.best
     const rows = []
@@ -2147,30 +2134,27 @@ function renderPrevDayVerdict() {
     rows.push(`<li><span class="ra-t">${fmtTime(b.arr + b.access)}</span><span class="ra-dot"></span>
       <span>현장 도착<span class="ra-sub">${accessLine(b, j.dest)}</span></span></li>`)
     rows.push(`<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`)
-    const verdict = j.move
-      ? `<div class="ra-verdict is-yes"><span>전날 이동 인정</span><b>${bonus}</b></div>
-         <div class="ra-why">마산역 ${fmtTime(b.dep)} 출발 — 출근시각 08:30보다 일러요</div>`
-      : `<div class="ra-verdict"><span>당일 이동</span><b>추가 없음</b></div>
-         <div class="ra-why">마산역 ${fmtTime(b.dep)} 출발이면 돼요 — 08:30 이후</div>`
-    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>${j.move ? sum : ''}`, true)
+    const verdict = `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>마산역 ${fmtTime(b.dep)} 출발</b></div>
+      ${j.move ? '<div class="ra-why">출근시각(08:30) 전에 출발하는 편이에요</div>' : ''}`
+    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>`, true)
   }
   if (j.kind === 'no-train') {
-    return show(`<div class="ra-verdict is-yes"><span>전날 이동 인정</span><b>${bonus}</b></div>
-      <div class="ra-why">첫날 ${escapeHtml(state.startTime)} 시작에 닿는 당일 열차가 없어요</div>${sum}`, true)
+    return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>전날 이동</b></div>
+      <div class="ra-why">첫날 ${escapeHtml(state.startTime)} 시작에 닿는 당일 열차가 없어요</div>`, true)
   }
   if (j.kind === 'near') {
-    return show(`<div class="ra-verdict"><span>당일 이동</span><b>추가 없음</b></div>
-      <div class="ra-why">마산역 인근이라 기차 역산 대상이 아니에요</div>`, true)
+    return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>당일 이동</b></div>
+      <div class="ra-why">마산역 인근이라 기차를 타지 않는 구간이에요</div>`, true)
   }
   if (j.kind === 'bus') {
     return show(`<div class="ra-verdict is-info"><span>자동 계산 불가</span></div>
-      <div class="ra-why">시외버스 구간이라 시간표 자료가 없어요. 전날 이동 여부는 '추가 확인'에서 여쭤볼게요.</div>${RULE}`, true)
+      <div class="ra-why">시외버스 구간이라 시간표 자료가 없어요. 출발시각은 '추가 확인'에서 여쭤볼게요.</div>`, true)
   }
   if (j.kind === 'noplace') {
     return show(`<div class="ra-verdict is-info"><span>장소를 목록에서 골라 주세요</span></div>
       <div class="ra-why">출장 장소를 검색해 목록에서 고르면 탈 기차를 바로 계산해요. 못 찾으면 '추가 확인'에서 여쭤볼게요.</div>`, true)
   }
-  show(RULE, false)
+  show('', false)
 }
 
 function applyPrevDayMove() {
@@ -2483,13 +2467,16 @@ function prepareCard9() {
                  + tripNormDays * DAILY_RATE
                  + middleDays * DAILY_RATE_25P
       const parts = []
-      if (prevDayBonus) parts.push(`전날 1일 × ${DAILY_RATE.toLocaleString()}원`)
       parts.push(`출장 ${tripNormDays}일 × ${DAILY_RATE.toLocaleString()}원`)
+      if (prevDayBonus) parts.push(`전날 이동 1일 × ${DAILY_RATE.toLocaleString()}원`)
       if (middleDays > 0) parts.push(`중간 ${middleDays}일 × ${DAILY_RATE_25P.toLocaleString()}원 (25%)`)
-      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, note: parts.join(' + ') })
+      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, note: parts.join(' + '), prevDay: !!prevDayBonus })
     } else {
       dailyTotal = totalDays * DAILY_RATE
-      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, note: `${totalDays}일 × ${DAILY_RATE.toLocaleString()}원` })
+      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus,
+        note: prevDayBonus
+          ? `출장 ${baseDays}일 + 전날 이동 1일 · ${totalDays}일 × ${DAILY_RATE.toLocaleString()}원`
+          : `${totalDays}일 × ${DAILY_RATE.toLocaleString()}원` })
     }
     total += dailyTotal
 
@@ -2498,7 +2485,7 @@ function prepareCard9() {
       if (state.lodgingProvided) {
         if (prevDayBonus > 0) {
           const bonusLodging = prevDayBonus * LODGING_RATE
-          breakdown.push({ label: `숙박비 전날 (${prevDayBonus}박)`, amount: bonusLodging, note: '출근시각 전 출발 — 전날 이동 · 숙소 제공 범위 밖이라 지급' })
+          breakdown.push({ label: `숙박비 전날 이동 (${prevDayBonus}박)`, amount: bonusLodging, prevDay: true, note: '전날 밤 숙박은 숙소 제공 범위 밖이라 지급' })
           total += bonusLodging
         }
         if (tripNights > 0) {
@@ -2508,7 +2495,10 @@ function prepareCard9() {
         const baseNights = tripNights + prevDayBonus
         if (baseNights > 0) {
           const lodgingTotal = baseNights * LODGING_RATE
-          breakdown.push({ label: `숙박비 (${baseNights}박)`, amount: lodgingTotal, note: `${baseNights}박 × ${LODGING_RATE.toLocaleString()}원` })
+          breakdown.push({ label: `숙박비 (${baseNights}박)`, amount: lodgingTotal, prevDay: !!prevDayBonus,
+            note: prevDayBonus
+              ? `${tripNights ? `출장 ${tripNights}박 + ` : ''}전날 이동 1박 · ${baseNights}박 × ${LODGING_RATE.toLocaleString()}원`
+              : `${baseNights}박 × ${LODGING_RATE.toLocaleString()}원` })
           total += lodgingTotal
         }
       }
@@ -2532,7 +2522,7 @@ function prepareCard9() {
     return `
       <div class="breakdown-item">
         <div class="breakdown-left">
-          <span class="breakdown-label">${item.label}</span>
+          <span class="breakdown-label">${item.label}${item.prevDay ? ' <span class="pd-badge">전날 이동 포함</span>' : ''}</span>
           ${item.note ? `<span class="breakdown-note">${item.note}</span>` : ''}
         </div>
         <span class="breakdown-amount ${!isNum ? 'breakdown-amount-text' : ''}">${amtStr}</span>
@@ -2546,28 +2536,50 @@ function prepareCard9() {
 
   renderRoutePanel()
 
-  // 전날 이동 인정 시 → 추가된 금액 강조 표시
+  // 전날 이동 인정 시 — 총액 바로 아래에서 날짜·이유·추가 금액을 한눈에 보인다(2026-09-26 지석초이)
   const prevDayHintEl = document.getElementById('prevDayHint')
   if (prevDayHintEl) {
     const show = state.prevDayMove === true
     prevDayHintEl.classList.toggle('hidden', !show)
-    if (show) {
-      const j = judgePrevDayMove()
-      const basis = j.auto ? prevDayBasisText(j) : '추가 확인에서 직접 답하신 내용 기준'
-      prevDayHintEl.innerHTML = `
-        <div class="seoul-hint-title">✅ 전날 이동 적용됨</div>
-        <div class="seoul-hint-body">
-          ${basis ? `<div class="seoul-hint-basis">${escapeHtml(basis)}</div>` : ''}
-          전날 이동 기준으로 아래 금액이 <strong>추가</strong>됐어요
-          <div class="seoul-hint-items">
-            <span>📅 일당 +1일</span><span class="seoul-hint-amt">+${DAILY_RATE.toLocaleString()}원</span>
-          </div>
-          <div class="seoul-hint-items">
-            <span>🏨 숙박비 +1박</span><span class="seoul-hint-amt">+${LODGING_RATE.toLocaleString()}원</span>
-          </div>
-        </div>`
-    }
+    if (show) prevDayHintEl.innerHTML = prevDayHintHtml()
   }
+}
+
+// 'YYYY-MM-DD' → '9/23(수)'. offset 일만큼 옮긴다.
+function shortDate(iso, offset = 0) {
+  if (!iso) return ''
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() + offset)
+  return `${d.getMonth() + 1}/${d.getDate()}(${'일월화수목금토'[d.getDay()]})`
+}
+
+// 받침이 있으면 '으로', 없거나 ㄹ받침이면 '로' (서울로 · 수원으로)
+function josaRo(word) {
+  const c = (word || '').charCodeAt(word.length - 1) - 0xac00
+  if (c < 0 || c > 11171) return '로'
+  const jong = c % 28
+  return jong === 0 || jong === 8 ? '로' : '으로'
+}
+
+function prevDayHintHtml() {
+  const j = judgePrevDayMove()
+  const where = escapeHtml(state.region || state.place || '출장지')
+  const start = escapeHtml(state.startTime || '')
+  const why = j.kind === 'train'
+    ? `${start} 교육에 닿으려면 <b>마산역 ${fmtTime(j.best.dep)}</b> KTX를 타야 해요 — 출근시각(08:30) 전 출발`
+    : j.kind === 'no-train'
+    ? `첫날 ${start} 교육에 닿는 당일 기차가 없어요`
+    : `추가 확인에서 '08:30 전에 나서야 한다'고 답하셨어요`
+  const bonus = DAILY_RATE + LODGING_RATE
+  return `
+    <div class="pd-head"><span>🌙 전날 이동으로 정산돼요</span><b>+${bonus.toLocaleString()}원</b></div>
+    <div class="pd-days">
+      <div class="pd-day is-prev"><span class="pd-date">${shortDate(state.startDate, -1)}</span><span>${where}${josaRo(where)} 이동 · 숙박</span></div>
+      <span class="pd-arrow">→</span>
+      <div class="pd-day"><span class="pd-date">${shortDate(state.startDate)}</span><span>${start ? `${start} ` : ''}교육 시작</span></div>
+    </div>
+    <div class="pd-why">${why}</div>
+    <div class="pd-sum">일당 1일 ${DAILY_RATE.toLocaleString()}원 + 숙박 1박 ${LODGING_RATE.toLocaleString()}원 — 아래 일당·숙박비에 포함됐어요</div>`
 }
 
 // 시·분 두 칸으로만 받는다 — 분은 10분 단위 선택지뿐이라 역산 기준이 늘 10분 단위다.
