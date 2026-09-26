@@ -66,7 +66,9 @@ module.exports = async function handler(req, res) {
     const route = await lookup(p, key)
     send(200, route ? { ok: true, ...route } : { ok: false, error: '경로 없음' })
   } catch (e) {
-    send(502, { ok: false, error: e.message })
+    // fetch failed 만으로는 원인을 모른다 — 연결 거부·시간 초과 코드를 함께 돌려준다
+    const cause = e.cause && (e.cause.code || e.cause.message)
+    send(502, { ok: false, error: cause ? `${e.message} (${cause})` : e.message })
   }
 }
 
