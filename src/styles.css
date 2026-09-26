@@ -2323,6 +2323,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   letter-spacing: -0.01em;
 }
 
+.amount-total-plus { display: block; margin-top: 8px; font-size: 15px; font-weight: 600; opacity: .9; letter-spacing: -0.01em; }
 .amount-total-num {
   font-size: 34px;
   font-weight: 700;
@@ -3089,3 +3090,12 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .ra-earlier { margin-top: 4px; padding: 10px 12px; border-radius: 10px; background: #f7f8fa; font-size: 13px; line-height: 1.55; }
 .ra-earlier-title { font-size: 12px; font-weight: 700; color: var(--subtle); margin-bottom: 2px; }
 .ra-earlier .ra-sub { display: block; color: var(--muted); font-size: 12px; }
+
+/* 일당 날짜별 칸 — 가는 날·오는 날 전액, 식사 제공 끼인 날 25% */
+.day-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.day-chip { flex: 1 1 0; min-width: 74px; max-width: 150px; display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border-radius: 10px; background: #eef6ff; font-size: 12px; line-height: 1.4; }
+.day-chip-date { font-weight: 700; color: var(--ink); }
+.day-chip-label { color: var(--subtle); }
+.day-chip b { color: #1b64da; font-size: 13px; }
+.day-chip.is-quarter { background: #fff7ed; }
+.day-chip.is-quarter b { color: #c2410c; }

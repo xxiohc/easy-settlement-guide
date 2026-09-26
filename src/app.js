@@ -2405,7 +2405,7 @@ function prepareCard9() {
     return
   }
   document.getElementById('amount-note-text').textContent = state.isJeju
-    ? '실제 정산은 결재 후 확정되며, 실비 항목(항공·셔틀)은 영수증 금액으로 반영돼요'
+    ? '실제 정산은 결재 후 확정돼요. 항공·셔틀은 낸 영수증 금액으로 정산돼요'
     : '실제 정산은 결재 후 확정돼요'
 
   const isJeju  = state.isJeju
@@ -2417,9 +2417,10 @@ function prepareCard9() {
   const fare = getFare(state.region || state.place)
   const rf   = isJeju ? null : routeFare()
   if (isJeju) {
-    breakdown.push({ label: '항공료 (제주)', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
+    // 항공·셔틀은 정액이 아니다 — 영수증(매출전표)을 내야 결제한 금액만큼 정산된다(2026-09-26 지석초이)
+    breakdown.push({ label: '항공료 (왕복)', amount: '영수증 금액', note: '법인카드로 결제하고 신용카드 매출전표를 내면 결제한 금액만큼 정산돼요' })
     if (state.hasShuttle === true) {
-      breakdown.push({ label: '공항 셔틀버스', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
+      breakdown.push({ label: '공항 셔틀버스', amount: '영수증 금액', note: '법인카드 결제 · 매출전표를 내면 그 금액만큼 정산돼요' })
     }
   } else if (rf) {
     const kind = rf.transfers ? `${rf.via.join('·')} 환승 ${rf.transfers}회` : '직통'
@@ -2473,6 +2474,18 @@ function prepareCard9() {
     const totalDays  = baseDays + prevDayBonus
     const tripNights = Math.max(0, state.nights || 0)
 
+    // 날짜별 일당 — 가는 날·오는 날(전날 이동 포함)은 전액, 식사를 제공받는 끼인 날만 25%
+    const quarterMid = !!(state.mealProvided && !state.isDayTrip && tripNights >= 2)
+    const dayList = []
+    if (prevDayBonus) dayList.push({ date: shortDate(state.startDate, -1), label: '전날 이동', amt: DAILY_RATE })
+    for (let i = 0; i < baseDays; i++) {
+      const first = i === 0, last = i === baseDays - 1
+      const quarter = quarterMid && !first && !last
+      dayList.push({ date: shortDate(state.startDate, i), quarter,
+        label: baseDays === 1 ? '당일' : first ? '가는 날' : last ? '오는 날' : '끼인 날',
+        amt: quarter ? DAILY_RATE_25P : DAILY_RATE })
+    }
+
     let dailyTotal = 0
     if (state.mealProvided && !state.isDayTrip && tripNights >= 2) {
       // 식사 지원: 출장 중간날만 25% 적용
@@ -2481,17 +2494,15 @@ function prepareCard9() {
       dailyTotal = prevDayBonus * DAILY_RATE
                  + tripNormDays * DAILY_RATE
                  + middleDays * DAILY_RATE_25P
-      const parts = []
-      parts.push(`출장 ${tripNormDays}일 × ${DAILY_RATE.toLocaleString()}원`)
-      if (prevDayBonus) parts.push(`전날 이동 1일 × ${DAILY_RATE.toLocaleString()}원`)
-      if (middleDays > 0) parts.push(`중간 ${middleDays}일 × ${DAILY_RATE_25P.toLocaleString()}원 (25%)`)
-      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, note: parts.join(' + '), prevDay: !!prevDayBonus })
+      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus, days: dayList,
+        note: '가는 날·오는 날은 전액, 식사를 제공받는 끼인 날은 <x-nb>25%만</x-nb> 지급돼요' })
     } else {
       dailyTotal = totalDays * DAILY_RATE
       breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus,
         note: prevDayBonus
           ? `출장 ${baseDays}일 + 전날 이동 1일 · ${totalDays}일 × ${DAILY_RATE.toLocaleString()}원`
-          : `${totalDays}일 × ${DAILY_RATE.toLocaleString()}원` })
+          : `${totalDays}일 × ${DAILY_RATE.toLocaleString()}원`,
+        days: dayList.length >= 2 ? dayList : null })
     }
     total += dailyTotal
 
@@ -2539,15 +2550,21 @@ function prepareCard9() {
         <div class="breakdown-left">
           <span class="breakdown-label">${item.label}${item.prevDay ? ' <span class="pd-badge">전날 이동 포함</span>' : ''}</span>
           ${item.note ? `<span class="breakdown-note">${item.note}</span>` : ''}
+          ${item.days ? `<div class="day-chips">${item.days.map(d => `
+            <div class="day-chip${d.quarter ? ' is-quarter' : ''}">
+              <span class="day-chip-date">${d.date}</span><span class="day-chip-label">${d.label}${d.quarter ? ' 25%' : ''}</span>
+              <b>${d.amt.toLocaleString()}원</b>
+            </div>`).join('')}</div>` : ''}
         </div>
         <span class="breakdown-amount ${!isNum ? 'breakdown-amount-text' : ''}">${amtStr}</span>
       </div>`
   }).join('')
 
   const hasNonNum = breakdown.some(i => typeof i.amount !== 'number')
-  document.getElementById('totalAmount').textContent = hasNonNum
-    ? `${total.toLocaleString()}원 + 실비`
-    : `${total.toLocaleString()}원`
+  // 금액 뒤 덧붙임(영수증 금액·실비)은 작게 한 줄로 — 휴대폰에서 총액이 두 줄로 꺾였다
+  const plus = isJeju ? `+ 항공${state.hasShuttle === true ? '·셔틀' : ''} 영수증 금액` : hasNonNum ? '+ 실비' : ''
+  document.getElementById('totalAmount').innerHTML =
+    `${total.toLocaleString()}원${plus ? `<span class="amount-total-plus">${plus}</span>` : ''}`
 
   renderRoutePanel()
 
@@ -2778,7 +2795,7 @@ function renderRoutePanel() {
 
   const r = computeRoutePlan()
   if (r.skip === 'online') return hide('')
-  if (r.skip === 'jeju')   return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
+  if (r.skip === 'jeju')   return hide('')
   if (r.skip === 'bus') {
     return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. ${ORIGIN_BUS}에서 출발합니다. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
   }
