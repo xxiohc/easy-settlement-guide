@@ -3184,3 +3184,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   color: #3f4b5b;
 }
 .auto-judged strong { color: #1b64da; font-weight: 700; }
+
+.ra-transit { margin-top: 6px; }
+.ra-transit summary { cursor: pointer; color: var(--primary); font-weight: 600; font-size: 12px; }
+.ra-transit ol { margin: 6px 0 0; padding-left: 18px; color: var(--subtle); font-size: 12px; line-height: 1.6; }

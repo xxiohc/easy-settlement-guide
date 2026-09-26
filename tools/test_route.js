@@ -26,8 +26,9 @@ test('등재 기관을 이름·별칭으로 찾는다', () => {
   assert.equal(R.findDestination('없는기관이름입니다'), null)
 })
 
-test('삼성서울병원은 서울역이 아니라 수서역으로 간다', () => {
-  const p = planFor('삼성서울병원')
+// 13:00 기준 — 14:00은 09:21 서울역 직통이 닿아 서울역이 맞다(직통 우선, 2026-09-26)
+test('삼성서울병원은 서울역이 아니라 수서역으로 간다 (13:00)', () => {
+  const p = planFor('삼성서울병원', 13 * 60)
   assert.ok(p.ok)
   assert.equal(p.best.station, '수서')
   // 서울역보다 현장 도착이 이르기 때문에 이긴 것이어야 한다(운임·거리 때문이 아니라)
@@ -44,7 +45,7 @@ test('서울지방국세청은 수서역이 아니라 서울역으로 간다', (
 })
 
 test('접근시간이 확인값이면 추정으로 표시하지 않는다', () => {
-  assert.equal(planFor('삼성서울병원').best.accessSrc, 'known')
+  assert.equal(planFor('삼성서울병원', 13 * 60).best.accessSrc, 'known')
   assert.equal(planFor('서울지방국세청').best.accessSrc, 'est')
 })
 
@@ -119,8 +120,8 @@ test('귀가편은 종료시각 이후 편으로 잡는다', () => {
 const RATES = rd('rates.json')
 const regionFare = kw => RATES.fareTable.find(r => r.keywords.some(k => kw.includes(k)))
 
-test('정산 교통비는 역산이 고른 역의 운임을 쓴다 (삼성서울병원 → 수서)', () => {
-  const f = R.settlementFare(planFor('삼성서울병원'))
+test('정산 교통비는 역산이 고른 역의 운임을 쓴다 (삼성서울병원 13:00 → 수서)', () => {
+  const f = R.settlementFare(planFor('삼성서울병원', 13 * 60))
   assert.ok(f)
   assert.equal(f.station, '수서')
   assert.equal(f.oneWay, 47200)
@@ -146,9 +147,10 @@ test('특실(의료원장 동행) 지정 시 특실 운임으로 정산된다', 
   assert.equal(f.roundTrip, 141000)
 })
 
-test('환승편이 잡히면 경유역이 정산 경로에 남는다', () => {
-  const f = R.settlementFare(planFor('삼성서울병원'))
-  if (f.transfers > 0) assert.ok(f.via.length > 0, '환승인데 경유역이 비어 있다')
+test('환승편이 잡히면 경유역이 정산 경로에 남는다 (직통 없는 전주)', () => {
+  const f = R.settlementFare(planFor('국민연금공단'))
+  assert.ok(f.transfers > 0, '전주는 직통이 없어 환승이어야 한다')
+  assert.ok(f.via.length > 0, '환승인데 경유역이 비어 있다')
 })
 
 test('역산이 실패하면 정산 교통비는 null이다 (기존 운임표로 되돌아간다)', () => {
@@ -168,13 +170,13 @@ const WORK_START_MIN = 8 * 60 + 30
 const prevDayCases = [
   // [목적지, 시작시각(분), 기대 판정]  judged: 'yes' | 'no' | 'forced'
   ['삼성서울병원',        13 * 60, 'yes'],    // 수서 07:33 — 12시 기준이면 미인정이던 구간
-  ['삼성서울병원',        14 * 60, 'no'],     // 수서 09:21
+  ['삼성서울병원',        14 * 60, 'no'],     // 서울 09:21 직통이 닿는다 — 14시 서울 일정은 당일(2026-09-26 지석초이)
   ['서울지방국세청',       9 * 60, 'yes'],    // 서울 04:59
   ['서울지방국세청',      13 * 60, 'no'],     // 서울 09:21 — 서울인데도 미인정
   ['건강보험심사평가원',   9 * 60, 'forced'], // 원주 — 당일 도착 열차 없음
   ['국민건강보험공단',    10 * 60, 'forced'], // 원주 — 당일 도착 열차 없음
   ['대한병원협회',        13 * 60, 'yes'],    // 용산 07:33
-  ['한국보건복지인재원',  13 * 60, 'no'],     // 오송 09:21
+  ['한국보건복지인재원',  13 * 60, 'yes'],    // 오송 07:33 직통 — 제때 닿는 직통 중 가장 늦은 편. 09:21은 환승이라 보지 않음(2026-09-26)
 ]
 
 for (const [name, startMin, judged] of prevDayCases) {
@@ -243,7 +245,7 @@ test('우회 구간이어도 사용자가 도착역을 직접 고르면 그 역�
 })
 
 test('우회 판정이 기존 추천을 건드리지 않는다 (수서·서울·포항)', () => {
-  assert.equal(planFor('삼성서울병원').best.station, '수서')
+  assert.equal(planFor('삼성서울병원', 13 * 60).best.station, '수서')
   assert.equal(planFor('서울지방국세청').best.station, '서울')
 })
 
@@ -292,7 +294,7 @@ test('버스 우세 눈금은 45분이다 — 49분 절감은 띄우고 44분 �
   const off = planFor('국민연금공단', 14 * 60, { only: '전주', access: { 전주: 15 } })
   assert.equal(on.busFaster.savedMin, 49)
   assert.ok(on.busFaster, '절감 49분이면 배너를 띄워야 한다')
-  assert.equal(off.busFaster, null, '절감 44분이면 배너를 띄우지 않아야 한다')
+  assert.equal(off.busFaster, null, '절감 44분 이하면 배너를 띄우지 않아야 한다')
 })
 
 test('수도권·대전·오송 추천은 시외버스로 뒤집히지 않는다', () => {
@@ -308,4 +310,18 @@ test('도착역을 직접 골라도 철도 계산은 그대로 하고 버스 우
   assert.ok(p.ok)
   assert.equal(p.best.station, '서울')
   assert.ok(p.busFaster, '직접 고른 역에서도 버스 우세는 알려야 한다')
+})
+
+test('제때 닿는 직통이 있으면 환승보다 직통을 권한다 — 강북삼성병원 12:00은 06:35 서울역 직통', () => {
+  const p = R.planTrip({ lat: 37.5684, lon: 126.9677, startMin: 12 * 60, dow: THU })
+  assert.ok(p.ok)
+  assert.equal(p.best.transfers, 0, `환승편 ${R.fmtTime(p.best.dep)} ${p.best.via.join('·')}이 잡혔다`)
+  assert.equal(p.best.station, '서울')
+  assert.equal(R.fmtTime(p.best.dep), '06:35', '같은 역에서는 더 이른 새벽편(04:59)이 아니라 늦은 편이어야 한다')
+})
+
+test('14시 삼성서울병원은 09:21 서울역 직통으로 당일 이동이다', () => {
+  const p = planFor('삼성서울병원', 14 * 60)
+  assert.equal(p.best.transfers, 0)
+  assert.equal(R.fmtTime(p.best.dep), '09:21')
 })
