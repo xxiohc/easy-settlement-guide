@@ -64,19 +64,17 @@ test('다녀온 출장은 탈 기차·귀가편·대안 추천을 보여주지 �
   assert.ok(!html.includes('KTX 102'))
 })
 
-test('다녀온 출장도 도착역과 정산 기준 운임은 그대로 보여준다', () => {
-  const html = render('done')
-  assert.ok(html.includes('정산 기준'))
-  assert.ok(html.includes('동대구'))
-  assert.ok(html.includes('43,000'))
-  assert.ok(html.includes('역→목적지 이동시간을 직접 넣기'))
-})
-
-test('갈 예정 출장은 탈 기차와 귀가편 추천을 그대로 보여준다', () => {
-  const html = render('planned')
-  assert.ok(html.includes('이 기차를 타세요'))
-  assert.ok(html.includes('귀가편'))
-  assert.ok(html.includes('다른 후보'))
+// 2026-09-26 지석초이: 예상 금액 화면의 '정산 기준' 상자는 없앤다. 탈 기차는 정보 확인 화면 이동 패널,
+// 금액·도착역은 예상 금액 내역이 보인다. 경로가 정상으로 잡히면 이 패널은 비어 숨는다.
+test('경로가 정상이면 예상 금액 화면에 정산 기준 상자를 띄우지 않는다', () => {
+  for (const status of ['done', 'planned']) {
+    const app = loadApp()
+    Object.assign(app.state, { tripStatus: status, startTime: '10:00', endTime: '17:00', place: '대구시청' })
+    app.stubPlan({ manual: false, dow: 1, dest: { label: '대구시청', proxy: false, row: null }, plan: PLAN })
+    app.render()
+    assert.equal(app.panel.innerHTML, '', status)
+    assert.match(app.panel.className, /hidden/)
+  }
 })
 
 test('다녀온 출장에서 당일 열차가 없으면 전날 후보 열차 대신 정산 안내만 뜬다', () => {
@@ -140,20 +138,17 @@ test('시외버스가 빠른 구간은 배너로 먼저 알린다', () => {
   const html = renderBusFaster('planned', '국민연금공단')
   assert.ok(html.includes('시외버스가 빠릅니다'))
   assert.ok(html.includes('1시간 17분'), '단축시간이 표시되지 않았다')
-  assert.ok(html.indexOf('시외버스가 빠릅니다') < html.indexOf('이 기차를 타세요'), '버스 안내가 기차 안내보다 위에 와야 한다')
 })
 
-test('버스가 빨라도 기차 안내와 기준 운임은 지우지 않는다', () => {
+test('버스가 빠른 구간도 배너만 남기고 정산 기준 상자는 띄우지 않는다', () => {
   const html = renderBusFaster('planned', '국민연금공단')
-  assert.ok(html.includes('이 기차를 타세요'))
-  assert.ok(html.includes('43,000원'), '기차 기준 운임이 사라졌다')
-  assert.ok(html.includes('기차로 가실 경우'))
+  assert.ok(!html.includes('이 기차를 타세요'))
+  assert.ok(!html.includes('정산 기준 —'))
 })
 
 test('다녀온 출장에서도 버스가 빨랐다는 사실은 알린다', () => {
   const html = renderBusFaster('done', '국민연금공단')
   assert.ok(html.includes('시외버스가 빠릅니다'))
-  assert.ok(html.includes('43,000원'))
   assert.ok(!html.includes('이 기차를 타세요'))
 })
 

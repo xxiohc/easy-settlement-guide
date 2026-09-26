@@ -2096,6 +2096,21 @@ function accessLine(b, dest) {
   return `대중교통 약 ${b.access}분(${basis})${links}${transitDetailHtml(b.accessRoute)}`
 }
 
+// 조금 더 일찍 닿고 싶을 때 — 같은 역으로 가는 바로 앞 직통편(2026-09-26 지석초이).
+// 정산 판정은 권한 편 기준 그대로다. 앞 편을 탄다고 전날 이동이 되지 않는다.
+function earlierTrainHtml(b) {
+  if (!b || b.transfers) return ''
+  const prev = findItineraries(b.station, b.arr, tripDow())
+    .filter(it => it.transfers === 0 && it.dep < b.dep)
+    .sort((x, y) => y.dep - x.dep)[0]
+  if (!prev) return ''
+  return `<div class="ra-earlier">
+    <div class="ra-earlier-title">조금 더 일찍 가려면</div>
+    <div>마산역 <b>${fmtTime(prev.dep)}</b> 출발 → ${escapeHtml(b.station)}역 ${fmtTime(prev.arr)} 도착 → 현장 ${fmtTime(prev.arr + b.access)} 도착
+      <span class="ra-sub">${escapeHtml(prev.legs[0].type)} ${escapeHtml(prev.legs[0].no)} · 정산은 위 ${fmtTime(b.dep)} 편 기준이에요</span></div>
+  </div>`
+}
+
 // 카드4 첫날 이동 안내 패널(넓은 화면은 오른쪽 여백). '어떻게 가는지'만 안내하고, 전날 이동 인정·추가 금액은
 // 예상 금액 화면에서 알린다(2026-09-26 지석초이). 탈 기차 시각과 전날 이동 판정을 한눈에 보인다.
 function renderPrevDayVerdict() {
@@ -2135,8 +2150,8 @@ function renderPrevDayVerdict() {
       <span>현장 도착<span class="ra-sub">${accessLine(b, j.dest)}</span></span></li>`)
     rows.push(`<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`)
     const verdict = `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>마산역 ${fmtTime(b.dep)} 출발</b></div>
-      ${j.move ? '<div class="ra-why">출근시각(08:30) 전에 출발하는 편이에요</div>' : ''}`
-    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>`, true)
+      ${j.move ? '<div class="ra-why">정규 출근시각(08:30) 전에 출발하는 편이에요</div>' : ''}`
+    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>${earlierTrainHtml(b)}`, true)
   }
   if (j.kind === 'no-train') {
     return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>전날 이동</b></div>
@@ -2252,7 +2267,7 @@ function prepareCard8() {
 const CARD8_QUESTIONS = [
   { field: 'isShortDayTrip',  id: 'field-shortdaytrip', label: '교육+이동 8시간 이하 당일 출장인지' },
   { field: 'isMS',            id: 'field-rank',         label: '직급이 MS 이상인지' },
-  { field: 'prevDayMove',     id: 'field-daytrip',      label: '출근시각(08:30) 전에 출발해야 했는지' },
+  { field: 'prevDayMove',     id: 'field-daytrip',      label: '정규 출근시각(08:30) 전에 출발해야 했는지' },
   { field: 'lodgingProvided', id: 'field-lodging',      label: '숙소가 제공되는지' },
   { field: 'mealProvided',    id: 'field-meal',         label: '식사가 제공되는지' },
   { field: 'hasShuttle',      id: 'field-shuttle',      label: '공항 셔틀버스를 이용했는지' },
@@ -2390,7 +2405,7 @@ function prepareCard9() {
     return
   }
   document.getElementById('amount-note-text').textContent = state.isJeju
-    ? '실제 정산은 결재 후 확정되며, 실비 항목(항공·셔틀)은 영수증 금액으로 반영돼요'
+    ? '실제 정산은 결재 후 확정돼요. 항공·셔틀은 낸 영수증 금액으로 정산돼요'
     : '실제 정산은 결재 후 확정돼요'
 
   const isJeju  = state.isJeju
@@ -2402,9 +2417,10 @@ function prepareCard9() {
   const fare = getFare(state.region || state.place)
   const rf   = isJeju ? null : routeFare()
   if (isJeju) {
-    breakdown.push({ label: '항공료 (제주)', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
+    // 항공·셔틀은 정액이 아니다 — 영수증(매출전표)을 내야 결제한 금액만큼 정산된다(2026-09-26 지석초이)
+    breakdown.push({ label: '항공료 (왕복)', amount: '영수증 금액', note: '법인카드로 결제하고 신용카드 매출전표를 내면 결제한 금액만큼 정산돼요' })
     if (state.hasShuttle === true) {
-      breakdown.push({ label: '공항 셔틀버스', amount: '실비', note: '법인카드 결제 · 신용카드 매출전표 제출 필수' })
+      breakdown.push({ label: '공항 셔틀버스', amount: '영수증 금액', note: '법인카드 결제 · 매출전표를 내면 그 금액만큼 정산돼요' })
     }
   } else if (rf) {
     const kind = rf.transfers ? `${rf.via.join('·')} 환승 ${rf.transfers}회` : '직통'
@@ -2458,6 +2474,18 @@ function prepareCard9() {
     const totalDays  = baseDays + prevDayBonus
     const tripNights = Math.max(0, state.nights || 0)
 
+    // 날짜별 일당 — 가는 날·오는 날(전날 이동 포함)은 전액, 식사를 제공받는 끼인 날만 25%
+    const quarterMid = !!(state.mealProvided && !state.isDayTrip && tripNights >= 2)
+    const dayList = []
+    if (prevDayBonus) dayList.push({ date: shortDate(state.startDate, -1), label: '전날 이동', amt: DAILY_RATE })
+    for (let i = 0; i < baseDays; i++) {
+      const first = i === 0, last = i === baseDays - 1
+      const quarter = quarterMid && !first && !last
+      dayList.push({ date: shortDate(state.startDate, i), quarter,
+        label: baseDays === 1 ? '당일' : first ? '가는 날' : last ? '오는 날' : '끼인 날',
+        amt: quarter ? DAILY_RATE_25P : DAILY_RATE })
+    }
+
     let dailyTotal = 0
     if (state.mealProvided && !state.isDayTrip && tripNights >= 2) {
       // 식사 지원: 출장 중간날만 25% 적용
@@ -2466,17 +2494,15 @@ function prepareCard9() {
       dailyTotal = prevDayBonus * DAILY_RATE
                  + tripNormDays * DAILY_RATE
                  + middleDays * DAILY_RATE_25P
-      const parts = []
-      parts.push(`출장 ${tripNormDays}일 × ${DAILY_RATE.toLocaleString()}원`)
-      if (prevDayBonus) parts.push(`전날 이동 1일 × ${DAILY_RATE.toLocaleString()}원`)
-      if (middleDays > 0) parts.push(`중간 ${middleDays}일 × ${DAILY_RATE_25P.toLocaleString()}원 (25%)`)
-      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, note: parts.join(' + '), prevDay: !!prevDayBonus })
+      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus, days: dayList,
+        note: '가는 날·오는 날은 전액, 식사를 제공받는 끼인 날은 <x-nb>25%만</x-nb> 지급돼요' })
     } else {
       dailyTotal = totalDays * DAILY_RATE
       breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus,
         note: prevDayBonus
           ? `출장 ${baseDays}일 + 전날 이동 1일 · ${totalDays}일 × ${DAILY_RATE.toLocaleString()}원`
-          : `${totalDays}일 × ${DAILY_RATE.toLocaleString()}원` })
+          : `${totalDays}일 × ${DAILY_RATE.toLocaleString()}원`,
+        days: dayList.length >= 2 ? dayList : null })
     }
     total += dailyTotal
 
@@ -2524,15 +2550,21 @@ function prepareCard9() {
         <div class="breakdown-left">
           <span class="breakdown-label">${item.label}${item.prevDay ? ' <span class="pd-badge">전날 이동 포함</span>' : ''}</span>
           ${item.note ? `<span class="breakdown-note">${item.note}</span>` : ''}
+          ${item.days ? `<div class="day-chips">${item.days.map(d => `
+            <div class="day-chip${d.quarter ? ' is-quarter' : ''}">
+              <span class="day-chip-date">${d.date}</span><span class="day-chip-label">${d.label}${d.quarter ? ' 25%' : ''}</span>
+              <b>${d.amt.toLocaleString()}원</b>
+            </div>`).join('')}</div>` : ''}
         </div>
         <span class="breakdown-amount ${!isNum ? 'breakdown-amount-text' : ''}">${amtStr}</span>
       </div>`
   }).join('')
 
   const hasNonNum = breakdown.some(i => typeof i.amount !== 'number')
-  document.getElementById('totalAmount').textContent = hasNonNum
-    ? `${total.toLocaleString()}원 + 실비`
-    : `${total.toLocaleString()}원`
+  // 금액 뒤 덧붙임(영수증 금액·실비)은 작게 한 줄로 — 휴대폰에서 총액이 두 줄로 꺾였다
+  const plus = isJeju ? `+ 항공${state.hasShuttle === true ? '·셔틀' : ''} 영수증 금액` : hasNonNum ? '+ 실비' : ''
+  document.getElementById('totalAmount').innerHTML =
+    `${total.toLocaleString()}원${plus ? `<span class="amount-total-plus">${plus}</span>` : ''}`
 
   renderRoutePanel()
 
@@ -2566,7 +2598,7 @@ function prevDayHintHtml() {
   const where = escapeHtml(state.region || state.place || '출장지')
   const start = escapeHtml(state.startTime || '')
   const why = j.kind === 'train'
-    ? `${start} 교육에 닿으려면 <b>마산역 ${fmtTime(j.best.dep)}</b> KTX를 타야 해요 — 출근시각(08:30) 전 출발`
+    ? `${start} 교육에 닿으려면 <b>마산역 ${fmtTime(j.best.dep)}</b> KTX를 타야 해요 — 정규 출근시각(08:30) 전 출발`
     : j.kind === 'no-train'
     ? `첫날 ${start} 교육에 닿는 당일 기차가 없어요`
     : `추가 확인에서 '08:30 전에 나서야 한다'고 답하셨어요`
@@ -2652,41 +2684,6 @@ function routeDestination() {
   return null
 }
 
-function legLine(leg) {
-  return `<div class="route-leg">
-    <span class="route-leg-train">${escapeHtml(leg.no)} ${escapeHtml(leg.type)}</span>
-    <span class="route-leg-time">${leg.from} ${fmtTime(leg.dep)} → ${leg.to} ${fmtTime(leg.arr)}</span>
-    <span class="route-leg-note">${escapeHtml(leg.note)} 운행 · ${fmtDur(leg.arr - leg.dep)}</span>
-  </div>`
-}
-
-const ACCESS_SRC_LABEL = { known: '확인값', user: '직접 입력', transit: '서울시 대중교통 조회', est: '추정' }
-function accessSrcLabel(src) { return ACCESS_SRC_LABEL[src] || '추정' }
-
-// 마스터에 없는 기관이거나 추정값이 실제와 다를 때, 도착역과 이동시간을 직접 넣는 폼.
-// 넣은 값은 그 역의 접근시간으로 바로 반영되고, 도착역 판정도 그 값으로 다시 계산한다.
-function accessFormHtml(best, plan) {
-  const opts = [best, ...plan.alternatives]
-    .map(p => p.station)
-    .filter((v, i, a) => a.indexOf(v) === i)
-  const cur = state.pinStation || best.station
-  const sel = opts.map(n =>
-    `<option value="${escapeHtml(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}역</option>`).join('')
-  const curMin = state.accessOverride[cur]
-  return `<details class="route-fix"${state.pinStation ? ' open' : ''}>
-    <summary>역→목적지 이동시간을 직접 넣기</summary>
-    <div class="route-fix-body">
-      <div class="route-fix-row">
-        <select id="routeFixStation" aria-label="도착역">${sel}</select>
-        <input id="routeFixMin" type="number" min="0" max="240" step="5" inputmode="numeric"
-               placeholder="분" value="${Number.isFinite(curMin) ? curMin : ''}" aria-label="이동시간(분)">
-        <button type="button" class="route-fix-btn" onclick="applyAccessOverride()">적용</button>
-      </div>
-      <div class="route-fix-help">실제 대중교통 소요시간을 아시면 넣어 주세요. 넣은 역으로 도착역이 고정됩니다.
-        ${state.pinStation ? `<button type="button" class="route-fix-clear" onclick="clearAccessOverride()">자동 판정으로 되돌리기</button>` : ''}</div>
-    </div>
-  </details>`
-}
 
 // 좌표를 모를 때 쓰는 폼 — 운임표에 있는 역 전체에서 내릴 역을 고르고 이동시간을 넣는다.
 function manualPickHtml() {
@@ -2721,12 +2718,6 @@ function applyAccessOverride() {
   if (!raw || !Number.isFinite(min) || min < 0) return
   state.accessOverride = { ...state.accessOverride, [st]: Math.round(min) }
   state.pinStation = st
-  refreshAmountAndRoute()
-}
-
-function clearAccessOverride() {
-  state.accessOverride = {}
-  state.pinStation = null
   refreshAmountAndRoute()
 }
 
@@ -2804,7 +2795,7 @@ function renderRoutePanel() {
 
   const r = computeRoutePlan()
   if (r.skip === 'online') return hide('')
-  if (r.skip === 'jeju')   return hide('✈️ 제주는 항공 이용 구간이라 기차 역산 안내를 하지 않아요.')
+  if (r.skip === 'jeju')   return hide('')
   if (r.skip === 'bus') {
     return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. ${ORIGIN_BUS}에서 출발합니다. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
   }
@@ -2846,76 +2837,15 @@ function renderRoutePanel() {
     return
   }
 
+  // 예상 금액 화면에서는 '정산 기준' 상자를 띄우지 않는다(2026-09-26 지석초이). 탈 기차는 정보 확인 화면의
+  // 이동 패널이, 금액·도착역은 위 내역이 이미 보인다. 시외버스가 더 빠른 구간·직접 고른 역의 우회 경고만 남긴다.
   const b = plan.best
-  const busTop = plan.busFaster ? busFasterHtml(plan.busFaster) : ''
-  const railHead = plan.busFaster ? '기차로 가실 경우 — ' : ''
-  const arriveVenue = b.arr + b.access
-  const fareLine = b.fare
-    ? `편도 ${b.fare.oneWay.toLocaleString()}원 (${b.fare.grade}) · 왕복 ${b.fare.roundTrip.toLocaleString()}원`
-    : '운임표에 없는 역'
-  const routeKind = b.transfers ? `${b.via.join('·')} 환승 ${b.transfers}회` : '직통'
-  // 도착역을 기관 행에서 고정한 곳(원주 등)은 역에서 목적지까지가 시내 이동이 아니라
-  // 또 한 번의 시외 이동이다. 그 135분이 무엇인지 화면에 그대로 밝힌다.
-  const accessNote = dest && dest.row && dest.row.accessNote
-    && dest.row.accessOverride && b.station in dest.row.accessOverride
-    ? `<div class="route-note">${escapeHtml(dest.row.accessNote)}</div>`
-    : ''
-  // 사용자가 도착역을 직접 고른 경우에만 우회 경로가 여기까지 온다(자동 추천에서는 걸러진다).
   const detourWarn = b.detour
     ? `<div class="route-warn">직접 고르신 ${escapeHtml(b.station)}역은 ${escapeHtml(b.detour.hub)}까지 올라갔다 되내려오는 경로예요 — 직선 ${b.detour.directKm}km를 ${b.detour.railKm}km로 돕니다. 시외버스가 빠를 수 있습니다.</div>`
     : ''
-  const waitLine = b.transfers && b.wait != null
-    ? `<div class="route-transfer">🔁 ${b.via.join('·')}역 환승 대기 ${b.wait}분</div>` : ''
-
-  const altHtml = plan.alternatives.length
-    ? `<div class="route-alt-title">다른 후보</div>` + plan.alternatives.map(a =>
-        `<div class="route-alt">마산 ${fmtTime(a.dep)} → ${a.station}역 ${fmtTime(a.arr)} · ${a.transfers ? `${a.via.join('·')} 환승` : '직통'} · 역에서 ${a.access}분 · 현장 ${fmtTime(a.arr + a.access)} 도착(여유 ${a.margin}분)${a.tight ? ' <span class="route-tight">빠듯</span>' : ''}</div>`
-      ).join('')
-    : ''
-
-  const retHtml = plan.ret
-    ? (plan.ret.leg
-        ? `<div class="route-alt-title">귀가편 (종료 ${state.endTime} 기준)</div>
-           <div class="route-alt">${b.station}역 ${fmtTime(plan.ret.leg.dep)} 출발 → 마산 ${fmtTime(plan.ret.leg.arr)} 도착 · ${plan.ret.leg.no}${plan.ret.next ? ` (다음 편 ${fmtTime(plan.ret.next.dep)})` : ''}</div>`
-        : `<div class="route-alt-title">귀가편</div><div class="route-alt">종료시각 이후 마산 직통 편이 없어요 — 숙박 또는 환승 확인이 필요합니다.</div>`)
-    : ''
-
-  if (isDone) {
-    return show(`
-      ${busTop}
-      <div class="route-head">
-        <span class="route-head-title">🚄 ${railHead}정산 기준 — 마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
-        <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} 기준 운임</span>
-      </div>
-      ${detourWarn}
-      <div class="route-step">💳 ${fareLine}</div>
-      <div class="route-step">🚶 ${escapeHtml(b.station)}역에서 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)})</div>
-      ${accessNote}
-      ${accessFormHtml(b, plan)}
-      <div class="route-note">운임표 2026년 9월 기준. 실제 탑승 편과 무관하게 이 구간 운임으로 정산합니다. 도착역이 다르면 위에서 바꿔 주세요.</div>`)
-  }
-
-  show(`
-    ${busTop}
-    <div class="route-head">
-      <span class="route-head-title">🚄 ${railHead}마산역 → ${escapeHtml(b.station)}역 · ${routeKind}</span>
-      <span class="route-head-sub">${escapeHtml((dest && dest.label) || state.place || '')}${dest && dest.proxy ? ' (역 기준 계산)' : ''}${manual ? ' (역·이동시간 직접 지정)' : ''} ${state.startTime} 시작 기준 역산</span>
-    </div>
-    <div class="route-pick">
-      <span class="route-pick-label">이 기차를 타세요</span>
-      <span class="route-pick-time">마산역 ${fmtTime(b.dep)} 출발</span>
-    </div>
-    ${detourWarn}
-    ${b.legs.map(legLine).join(waitLine)}
-    <div class="route-step">🚶 ${escapeHtml(b.station)}역 ${fmtTime(b.arr)} 도착 → 목적지까지 대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)}) → 현장 ${fmtTime(arriveVenue)} 도착</div>
-    ${accessNote}
-    <div class="route-step">⏱ 시작 ${state.startTime}까지 여유 ${b.margin}분${b.tight ? ' <span class="route-tight">빠듯</span>' : ''} · 문 앞 총 소요 ${fmtDur(b.totalMin)}</div>
-    ${plan.noBuffer ? '<div class="route-warn">권장 여유(10분)를 지키는 편이 없어 도착 직전에 닿는 편을 표시했습니다. 전날 이동도 함께 검토하세요.</div>' : ''}
-    <div class="route-step">💳 ${fareLine}</div>
-    ${altHtml}
-    ${retHtml}
-    ${accessFormHtml(b, plan)}
-    <div class="route-note">시간표 2026년 10월 기준 · 운임표 2026년 9월 기준. ${b.accessSrc === 'est' ? '역→목적지 이동시간은 직선거리 기반 <strong>추정치</strong>이고 실제 대중교통 조회 결과가 아닙니다. ' : ''}좌석 잔여는 반영되지 않습니다.</div>`)
+  const extra = (plan.busFaster ? busFasterHtml(plan.busFaster) : '') + detourWarn
+  if (extra) show(extra)
+  else hide('')
 }
 
 // 철도가 종착지보다 북쪽으로 올라갔다 되내려오는 구간(여수·순천·목포 등)에서 띄우는 안내.
@@ -3210,7 +3140,7 @@ function renderTripFormPreview() {
   } else {
     if (state.isMS === true)  tokgiItems.push('&lt;교통비&gt; MS 적용')
     if (state.isMS === false) tokgiItems.push('&lt;교통비&gt; MS 미적용')
-    if (prevDayBonus > 0) tokgiItems.push('출근시각 전 출발 — 전날 이동 적용 (+1일 +1박)')
+    if (prevDayBonus > 0) tokgiItems.push('정규 출근시각 전 출발 — 전날 이동 적용 (+1일 +1박)')
   }
   if (isJeju) tokgiItems.push('제주 항공료·셔틀버스: 사후정산 (법인카드 결제 후 매출전표 제출)')
   const tokgiStr = tokgiItems.length
