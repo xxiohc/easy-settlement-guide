@@ -1,8 +1,6 @@
 // ── 카카오 장소 검색 API 키 ────────────────────────────────────────────────────
 // developers.kakao.com → 내 애플리케이션 → REST API 키
 const KAKAO_API_KEY = (typeof window !== 'undefined' && window.KAKAO_API_KEY) || ''
-// ODsay 대중교통 길찾기(무료 Basic 하루 30건). 웹 키는 등록한 사이트 주소에서만 쓰인다.
-const ODSAY_API_KEY = (typeof window !== 'undefined' && window.ODSAY_API_KEY) || ''
 
 // ── 단계 정의 ────────────────────────────────────────────────────────────────
 const STEPS = [
@@ -45,7 +43,7 @@ const state = {
   isDayTrip: null,
   prevDayMove: null,
   prevDayAuto: false,   // prevDayMove를 역산이 정했는지(사람이 답한 게 아니면 true)
-  transitAccess: {},    // ODsay로 조회한 역→현장 대중교통 { 역이름: { min, steps, key } }
+  transitAccess: {},    // 서울시 대중교통 조회로 얻은 역→현장 경로 { 역이름: { min, steps, key } }
   lodgingProvided: null,
   mealProvided: null,
   hasPlane: null,
@@ -2046,64 +2044,46 @@ function kakaoRouteUrl(mode, fromName, from, toName, to) {
   const pt = (n, p) => `${encodeURIComponent(n.replace(/\s*\(.*$/, '').replace(/,/g, ' ').trim())},${p.lat},${p.lon}`
   return `https://map.kakao.com/link/by/${mode}/${pt(fromName, from)}/${pt(toName, to)}`
 }
-// ── ODsay 대중교통 조회 ──────────────────────────────────────────────────────
-// 역→현장 이동시간을 직선거리 추정 대신 실제 대중교통 경로로 바꾼다. 무료 한도(하루 30건)를
-// 아끼려고 같은 역·같은 좌표는 브라우저에 30일 저장하고, 한 목적지에서 역마다 한 번만 부른다.
+// ── 서울시 대중교통 조회 ─────────────────────────────────────────────────────
+// 역→현장 이동시간을 직선거리 추정 대신 실제 대중교통 경로로 바꾼다(api/transit.js → 서울시
+// 대중교통환승경로, 무료·하루 1,000건). 서울시 자료라 수도권 밖은 추정 그대로다. 같은 역·좌표는
+// 브라우저에 30일 저장하고, 한 목적지에서 역마다 한 번만 부른다.
 const TRANSIT_CACHE_DAYS = 30
 const transitPending = new Set()
+const inCapitalArea = p => p.lat > 37.2 && p.lat < 37.8 && p.lon > 126.6 && p.lon < 127.4
 
 function transitKey(st, dest) {
   return [st.lon, st.lat, dest.lon, dest.lat].map(n => Number(n).toFixed(4)).join(',')
 }
 
-function summarizeOdsayPath(path) {
-  const steps = (path.subPath || []).map(sp => {
-    if (sp.trafficType === 3) return sp.sectionTime ? { kind: '도보', min: sp.sectionTime, text: `도보 ${sp.sectionTime}분` } : null
-    const lane = (sp.lane && sp.lane[0]) || {}
-    const name = sp.trafficType === 1 ? (lane.name || '지하철') : `${lane.busNo || ''}번 버스`
-    return { kind: sp.trafficType === 1 ? '지하철' : '버스', min: sp.sectionTime,
-      text: `${name} ${sp.startName || ''} → ${sp.endName || ''} ${sp.sectionTime}분` }
-  }).filter(Boolean)
-  return { min: path.info.totalTime, steps }
-}
-
-async function fetchTransit(stationName, st, dest) {
+async function fetchTransit(st, dest) {
   const key = transitKey(st, dest)
-  const cacheKey = `odsay:v1:${key}`
+  const cacheKey = `transit:v1:${key}`
   try {
     const hit = JSON.parse(localStorage.getItem(cacheKey) || 'null')
     if (hit && Date.now() - hit.at < TRANSIT_CACHE_DAYS * 86400000) return { ...hit.v, key }
   } catch { /* 저장소를 못 쓰면 매번 조회 */ }
-  const qs = new URLSearchParams({ SX: st.lon, SY: st.lat, EX: dest.lon, EY: dest.lat, OPT: '0', apiKey: ODSAY_API_KEY })
-  const res = await fetch(`https://api.odsay.com/v1/api/searchPubTransPathT?${qs}`)
+  const qs = new URLSearchParams({ sx: st.lon, sy: st.lat, ex: dest.lon, ey: dest.lat })
+  const res = await fetch(`./api/transit?${qs}`)
   const body = await res.json()
-  const err = body.error && (Array.isArray(body.error) ? body.error[0] : body.error)
-  let v
-  if (err) {
-    // 700m 이내는 대중교통 대상이 아니다 — 걸어서 간다(분속 67m)
-    if (String(err.code) !== '-98') throw new Error(err.message || err.msg || `ODsay 오류 ${err.code}`)
-    const km = haversineKm(st.lat, st.lon, dest.lat, dest.lon)
-    const walk = Math.max(3, Math.ceil(km * 1000 / 67))
-    v = { min: walk, steps: [{ kind: '도보', min: walk, text: `도보 약 ${walk}분 (700m 이내)` }] }
-  } else {
-    v = summarizeOdsayPath(body.result.path[0])
-  }
+  if (!body.ok) throw new Error(body.error || `응답 오류 ${res.status}`)
+  const v = { min: body.min, steps: body.steps }
   try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), v })) } catch { /* 무시 */ }
   return { ...v, key }
 }
 
 // 추천역이 직선거리 추정이면 그 역만 조회해 채우고 다시 그린다(역이 바뀌면 새 역도 한 번)
 function ensureTransit(b, dest) {
-  if (!ODSAY_API_KEY || !b || b.accessSrc !== 'est' || !dest || dest.proxy) return
+  if (!b || b.accessSrc !== 'est' || !dest || dest.proxy || !inCapitalArea(dest)) return
   const st = KtxRoute.stations && KtxRoute.stations[b.station]
   if (!st) return
   const key = transitKey(st, dest)
   const cur = state.transitAccess[b.station]
   if ((cur && cur.key === key) || transitPending.has(key)) return
   transitPending.add(key)
-  fetchTransit(b.station, st, dest)
+  fetchTransit(st, dest)
     .then(v => { state.transitAccess = { ...state.transitAccess, [b.station]: v }; renderPrevDayVerdict() })
-    .catch(e => console.warn('ODsay 대중교통 조회 실패:', e.message))
+    .catch(e => console.warn('서울시 대중교통 조회 실패:', e.message))
     .finally(() => transitPending.delete(key))
 }
 
@@ -2116,7 +2096,7 @@ function transitDetailHtml(route) {
 function accessLine(b, dest) {
   if (!dest || dest.proxy) return `${escapeHtml(b.station)}역 기준 계산 — 장소를 검색 목록에서 고르면 현장까지 실제 거리로 계산해요`
   const basis = b.accessSrc === 'est' ? `추정 · 역에서 직선 ${b.stationKm}km 기준`
-    : b.accessSrc === 'transit' ? 'ODsay 대중교통 조회'
+    : b.accessSrc === 'transit' ? '서울시 대중교통 조회'
     : b.accessSrc === 'known' ? '확인값' : '직접 입력'
   const st = KtxRoute.stations && KtxRoute.stations[b.station]
   const links = st && dest && Number.isFinite(dest.lat)
@@ -2668,7 +2648,7 @@ function legLine(leg) {
   </div>`
 }
 
-const ACCESS_SRC_LABEL = { known: '확인값', user: '직접 입력', transit: 'ODsay 대중교통 조회', est: '추정' }
+const ACCESS_SRC_LABEL = { known: '확인값', user: '직접 입력', transit: '서울시 대중교통 조회', est: '추정' }
 function accessSrcLabel(src) { return ACCESS_SRC_LABEL[src] || '추정' }
 
 // 마스터에 없는 기관이거나 추정값이 실제와 다를 때, 도착역과 이동시간을 직접 넣는 폼.

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "echo \"window.KAKAO_API_KEY='${KAKAO_API_KEY}';window.ODSAY_API_KEY='${ODSAY_API_KEY}';\" > src/config.js",
+    "build": "echo \"window.KAKAO_API_KEY='${KAKAO_API_KEY}'\" > src/config.js",
     "dev": "npx serve -l 3000 --no-clipboard",
     "test": "node --test test/*.test.cjs"
   }

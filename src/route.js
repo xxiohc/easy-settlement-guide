@@ -152,7 +152,7 @@ function findDestination(text) {
 
 // 역 → 목적지 접근시간. 사람이 확인한 값(사용자 입력 > 마스터 등재)이 있으면 그것을 쓰고,
 // 없으면 거리 기반 추정을 쓴다. 어느 쪽인지 src로 함께 돌려줘 화면에 그대로 밝힌다.
-// 역→목적지 이동시간 출처 우선순위: 직접 입력 > 등재 확인값 > ODsay 대중교통 조회 > 직선거리 추정
+// 역→목적지 이동시간 출처 우선순위: 직접 입력 > 등재 확인값 > 서울시 대중교통 조회 > 직선거리 추정
 function accessInfo(stationName, km, destRow, overrides, transit) {
   const user = overrides && overrides[stationName]
   if (Number.isFinite(user)) return { min: Math.max(0, Math.round(user)), src: 'user' }
@@ -258,19 +258,26 @@ function findItineraries(dest, deadline, dow) {
   return [...direct, ...byDep.values()].sort((a, b) => b.dep - a.dep || a.arr - b.arr)
 }
 
-// 추천편 고르기(2026-09-26 지석초이 지시). ① 제때 닿는 직통이 있으면 직통만 본다 — 환승이 조금 늦게
-// 출발해도 된다고 오송 환승을 권하면 사람이 실제로 타지 않는다(강북삼성병원: 06:35 직통 서울역이 맞다).
-// ② 역마다 제때 닿는 가장 늦은 편을 고른다. ③ 그중 마산역→현장 실제 이동시간이 짧은 역.
-// 전날 이동 판정(08:30)은 이렇게 고른 편의 출발시각으로 한다.
+// 추천편 고르기(2026-09-26 지석초이 지시).
+// ① 제때 닿는 직통이 있으면 직통만 본다 — 환승이 조금 늦게 출발해도 된다고 오송 환승을 권하면
+//    사람이 실제로 타지 않는다(강북삼성병원 12:00: 06:35 서울역 직통이 맞다).
+// ② 전날 이동 판정은 '제때 닿는 가장 늦은 직통'의 출발시각으로 한다 — 14:00 서울 일정은
+//    09:21 직통이 닿으므로 당일 이동이다(07:33 수서 직통을 골라 전날 이동이 되던 문제).
+// ③ 화면에 권하는 편은 그 판정(08:30 전/후)이 같은 직통 가운데, 역마다 가장 늦은 편을 뽑은 뒤 현장까지 실제 이동시간이 짧은 역.
+const WORK_START = 8 * 60 + 30
 function pickBest(list, fareVal) {
   const directs = list.filter(p => p.transfers === 0)
   const pool = directs.length ? directs : list
-  const latest = new Map()
-  for (const p of pool) {
-    const cur = latest.get(p.station)
-    if (!cur || p.dep > cur.dep || (p.dep === cur.dep && p.travelMin < cur.travelMin)) latest.set(p.station, p)
+  const latestDep = Math.max(...pool.map(p => p.dep))
+  const early = latestDep < WORK_START
+  // 역마다 그 판정 안에서 가장 늦게 출발해도 되는 편 하나 → 역끼리는 실제 이동시간으로 비교.
+  // 이동시간만 보면 같은 서울역 안에서 더 빠른 새벽 04:59 편이 06:35 편을 이겼다.
+  const latestByStation = new Map()
+  for (const p of pool.filter(p => (p.dep < WORK_START) === early)) {
+    const cur = latestByStation.get(p.station)
+    if (!cur || p.dep > cur.dep || (p.dep === cur.dep && p.travelMin < cur.travelMin)) latestByStation.set(p.station, p)
   }
-  return [...latest.values()].sort((a, b) =>
+  return [...latestByStation.values()].sort((a, b) =>
     a.travelMin - b.travelMin || b.dep - a.dep || a.transfers - b.transfers || fareVal(a) - fareVal(b))[0]
 }
 
