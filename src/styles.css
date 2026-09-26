@@ -2847,7 +2847,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   cursor: pointer;
 }
 .time-select:focus { border-color: var(--primary); background-color: var(--primary-soft); }
-.time-select:invalid, .time-select option[value=""] { color: #c9cdd2; }
+.time-select.is-empty { color: #b0b8c1; font-weight: 400; }
 .time-select option { color: var(--ink); }
 
 /* ── 첫날 이동 안내 패널 ─────────────────────────────────────────────────
@@ -2874,19 +2874,28 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .ra-verdict.is-yes { background: #ecfdf3; color: #047857; }
 .ra-verdict.is-info { background: #fff7ed; color: #c2410c; }
 .ra-why { margin: 8px 2px 0; color: var(--subtle); font-size: 12.5px; }
-.ra-timeline { list-style: none; margin: 14px 0 0; padding: 0; position: relative; }
-.ra-timeline::before {
-  content: ''; position: absolute; left: 44px; top: 8px; bottom: 8px; width: 2px; background: var(--line);
-}
-.ra-timeline li { display: grid; grid-template-columns: 38px 16px 1fr; align-items: start; gap: 0 6px; padding: 5px 0; }
-.ra-timeline .ra-t { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.ra-timeline { list-style: none; margin: 14px 0 0; padding: 0; }
+/* 점과 선은 같은 칸(.ra-dot) 안에서 그린다 — 목록 전체에 선 하나를 절대 좌표로 깔았더니
+   글꼴·폭에 따라 점과 어긋났다(2026-09-26 지적). 선은 이 점 중심에서 다음 줄 점 중심까지. */
+.ra-timeline li { display: grid; grid-template-columns: 40px 12px 1fr; align-items: start; column-gap: 8px; position: relative; }
+.ra-timeline li > span:last-child { padding-bottom: 12px; }
+.ra-timeline .ra-t { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; line-height: 20px; }
 .ra-timeline .ra-dot {
-  width: 10px; height: 10px; margin: 5px 0 0 1px; border-radius: 50%;
-  background: var(--bg); border: 2px solid #c9cdd2; position: relative; z-index: 1;
+  position: relative; align-self: stretch;
 }
-.ra-timeline li.is-train .ra-dot { border-color: var(--primary); background: var(--primary); }
-.ra-timeline li.is-goal .ra-dot { border-color: #047857; background: #047857; }
-.ra-timeline .ra-sub { display: block; color: var(--muted); font-size: 12px; }
+.ra-timeline .ra-dot::before {
+  content: ''; position: absolute; left: 1px; top: 5px; width: 10px; height: 10px; box-sizing: border-box;
+  border-radius: 50%; background: var(--bg); border: 2px solid #c9cdd2; z-index: 1;
+}
+.ra-timeline li:not(:last-child) .ra-dot::after {
+  content: ''; position: absolute; left: 5px; top: 10px; bottom: -10px; width: 2px; background: var(--line);
+}
+.ra-timeline li > span:last-child { line-height: 20px; }
+.ra-link { color: var(--primary); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.ra-link:hover { text-decoration: underline; }
+.ra-timeline li.is-train .ra-dot::before { border-color: var(--primary); background: var(--primary); }
+.ra-timeline li.is-goal .ra-dot::before { border-color: #047857; background: #047857; }
+.ra-timeline .ra-sub { display: block; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .ra-sum { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--subtle); font-size: 12.5px; }
 .ra-rule { margin-top: 10px; color: var(--muted); font-size: 12px; }
 
@@ -2904,6 +2913,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 
 .seoul-hint-basis { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+
+#time-ktx-hint.is-warn { color: #c2410c; font-weight: 600; }
 
 .date-warn {
   margin-top: 8px;

@@ -290,11 +290,11 @@
               <div class="info-field" id="field-time">
                 <label class="info-label" for="input-starthour">첫날 교육 시작시각</label>
                 <div class="time-row">
-                  <select class="info-input time-select" id="input-starthour" aria-label="시작 시" onchange="onTimeChange()">
+                  <select class="info-input time-select is-empty" id="input-starthour" aria-label="시작 시" onchange="onTimeChange()">
                     <option value="">시</option><option value="05">05시</option><option value="06">06시</option><option value="07">07시</option><option value="08">08시</option><option value="09">09시</option><option value="10">10시</option><option value="11">11시</option><option value="12">12시</option><option value="13">13시</option><option value="14">14시</option><option value="15">15시</option><option value="16">16시</option>
                   </select>
                   <span class="time-sep">:</span>
-                  <select class="info-input time-select" id="input-startmin" aria-label="시작 분 (10분 단위)" onchange="onTimeChange()">
+                  <select class="info-input time-select is-empty" id="input-startmin" aria-label="시작 분 (10분 단위)" onchange="onTimeChange()">
                     <option value="">분</option><option value="00">00분</option><option value="10">10분</option><option value="20">20분</option><option value="30">30분</option><option value="40">40분</option><option value="50">50분</option>
                   </select>
                   <input type="hidden" id="input-starttime" />
@@ -318,6 +318,7 @@
                   <div class="place-suggest hidden" id="placeSuggest"></div>
                 </div>
                 <p class="info-subhint">🔍 글자를 입력하면 장소 검색이 돼요. 클릭하면 지역이 자동 선택됩니다.</p>
+                <p class="info-subhint hidden" id="place-geo-note"></p>
               </div>
 
               <!-- 출장 지역 (도시·지역) -->

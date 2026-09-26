@@ -77,6 +77,29 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await ctx.close()
 }
 
+// ── R. 새 공문을 올리면 앞서 넣은 장소·시각이 남지 않는다 (2026-09-26 지석초이 제보) ──
+{
+  const DOCS = '/Users/jiseokchoi/ODDCHOI/workspace/09_교육, 출장 정산 가이드/테스트공문_업로드함/'
+  const F = DOCS + '제31차 대한의료관련감염관리학회 학술대회와 연수교육 개최 안내件.pdf'
+  const fs = await import('node:fs')
+  if (fs.existsSync(F)) {
+    const [ctx,p] = await newPage()
+    await p.click('[data-choice="planned"]'); await p.waitForTimeout(500)
+    await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
+    await p.fill('#input-place','강북삼성병원'); await p.dispatchEvent('#input-place','input')
+    await p.selectOption('#input-starthour','12'); await p.selectOption('#input-startmin','10')
+    await p.click('#card-4 .back-footer-btn'); await p.waitForTimeout(600)
+    await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(600)
+    await p.setInputFiles('#fileInput', F)
+    await p.waitForFunction(()=>!document.getElementById('ctaNext3').disabled,{timeout:120000})
+    await p.click('#ctaNext3'); await p.waitForTimeout(700)
+    const v = await p.evaluate(()=>[document.getElementById('input-place').value, state.startTime, document.getElementById('time-ktx-hint').textContent])
+    check('R 새 공문 장소로 바뀐다(이전 입력 안 남음)', v[0].startsWith('스위스 그랜드 호텔'), v[0])
+    check('R 공문에 시작시각이 없으면 비우고 직접 입력 안내', v[1]==='' && v[2].includes('찾지 못했어요'), v[1]+' / '+v[2].slice(0,30))
+    await ctx.close()
+  }
+}
+
 // ── B. 서울 · 숙박 · 등록비 있음(카드6 통합) ──
 {
   const [ctx,p] = await newPage()
