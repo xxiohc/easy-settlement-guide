@@ -262,7 +262,7 @@
                       <rect x="10" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
                     </svg>
                     <span class="date-placeholder" id="start-placeholder">시작</span>
-                    <input class="date-native" type="date" id="input-start" aria-label="출장 시작일"
+                    <input class="date-native" type="date" id="input-start" aria-label="출장 시작일" onclick="openDatePicker(this)"
                       onchange="onDateChange()" oninput="onDateChange()" />
                   </div>
                   <span class="date-range-sep">
@@ -278,7 +278,7 @@
                       <rect x="10" y="9" width="2" height="2" rx=".5" fill="#8b95a1"/>
                     </svg>
                     <span class="date-placeholder" id="end-placeholder">종료</span>
-                    <input class="date-native" type="date" id="input-end" aria-label="출장 종료일"
+                    <input class="date-native" type="date" id="input-end" aria-label="출장 종료일" onclick="openDatePicker(this)"
                       onchange="onDateChange()" oninput="onDateChange()" />
                   </div>
                 </div>
@@ -288,14 +288,19 @@
 
               <!-- 교육 시작시각 (KTX 역산 안내에 쓰임) -->
               <div class="info-field" id="field-time">
-                <label class="info-label" for="input-starttime">교육 시작시각</label>
+                <label class="info-label" for="input-starthour">첫날 교육 시작시각</label>
                 <div class="time-row">
-                  <input class="info-input time-input is-empty" type="time" id="input-starttime"
-                    step="600" aria-label="교육 시작시각"
-                    onchange="onTimeChange()" oninput="onTimeChange()" />
-                  <span class="time-empty-label" aria-hidden="true">시각을 골라주세요</span>
+                  <select class="info-input time-select" id="input-starthour" aria-label="시작 시" onchange="onTimeChange()">
+                    <option value="">시</option><option value="05">05시</option><option value="06">06시</option><option value="07">07시</option><option value="08">08시</option><option value="09">09시</option><option value="10">10시</option><option value="11">11시</option><option value="12">12시</option><option value="13">13시</option><option value="14">14시</option><option value="15">15시</option><option value="16">16시</option><option value="17">17시</option><option value="18">18시</option><option value="19">19시</option><option value="20">20시</option><option value="21">21시</option><option value="22">22시</option>
+                  </select>
+                  <span class="time-sep">:</span>
+                  <select class="info-input time-select" id="input-startmin" aria-label="시작 분 (10분 단위)" onchange="onTimeChange()">
+                    <option value="">분</option><option value="00">00분</option><option value="10">10분</option><option value="20">20분</option><option value="30">30분</option><option value="40">40분</option><option value="50">50분</option>
+                  </select>
+                  <input type="hidden" id="input-starttime" />
                 </div>
-                <p class="info-subhint" id="time-ktx-hint">🚄 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요 (10분 단위)</p>
+                <p class="info-subhint" id="time-ktx-hint">등록·오리엔테이션이 먼저 있으면 그 시각을 넣어 주세요. 마산역 역산 출발이 출근시각(08:30)보다 이르면 전날 이동으로 숙박 1박·일당 1일이 추가돼요.</p>
+                <div class="prevday-verdict hidden" id="prevday-verdict" aria-live="polite"></div>
               </div>
 
               <!-- 출장 장소 (구체적 장소 + 카카오 장소 검색) -->
