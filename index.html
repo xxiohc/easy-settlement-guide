@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css" />
     <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="icon" href="./smc-logo.png" />
   </head>
   <body>
 
@@ -214,24 +215,6 @@
               <h1 class="card-question" id="c4-period-msg">출장 정보를 확인해주세요</h1>
               <p class="card-desc" id="c4-place-msg">아래 내용이 맞는지 확인하고 수정할 수 있어요</p>
 
-              <div class="confirm-summary" id="c4-summary">
-                <!-- JS로 채워짐 -->
-              </div>
-
-              <!-- 교육비 확인 질문 -->
-              <div class="confirm-fee-q" id="c4-fee-q">
-                <div class="fee-q-row">
-                  <div class="fee-q-icon">💡</div>
-                  <div class="fee-q-text">
-                    <strong id="c4-fee-label">교육비 / 등록비가 있는 것 같아요</strong>
-                    <span id="c4-fee-sub">금액이 맞나요?</span>
-                  </div>
-                </div>
-                <div class="fee-confirm-btns">
-                  <button class="fee-confirm-btn fee-confirm-yes" onclick="confirmFeeYes()">예, 맞아요 — 자동 입력</button>
-                  <button class="fee-confirm-btn fee-confirm-no" onclick="confirmFeeNo()">아니요</button>
-                </div>
-              </div>
             </div>
 
             <!-- 공문 없이 직접 입력 시: 폼 뷰 -->
@@ -300,15 +283,17 @@
                   </div>
                 </div>
                 <div class="duration-tag hidden" id="duration-tag"></div>
+                <p class="date-warn hidden" id="date-warn"></p>
               </div>
 
               <!-- 교육 시작시각 (KTX 역산 안내에 쓰임) -->
               <div class="info-field" id="field-time">
                 <label class="info-label" for="input-starttime">교육 시작시각</label>
                 <div class="time-row">
-                  <input class="info-input time-input" type="time" id="input-starttime"
+                  <input class="info-input time-input is-empty" type="time" id="input-starttime"
                     step="600" aria-label="교육 시작시각"
-                    onchange="onTimeChange()" />
+                    onchange="onTimeChange()" oninput="onTimeChange()" />
+                  <span class="time-empty-label" aria-hidden="true">시각을 골라주세요</span>
                 </div>
                 <p class="info-subhint" id="time-ktx-hint">🚄 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요 (10분 단위)</p>
               </div>
@@ -361,7 +346,7 @@
                       placeholder="0" oninput="formatFeeInput(this); clearCard4Error('input-fee')" />
                     <span class="fee-unit">원</span>
                   </div>
-                  <p class="info-subhint">사전납입 · 회원병원 기준 금액으로 입력해주세요</p>
+                  <p class="info-subhint" id="fee-subhint">사전납입 · 회원병원 기준 금액으로 입력해주세요</p>
 
                   <!-- 등록비 지원 기준 안내 -->
                   <div class="inline-fee-rule">
@@ -629,11 +614,11 @@
             <!-- 제주: 셔틀버스 -->
             <div class="extra-field hidden" id="field-shuttle">
               <div class="extra-question">
-                <strong>공항 셔틀버스를 이용하셨나요?</strong>
+                <strong id="shuttle-q">공항 셔틀버스를 이용하셨나요?</strong>
                 <span>이용 시 법인카드 결제 후 영수증 제출이 필요해요</span>
               </div>
               <div class="yn-group">
-                <button class="yn-btn" onclick="setYN('hasShuttle', true)">예, 이용했어요</button>
+                <button class="yn-btn" id="shuttle-yes" onclick="setYN('hasShuttle', true)">예, 이용했어요</button>
                 <button class="yn-btn" onclick="setYN('hasShuttle', false)">아니요</button>
               </div>
             </div>
@@ -679,7 +664,7 @@
 
             <div class="amount-note">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#8b95a1" stroke-width="1.2"/><path d="M7 4.5v3M7 9.5v.5" stroke="#8b95a1" stroke-width="1.2" stroke-linecap="round"/></svg>
-              <p>실제 정산은 결재 후 확정되며, 실비 항목(항공·셔틀)은 영수증 금액으로 반영돼요</p>
+              <p id="amount-note-text">실제 정산은 결재 후 확정돼요</p>
             </div>
           </div>
 
