@@ -2097,14 +2097,27 @@ function accessLine(b, dest) {
   return `대중교통 약 ${b.access}분(${basis})${links}${transitDetailHtml(b.accessRoute)}`
 }
 
-// 코레일 예매 화면. 새 코레일 사이트는 매크로 방지로 요청을 암호화해 주소에 구간·날짜를 넣어도
-// 버린다(2026-09-26 실측 — 예전 letskorail 주소도 빈 예매 화면으로 넘어간다). 그래서 예매 화면만 열고
-// 찾을 편(구간·날짜·시각·열차번호)을 옆에 적어 둔다.
+// 코레일 예매 화면. 코레일 목록 화면은 조회 조건을 주소가 아니라 자기 사이트 안의 화면 상태(history.state)로만
+// 받는다(2026-09-26 실측) — 다른 사이트 링크로는 구간·날짜가 채워진 목록을 열 수 없다. 그래서 앱이 가진 시간표로
+// 그날 그 구간 직통 열차 목록을 바로 펼쳐 보이고, 예매는 코레일에서 한다. 좌석 여부는 코레일에서만 보인다.
 const KORAIL_SEARCH_URL = 'https://www.korail.com/ticket/search/general'
-function korailLinkHtml(leg) {
+function korailLinkHtml(leg, picked, earlier) {
   const day = state.startDate ? `${shortDate(state.startDate)} ` : ''
-  return `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${KORAIL_SEARCH_URL}">코레일 예매 ↗</a>` +
-    `<span class="ra-hint">${day}${escapeHtml(leg.from)}→${escapeHtml(leg.to)} ${fmtTime(leg.dep)} 편</span></span>`
+  const trains = findItineraries(leg.to, 1440 * 2, tripDow())
+    .filter(it => it.transfers === 0)
+    .sort((x, y) => x.dep - y.dep)
+  const rows = trains.map(it => {
+    const l = it.legs[0]
+    const mark = it.dep === picked ? ' is-picked' : it.dep === earlier ? ' is-earlier' : ''
+    const tag = it.dep === picked ? '<em>권한 편</em>' : it.dep === earlier ? '<em>앞 편</em>' : ''
+    return `<tr class="kt-row${mark}"><td>${fmtTime(l.dep)}</td><td>${fmtTime(l.arr)}</td><td>${escapeHtml(l.no)}</td><td>${fmtDur(l.arr - l.dep)}${tag}</td></tr>`
+  }).join('')
+  const list = trains.length ? `<details class="kt-list"><summary>${day}${escapeHtml(leg.from)}→${escapeHtml(leg.to)} 직통 열차 ${trains.length}편 보기</summary>
+      <table class="kt-table"><thead><tr><th>출발</th><th>도착</th><th>열차</th><th>소요</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="kt-note">KORAIL 시간표 기준 · 좌석은 코레일에서 확인해 주세요</div>
+    </details>` : ''
+  return `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${KORAIL_SEARCH_URL}">코레일에서 예매 ↗</a>` +
+    `<span class="ra-hint">${day}${escapeHtml(leg.from)}→${escapeHtml(leg.to)} ${fmtTime(leg.dep)} 편</span></span>${list}`
 }
 
 // 현장 도착 후 교육 시작까지 남는 시간(2026-09-26 지석초이) — 빠듯 15분 미만 / 적당 ~60분 / 넉넉
@@ -2117,11 +2130,15 @@ function slackPill(min) {
 
 // 조금 더 일찍 닿고 싶을 때 — 같은 역으로 가는 바로 앞 직통편(2026-09-26 지석초이).
 // 정산 판정은 권한 편 기준 그대로다. 앞 편을 탄다고 전날 이동이 되지 않는다.
-function earlierTrainHtml(b) {
-  if (!b || b.transfers) return ''
-  const prev = findItineraries(b.station, b.arr, tripDow())
+function earlierDirect(b) {
+  if (!b || b.transfers) return null
+  return findItineraries(b.station, b.arr, tripDow())
     .filter(it => it.transfers === 0 && it.dep < b.dep)
-    .sort((x, y) => y.dep - x.dep)[0]
+    .sort((x, y) => y.dep - x.dep)[0] || null
+}
+
+function earlierTrainHtml(b) {
+  const prev = earlierDirect(b)
   if (!prev) return ''
   return `<div class="ra-earlier">
     <div class="ra-earlier-title">조금 더 일찍 가려면</div>
@@ -2160,7 +2177,7 @@ function renderPrevDayVerdict() {
     b.legs.forEach((leg, i) => {
       rows.push(`<li class="is-train"><span class="ra-t">${fmtTime(leg.dep)}</span><span class="ra-dot"></span>
         <span>${i === 0 ? '마산역' : escapeHtml(leg.from) + '역 환승'} 출발<span class="ra-sub">${escapeHtml(leg.type)} ${escapeHtml(leg.no)}</span>
-        ${korailLinkHtml(leg)}</span></li>`)
+        ${i === 0 && !b.transfers ? korailLinkHtml(leg, b.dep, earlierDirect(b)?.dep) : korailLinkHtml(leg)}</span></li>`)
       if (i < b.legs.length - 1) {
         rows.push(`<li><span class="ra-t">${fmtTime(leg.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(leg.to)}역 도착</span></li>`)
       }
