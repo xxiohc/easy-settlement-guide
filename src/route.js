@@ -152,11 +152,14 @@ function findDestination(text) {
 
 // 역 → 목적지 접근시간. 사람이 확인한 값(사용자 입력 > 마스터 등재)이 있으면 그것을 쓰고,
 // 없으면 거리 기반 추정을 쓴다. 어느 쪽인지 src로 함께 돌려줘 화면에 그대로 밝힌다.
-function accessInfo(stationName, km, destRow, overrides) {
+// 역→목적지 이동시간 출처 우선순위: 직접 입력 > 등재 확인값 > ODsay 대중교통 조회 > 직선거리 추정
+function accessInfo(stationName, km, destRow, overrides, transit) {
   const user = overrides && overrides[stationName]
   if (Number.isFinite(user)) return { min: Math.max(0, Math.round(user)), src: 'user' }
   const fixed = destRow && destRow.accessOverride && destRow.accessOverride[stationName]
   if (Number.isFinite(fixed)) return { min: Math.max(0, Math.round(fixed)), src: 'known' }
+  const t = transit && transit[stationName]
+  if (t && Number.isFinite(t.min)) return { min: Math.max(0, Math.round(t.min)), src: 'transit', route: t }
   return { min: accessMinutes(km), src: 'est' }
 }
 
@@ -255,6 +258,22 @@ function findItineraries(dest, deadline, dow) {
   return [...direct, ...byDep.values()].sort((a, b) => b.dep - a.dep || a.arr - b.arr)
 }
 
+// 추천편 고르기(2026-09-26 지석초이 지시). ① 제때 닿는 직통이 있으면 직통만 본다 — 환승이 조금 늦게
+// 출발해도 된다고 오송 환승을 권하면 사람이 실제로 타지 않는다(강북삼성병원: 06:35 직통 서울역이 맞다).
+// ② 역마다 제때 닿는 가장 늦은 편을 고른다. ③ 그중 마산역→현장 실제 이동시간이 짧은 역.
+// 전날 이동 판정(08:30)은 이렇게 고른 편의 출발시각으로 한다.
+function pickBest(list, fareVal) {
+  const directs = list.filter(p => p.transfers === 0)
+  const pool = directs.length ? directs : list
+  const latest = new Map()
+  for (const p of pool) {
+    const cur = latest.get(p.station)
+    if (!cur || p.dep > cur.dep || (p.dep === cur.dep && p.travelMin < cur.travelMin)) latest.set(p.station, p)
+  }
+  return [...latest.values()].sort((a, b) =>
+    a.travelMin - b.travelMin || b.dep - a.dep || a.transfers - b.transfers || fareVal(a) - fareVal(b))[0]
+}
+
 function fareOf(station, isMS) {
   const f = KtxRoute.fares[station]
   if (!f) return null
@@ -279,7 +298,7 @@ function candidateStations(lat, lon, limit = CAND_LIMIT) {
 // 출장 시작시각(startMin)에 목적지에 도착하도록 마산역 출발편을 역산한다.
 // destRow: 등재된 기관 정보(있으면 확인된 접근시간 사용), access: 사용자가 직접 넣은 {역명: 분}
 // only: 사용자가 도착역을 직접 지정한 경우 그 역으로만 계산한다(폴백 입력).
-function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only }) {
+function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, transit, only }) {
   if (!KtxRoute.ready) return { ok: false, reason: 'data' }
 
   const origin = KtxRoute.stations[ORIGIN_STATION]
@@ -296,7 +315,7 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
   // 후보역마다 접근시간을 먼저 구하고, 목적지에서 너무 먼 역은 버린다.
   // (예: 전주 국민연금공단을 대전역에서 내려 2시간 넘게 버스로 가는 조합을 추천하지 않는다)
   let scored = candidateStations(lat, lon)
-    .map(st => ({ st, ai: accessInfo(st.name, st.km, destRow, access) }))
+    .map(st => ({ st, ai: accessInfo(st.name, st.km, destRow, access, transit) }))
   if (pin) {
     const pinned = scored.filter(x => x.st.name === pin)
     if (pinned.length) scored = pinned
@@ -304,7 +323,7 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
       const s = KtxRoute.stations[pin]
       if (s && KtxRoute.fares[pin]) {
         const st = { name: pin, km: haversineKm(lat, lon, s.lat, s.lon), ...s }
-        scored = [{ st, ai: accessInfo(pin, st.km, destRow, access) }]
+        scored = [{ st, ai: accessInfo(pin, st.km, destRow, access, transit) }]
       }
     }
   }
@@ -333,7 +352,7 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
         const margin = startMin - ai.min - it.arr
         acc.push({
           station: st.name, stationKm: Math.round(st.km * 10) / 10,
-          stationAddr: st.addr, access: ai.min, accessSrc: ai.src, deadline, fare,
+          stationAddr: st.addr, access: ai.min, accessSrc: ai.src, accessRoute: ai.route || null, deadline, fare,
           margin,
           slack: margin - ARRIVE_BUFFER,
           tight: margin < TIGHT_SLACK + ARRIVE_BUFFER,
@@ -363,9 +382,6 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
     return { ok: false, reason: 'no-train', candidates: cands.map(c => c.st.name) }
   }
 
-  // 1순위: 마산역에서 가장 늦게 나서도 되는 편(총 구속시간 최소).
-  // 같으면 2순위: 문 앞까지 실제 이동시간이 짧은 역 — 여기서 접근시간이 짧은 역이 이긴다.
-  // 그다음 환승 적은 편 → 운임 싼 역.
   const fareVal = p => (p.fare ? p.fare.oneWay : Number.MAX_SAFE_INTEGER)
   const byTotal = (a, b) =>
     a.totalMin - b.totalMin ||
@@ -374,7 +390,7 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, only
     fareVal(a) - fareVal(b)
   plans.sort(byTotal)
   const safe = plans.filter(p => p.margin >= MIN_SLACK + ARRIVE_BUFFER)
-  const best = (safe.length ? safe : plans)[0]
+  const best = pickBest(safe.length ? safe : plans, fareVal)
 
   // 차선은 '다른 도착역'을 우선 보여준다. 같은 열차를 역 이름만 바꿔 되풀이하면 쓸모가 없다.
   const pool = (safe.length ? safe : plans).filter(p => p !== best)
@@ -463,11 +479,11 @@ function fareStationNames() {
 }
 
 // 같은 목적지로 '전날 이동'이 필요한 경우, 전날 막차 기준 후보를 뽑는다.
-function planPreviousDay({ lat, lon, dow, destRow, access }) {
+function planPreviousDay({ lat, lon, dow, destRow, access, transit }) {
   if (!KtxRoute.ready) return null
   const prevDow = dow == null ? null : (dow + 6) % 7
   const scored = candidateStations(lat, lon)
-    .map(s => ({ s, ai: accessInfo(s.name, s.km, destRow, access) }))
+    .map(s => ({ s, ai: accessInfo(s.name, s.km, destRow, access, transit) }))
     .sort((a, b) => a.ai.min - b.ai.min)
   if (!scored.length) return null
   const { s: st, ai } = scored[0]

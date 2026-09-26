@@ -1,6 +1,8 @@
 // ── 카카오 장소 검색 API 키 ────────────────────────────────────────────────────
 // developers.kakao.com → 내 애플리케이션 → REST API 키
 const KAKAO_API_KEY = (typeof window !== 'undefined' && window.KAKAO_API_KEY) || ''
+// ODsay 대중교통 길찾기(무료 Basic 하루 30건). 웹 키는 등록한 사이트 주소에서만 쓰인다.
+const ODSAY_API_KEY = (typeof window !== 'undefined' && window.ODSAY_API_KEY) || ''
 
 // ── 단계 정의 ────────────────────────────────────────────────────────────────
 const STEPS = [
@@ -43,6 +45,7 @@ const state = {
   isDayTrip: null,
   prevDayMove: null,
   prevDayAuto: false,   // prevDayMove를 역산이 정했는지(사람이 답한 게 아니면 true)
+  transitAccess: {},    // ODsay로 조회한 역→현장 대중교통 { 역이름: { min, steps, key } }
   lodgingProvided: null,
   mealProvided: null,
   hasPlane: null,
@@ -552,6 +555,8 @@ async function processUploadedFile(file) {
 
   const ext = file.name.toLowerCase().split('.').pop()
   let text = ''
+  // AI 판독은 서버에서 따로 돈다 — 브라우저 OCR과 동시에 시작해 기다리는 시간을 겹친다
+  const aiPromise = aiReadDoc(file)
 
   try {
     if (ext === 'pdf') {
@@ -595,8 +600,12 @@ async function processUploadedFile(file) {
     return
   }
 
-  setParseProgress(95, '정보 추출 중')
-  const meta = parseDocMeta(file.name, text)
+  setParseProgress(85, '정보 추출 중')
+  const ruleMeta = parseDocMeta(file.name, text)
+  setParseProgress(90, 'AI 판독과 대조 중')
+  const ai = await aiPromise
+  const meta = ai.ok ? mergeAiMeta(ruleMeta, ai.fields) : { ...ruleMeta, ai: false, aiError: ai.error }
+  meta.fileName = file.name
   state.parsedMeta = meta
 
   setParseProgress(100, '완료!')
@@ -899,6 +908,47 @@ function parseDateSnippet(snip, curY) {
 
 const EVENT_DATE_LABEL = /(?<![가-힣])(?:교\s*육\s*|개\s*최\s*|행\s*사\s*|연\s*수\s*|과\s*정\s*)?(?:일\s*_?\s*시|일\s*_?\s*자|기\s*간|일\s*정)(?![가-힣])/g
 
+// 장소 글자 → 운임표 지역. 규칙 판독과 AI 판독이 같은 표로 지역을 정한다.
+const REGION_MAP = [
+  ['제주특별자치도|제주도|제주시|서귀포|제주', '제주'],
+  // 수원 — 성균관대 자연과학캠퍼스가 여기다. 운임표에 수원역이 있어 왕복 77,600원이고
+  // 서울역(97,200원)으로 잡으면 19,600원이 부풀려진다. 발신처 주소가 '서울 종로구'인
+  // 공문(성균관대 법인사무국)이 많으므로 서울 규칙보다 반드시 먼저 봐야 한다.
+  ['자연과학캠퍼스|성대\\s*수원|성균관대.*수원|수원', '수원'],
+  // 서울 자치구
+  ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
+  // 서울 주요 병원 (병원명으로 장소 특정되는 경우)
+  ['삼성서울병원|세브란스병원|신촌세브란스|강남세브란스|서울대학교병원|서울아산병원|서울성모병원|가톨릭대.*서울|한양대.*서울|이화.*서울|고대.*서울|고려대.*서울|건국대.*병원|경희대.*서울|중앙대.*서울|인하대.*서울', '서울'],
+  // 서울 랜드마크
+  ['서울특별시|여의도|여의나루|서울역|수서역|코엑스|COEX|삼성동|잠실|홍대|명동|광화문|서울시청|시청역|강남역', '서울'],
+  // 나머지 경기·인천 (서울 출장 처리) — 수원은 위에서 따로 잡는다. 성균관대학교는
+  // 인문사회과학캠퍼스(종로)가 기본이고 삼성창원병원·창원은 뺀다
+  ['경기도|인천광역시|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대학교(?!\\s*(?:삼성창원|창원))', '서울'],
+  ['천안시?|아산시?|천안아산역', '천안'],
+  ['오송|청주시?', '오송'],
+  ['대전광역시|대전시?|을지대.*대전|유성구|서구.*대전|대전.*서구', '대전'],
+  ['동대구|대구광역시|대구시?', '동대구'],
+  ['경주시?|신경주', '경주'],
+  ['울산광역시|울산시?', '울산'],
+  // 부산 (해운대구에 "대구" 포함되어 반드시 동대구보다 앞에 있어야 함)
+  ['부산광역시|부산시?|부산교육원|해운대|동래|사하|금정', '부산'],
+  ['전주시?|전라북도|전북', '전주'],
+  // 시외버스 고정 구간 — 지역명을 합치지 않고 따로 잡는다(안내에 그 지명이 그대로 나온다)
+  ['순천시?|광양시?', '순천'],
+  ['여수시?', '여수'],
+  ['목포시?', '목포'],
+  ['창원시?|마산|진해|창원특례시|삼성창원병원|성균관대.*창원|경상국립대.*창원', '창원'],
+  ['진주시?', '진주'],
+]
+
+function matchRegion(text) {
+  if (!text) return ''
+  for (const [keywords, region] of REGION_MAP) {
+    if (new RegExp(keywords, 'i').test(text)) return region
+  }
+  return ''
+}
+
 function parseDocMeta(filename, text) {
   const norm = s => s.replace(/\s+/g, '')
   const col  = s => s.replace(/\s+/g, ' ').trim()
@@ -1056,48 +1106,9 @@ function parseDocMeta(filename, text) {
   }
 
   // ── 장소 → 지역 ──
-  const REGION_MAP = [
-    ['제주특별자치도|제주도|제주시|서귀포|제주', '제주'],
-    // 수원 — 성균관대 자연과학캠퍼스가 여기다. 운임표에 수원역이 있어 왕복 77,600원이고
-    // 서울역(97,200원)으로 잡으면 19,600원이 부풀려진다. 발신처 주소가 '서울 종로구'인
-    // 공문(성균관대 법인사무국)이 많으므로 서울 규칙보다 반드시 먼저 봐야 한다.
-    ['자연과학캠퍼스|성대\\s*수원|성균관대.*수원|수원', '수원'],
-    // 서울 자치구
-    ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
-    // 서울 주요 병원 (병원명으로 장소 특정되는 경우)
-    ['삼성서울병원|세브란스병원|신촌세브란스|강남세브란스|서울대학교병원|서울아산병원|서울성모병원|가톨릭대.*서울|한양대.*서울|이화.*서울|고대.*서울|고려대.*서울|건국대.*병원|경희대.*서울|중앙대.*서울|인하대.*서울', '서울'],
-    // 서울 랜드마크
-    ['서울특별시|여의도|여의나루|서울역|수서역|코엑스|COEX|삼성동|잠실|홍대|명동|광화문|서울시청|시청역|강남역', '서울'],
-    // 나머지 경기·인천 (서울 출장 처리) — 수원은 위에서 따로 잡는다. 성균관대학교는
-    // 인문사회과학캠퍼스(종로)가 기본이고 삼성창원병원·창원은 뺀다
-    ['경기도|인천광역시|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대학교(?!\\s*(?:삼성창원|창원))', '서울'],
-    ['천안시?|아산시?|천안아산역', '천안'],
-    ['오송|청주시?', '오송'],
-    ['대전광역시|대전시?|을지대.*대전|유성구|서구.*대전|대전.*서구', '대전'],
-    ['동대구|대구광역시|대구시?', '동대구'],
-    ['경주시?|신경주', '경주'],
-    ['울산광역시|울산시?', '울산'],
-    // 부산 (해운대구에 "대구" 포함되어 반드시 동대구보다 앞에 있어야 함)
-    ['부산광역시|부산시?|부산교육원|해운대|동래|사하|금정', '부산'],
-    ['전주시?|전라북도|전북', '전주'],
-    // 시외버스 고정 구간 — 지역명을 합치지 않고 따로 잡는다(안내에 그 지명이 그대로 나온다)
-    ['순천시?|광양시?', '순천'],
-    ['여수시?', '여수'],
-    ['목포시?', '목포'],
-    ['창원시?|마산|진해|창원특례시|삼성창원병원|성균관대.*창원|경상국립대.*창원', '창원'],
-    ['진주시?', '진주'],
-  ]
-
   // 장소 → 지역 탐색 (발신자 주소 오인 방지 강화)
   let destination = ''
 
-  const matchRegion = (text) => {
-    if (!text) return ''
-    for (const [keywords, region] of REGION_MAP) {
-      if (new RegExp(keywords, 'i').test(text)) return region
-    }
-    return ''
-  }
 
   // 형식0: 장소를 읽었으면 그 장소로 판정한다 — 본문에는 발신처 주소가 섞여 있다
   const venue = extractVenue(tc)
@@ -1279,6 +1290,129 @@ function parseDocMeta(filename, text) {
            yearGuessed, isTripDoc, docKind, multiSession }
 }
 
+// ── AI 판독 + 교차검증 ───────────────────────────────────────────────────────
+// Claude(api/parse-doc.js)가 원본을 읽은 값과 규칙 판독(parseDocMeta) 값을 항목별로 맞춘다.
+// 금액에 영향을 주는 항목은 둘이 같을 때만 채우고, 다르거나 한쪽만 읽었으면 비운 뒤 후보를 보인다.
+// 틀린 값이 자동으로 들어가는 것보다 한 번 더 고르게 하는 편이 낫다(2026-09-26 지석초이 승인).
+const AI_PARSE_URL = './api/parse-doc'
+const AI_MAX_BYTES = 3 * 1024 * 1024
+const CROSS_CHECKED = ['startDate', 'endDate', 'startTime', 'destination', 'registration']
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1] || '')
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(file)
+  })
+}
+
+// 폰 사진은 수 MB라 함수 요청 한도를 넘는다 — 긴 변 2000px JPEG로 줄여 보낸다
+async function imageForAi(file) {
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height))
+  const c = document.createElement('canvas')
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale)
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height)
+  return c.toDataURL('image/jpeg', 0.88).split(',')[1]
+}
+
+async function aiReadDoc(file) {
+  const ext = file.name.toLowerCase().split('.').pop()
+  const isPdf = ext === 'pdf'
+  if (!isPdf && !['jpg', 'jpeg', 'png'].includes(ext)) return { ok: false, error: '지원하지 않는 형식' }
+  if (isPdf && file.size > AI_MAX_BYTES) return { ok: false, error: '파일이 커서 AI 판독을 건너뛰었어요' }
+  try {
+    const data = isPdf ? await fileToBase64(file) : await imageForAi(file)
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 75000)
+    const res = await fetch(AI_PARSE_URL, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
+      body: JSON.stringify({ data, mediaType: isPdf ? 'application/pdf' : 'image/jpeg' }),
+    })
+    clearTimeout(timer)
+    const body = await res.json().catch(() => ({ ok: false, error: `응답 오류 ${res.status}` }))
+    return body.ok ? body : { ok: false, error: body.error || `응답 오류 ${res.status}` }
+  } catch (e) {
+    return { ok: false, error: e.name === 'AbortError' ? 'AI 판독 시간이 초과됐어요' : e.message }
+  }
+}
+
+function snapTime10(hhmm) {
+  return /^\d{1,2}:\d{2}$/.test(hhmm || '') ? snapTo10(hhmm.padStart(5, '0')) : ''
+}
+
+function recomputePeriod(meta) {
+  if (!meta.startDate || !meta.endDate) {
+    Object.assign(meta, { periodDisplay: '', nights: 0, days: 0 })
+    return
+  }
+  const [sy, sm, sd] = meta.startDate.split('-').map(Number)
+  const [, em, ed] = meta.endDate.split('-').map(Number)
+  const nights = Math.max(0, Math.round((new Date(meta.endDate) - new Date(meta.startDate)) / 86400000))
+  Object.assign(meta, { nights, days: nights + 1,
+    periodDisplay: nights > 0 ? `${sm}월 ${sd}일 ~ ${em}월 ${ed}일` : `${sm}월 ${sd}일` })
+  void sy
+}
+
+// rule: parseDocMeta 결과, ai: api/parse-doc 의 fields. 돌려주는 meta 는 rule 과 같은 모양 + checks.
+function mergeAiMeta(rule, ai) {
+  const v = f => (ai[f] && ai[f].value !== undefined ? ai[f].value : null)
+  const q = f => (ai[f] && ai[f].quote) || ''
+  const aiVals = {
+    startDate: v('startDate') || '', endDate: v('endDate') || v('startDate') || '',
+    startTime: snapTime10(v('startTime')), destination: matchRegion(v('venue') || ''),
+    registration: Number.isInteger(v('registrationFee')) && v('registrationFee') > 0 ? v('registrationFee') : null,
+  }
+  const quotes = { startDate: q('startDate'), endDate: q('endDate') || q('startDate'), startTime: q('startTime'),
+    destination: q('venue'), registration: q('registrationFee') }
+
+  if (ai.docKind && ai.docKind !== 'notice') {
+    const blank = parseDocMeta('', '')
+    return { ...blank, isTripDoc: false, docKind: ai.docKind === 'receipt' ? 'other' : ai.docKind, ai: true, checks: {} }
+  }
+
+  const meta = { ...rule, isTripDoc: true, docKind: 'notice', ai: true, checks: {} }
+  // 제목·장소는 금액에 영향이 없고 AI가 스캔본을 훨씬 잘 읽는다 — AI 값을 쓰고 없으면 규칙 값
+  if (v('title')) meta.title = v('title')
+  if (v('venue')) meta.venue = v('venue')
+  meta.multiSession = !!(rule.multiSession || v('multiSession'))
+  const aiOnline = v('isOnline')
+  if (aiOnline !== null && aiOnline !== rule.isOnline) meta.checks.isOnline = { status: 'conflict', rule: rule.isOnline, ai: aiOnline, quote: q('isOnline') }
+
+  for (const f of CROSS_CHECKED) {
+    const r = rule[f] ?? (f === 'registration' ? null : '')
+    const a = aiVals[f]
+    const has = x => x !== null && x !== ''
+    let status
+    if (has(r) && has(a)) status = String(r) === String(a) ? 'agree' : 'conflict'
+    else status = has(r) ? 'rule-only' : has(a) ? 'ai-only' : 'none'
+    meta.checks[f] = { status, rule: r, ai: a, quote: quotes[f] }
+    if (status !== 'agree') meta[f] = f === 'registration' ? null : ''
+  }
+  if (meta.checks.registration.status !== 'agree') meta.registrationNote = null
+  if (meta.checks.startDate.status === 'agree' && meta.checks.endDate.status !== 'agree') meta.endDate = ''
+  recomputePeriod(meta)
+  meta.yearGuessed = meta.checks.startDate.status === 'agree' ? false : rule.yearGuessed
+  return meta
+}
+
+// 확인 필요 항목의 후보를 사람이 고르면 그 값으로 채운다
+function applyCandidate(field, source) {
+  const meta = state.parsedMeta
+  const c = meta && meta.checks && meta.checks[field]
+  if (!c) return
+  const value = c[source]
+  if (field === 'isOnline') meta.isOnline = value
+  else meta[field] = value
+  if (field === 'startDate' && !meta.endDate) meta.endDate = value
+  recomputePeriod(meta)
+  c.status = 'picked'
+  c.picked = source
+  state.appliedMeta = null
+  renderParseResult(meta.fileName || '', meta, true)
+}
+
 // 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
 function extractTimes(tc) {
   const toHM = (h, m, ampm) => {
@@ -1342,6 +1476,25 @@ function tidyVenue(raw) {
   // 장소 뒤에 딸린 길 안내 "(여의나루역 1번 출구 도보 10분)"는 검색을 방해한다
   v = v.replace(/\s*\([^)]*(?:출구|도보|분 거리|주차)[^)]*\)\s*$/, '')
   return fixLetterSpacing(v).slice(0, 60).trim()
+}
+
+// 교차검증 표시: 일치 ✅, 달라서 비운 칸은 ⚠️ + 후보 버튼(누르면 그 값으로 채움) + AI 근거 문장
+const CHECK_FMT = {
+  registration: v => (v ? `${Number(v).toLocaleString()}원` : ''),
+  isOnline: v => (v ? '온라인' : '오프라인'),
+}
+function checkHtml(meta, field, label) {
+  const c = meta.checks && meta.checks[field]
+  if (!c || c.status === 'none') return ''
+  const fmtV = CHECK_FMT[field] || (v => String(v ?? ''))
+  const quote = c.quote ? `<span class="chk-quote">근거: “${escapeHtml(c.quote.slice(0, 80))}”</span>` : ''
+  const head = label ? `${label} ` : ''
+  if (c.status === 'agree') return `<span class="chk chk-ok">✅ ${head}AI·규칙 일치</span>`
+  if (c.status === 'picked') return `<span class="chk chk-ok">☑️ ${head}${c.picked === 'ai' ? 'AI' : '규칙'} 판독 값을 골랐어요</span>`
+  const btn = src => (c[src] === null || c[src] === '' || c[src] === undefined) ? ''
+    : `<button type="button" class="chk-pick" onclick="applyCandidate('${field}','${src}')">${src === 'ai' ? 'AI' : '규칙'}: ${escapeHtml(fmtV(c[src]))}</button>`
+  const why = c.status === 'conflict' ? '두 판독이 달라요' : c.status === 'ai-only' ? 'AI만 읽었어요' : '규칙 판독만 읽었어요'
+  return `<span class="chk chk-warn">⚠️ ${head}${why} — 맞는 값을 누르세요</span><span class="chk-picks">${btn('ai')}${btn('rule')}</span>${quote}`
 }
 
 function renderParseResult(filename, meta, hasText) {
@@ -1414,15 +1567,21 @@ function renderParseResult(filename, meta, hasText) {
     ? `<div class="result-item full"><label>장소</label><span>${escapeHtml(meta.venue)}</span></div>`
     : `<div class="result-item full"><label>장소</label><span class="empty">확인 안 됨 — 직접 입력</span></div>`
 
+  const aiNote = meta.docKind && meta.docKind !== 'notice' ? ''
+    : meta.ai
+    ? `<div class="result-ai full">🤖 AI 판독과 규칙 판독을 대조했어요. <b>✅</b> 두 판독이 같은 값만 채웠고, <b>⚠️</b> 항목은 달라서 비워 뒀어요 — 공문을 보고 맞는 후보를 누르거나 다음 화면에서 직접 넣어 주세요.</div>`
+    : meta.aiError ? `<div class="result-ai full is-off">AI 판독을 쓰지 못해 규칙 판독만 썼어요(${escapeHtml(meta.aiError)}).</div>` : ''
+
   grid.innerHTML = `
     <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
+    ${aiNote}
     <div class="result-item full"><label>출장/교육명</label>${fmt(meta.title)}</div>
-    <div class="result-item"><label>기간</label>${fmt(periodStr)}</div>
-    <div class="result-item"><label>지역</label>${fmt(meta.destination)}</div>
-    <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}</div>
-    <div class="result-item"><label>교육 형태</label><span>${meta.isOnline ? '온라인' : '오프라인'}</span></div>
+    <div class="result-item"><label>기간</label>${fmt(periodStr)}${checkHtml(meta, 'startDate', '시작일')}${checkHtml(meta, 'endDate', '종료일')}</div>
+    <div class="result-item"><label>지역</label>${fmt(meta.destination)}${checkHtml(meta, 'destination')}</div>
+    <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}${checkHtml(meta, 'startTime')}</div>
+    <div class="result-item"><label>교육 형태</label><span>${meta.isOnline ? '온라인' : '오프라인'}</span>${checkHtml(meta, 'isOnline')}</div>
     ${venueHtml}
-    <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}</div>
+    <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}${checkHtml(meta, 'registration')}</div>
     ${warnHtml}
   `
   resultEl.classList.remove('hidden')
@@ -1521,7 +1680,10 @@ function renderTimeHint(meta) {
   const el = document.getElementById('time-ktx-hint')
   if (!el) return
   const missing = !!meta && !meta.startTime
-  el.textContent = missing
+  const st = meta && meta.checks && meta.checks.startTime && meta.checks.startTime.status
+  el.textContent = missing && (st === 'conflict' || st === 'ai-only' || st === 'rule-only')
+    ? '⚠️ AI와 규칙 판독이 서로 달라 비워 뒀어요. 공문을 보고 첫날 교육(등록) 시작시각을 직접 골라 주세요.'
+    : missing
     ? '⚠️ 공문에서 시작시각을 찾지 못했어요. 첫날 교육(등록) 시작시각을 직접 골라 주세요.'
     : meta ? `📄 공문에서 읽은 시각이에요. ${TIME_HINT_DEFAULT}` : TIME_HINT_DEFAULT
   el.classList.toggle('is-warn', missing)
@@ -1545,6 +1707,7 @@ async function geocodeDocVenue(venue) {
       if (state.place !== venue) return  // 그사이 사용자가 장소를 바꿨다
       state.placeLat = Number(d.y) || null
       state.placeLon = Number(d.x) || null
+      state.transitAccess = {}
       if (note) {
         note.textContent = `📍 카카오 지도 위치: ${d.place_name} · ${d.road_address_name || d.address_name || ''} — 다르면 장소를 다시 검색해 고르세요.`
         note.classList.remove('hidden')
@@ -1588,6 +1751,7 @@ function prepareCard4WithMeta() {
   state.placeLon = null
   state.accessOverride = {}
   state.pinStation = null
+  state.transitAccess = {}
   setStartTime(meta.startTime ? snapTo10(meta.startTime) : '', !!meta.startTime)
   renderTimeHint(meta)
   geocodeDocVenue(meta.venue)
@@ -1748,6 +1912,7 @@ function onPlaceInput() {
   state.placeLon = null
   state.accessOverride = {}
   state.pinStation = null
+  state.transitAccess = {}
   document.getElementById('place-geo-note')?.classList.add('hidden')
   renderPrevDayVerdict()
 
@@ -1815,6 +1980,7 @@ function selectPlace(name, addr, lat, lon) {
   state.place = name
   state.placeLat = Number(lat) || null
   state.placeLon = Number(lon) || null
+  state.transitAccess = {}
   // 주소에서 지역 자동 채우기 (장소 선택 시 항상 덮어씀)
   if (addr) {
     const regionGuess = guessRegionFromAddress(addr)
@@ -2037,16 +2203,85 @@ function kakaoRouteUrl(mode, fromName, from, toName, to) {
   const pt = (n, p) => `${encodeURIComponent(n.replace(/\s*\(.*$/, '').replace(/,/g, ' ').trim())},${p.lat},${p.lon}`
   return `https://map.kakao.com/link/by/${mode}/${pt(fromName, from)}/${pt(toName, to)}`
 }
+// ── ODsay 대중교통 조회 ──────────────────────────────────────────────────────
+// 역→현장 이동시간을 직선거리 추정 대신 실제 대중교통 경로로 바꾼다. 무료 한도(하루 30건)를
+// 아끼려고 같은 역·같은 좌표는 브라우저에 30일 저장하고, 한 목적지에서 역마다 한 번만 부른다.
+const TRANSIT_CACHE_DAYS = 30
+const transitPending = new Set()
+
+function transitKey(st, dest) {
+  return [st.lon, st.lat, dest.lon, dest.lat].map(n => Number(n).toFixed(4)).join(',')
+}
+
+function summarizeOdsayPath(path) {
+  const steps = (path.subPath || []).map(sp => {
+    if (sp.trafficType === 3) return sp.sectionTime ? { kind: '도보', min: sp.sectionTime, text: `도보 ${sp.sectionTime}분` } : null
+    const lane = (sp.lane && sp.lane[0]) || {}
+    const name = sp.trafficType === 1 ? (lane.name || '지하철') : `${lane.busNo || ''}번 버스`
+    return { kind: sp.trafficType === 1 ? '지하철' : '버스', min: sp.sectionTime,
+      text: `${name} ${sp.startName || ''} → ${sp.endName || ''} ${sp.sectionTime}분` }
+  }).filter(Boolean)
+  return { min: path.info.totalTime, steps }
+}
+
+async function fetchTransit(stationName, st, dest) {
+  const key = transitKey(st, dest)
+  const cacheKey = `odsay:v1:${key}`
+  try {
+    const hit = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+    if (hit && Date.now() - hit.at < TRANSIT_CACHE_DAYS * 86400000) return { ...hit.v, key }
+  } catch { /* 저장소를 못 쓰면 매번 조회 */ }
+  const qs = new URLSearchParams({ SX: st.lon, SY: st.lat, EX: dest.lon, EY: dest.lat, OPT: '0', apiKey: ODSAY_API_KEY })
+  const res = await fetch(`https://api.odsay.com/v1/api/searchPubTransPathT?${qs}`)
+  const body = await res.json()
+  const err = body.error && (Array.isArray(body.error) ? body.error[0] : body.error)
+  let v
+  if (err) {
+    // 700m 이내는 대중교통 대상이 아니다 — 걸어서 간다(분속 67m)
+    if (String(err.code) !== '-98') throw new Error(err.message || err.msg || `ODsay 오류 ${err.code}`)
+    const km = haversineKm(st.lat, st.lon, dest.lat, dest.lon)
+    const walk = Math.max(3, Math.ceil(km * 1000 / 67))
+    v = { min: walk, steps: [{ kind: '도보', min: walk, text: `도보 약 ${walk}분 (700m 이내)` }] }
+  } else {
+    v = summarizeOdsayPath(body.result.path[0])
+  }
+  try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), v })) } catch { /* 무시 */ }
+  return { ...v, key }
+}
+
+// 추천역이 직선거리 추정이면 그 역만 조회해 채우고 다시 그린다(역이 바뀌면 새 역도 한 번)
+function ensureTransit(b, dest) {
+  if (!ODSAY_API_KEY || !b || b.accessSrc !== 'est' || !dest || dest.proxy) return
+  const st = KtxRoute.stations && KtxRoute.stations[b.station]
+  if (!st) return
+  const key = transitKey(st, dest)
+  const cur = state.transitAccess[b.station]
+  if ((cur && cur.key === key) || transitPending.has(key)) return
+  transitPending.add(key)
+  fetchTransit(b.station, st, dest)
+    .then(v => { state.transitAccess = { ...state.transitAccess, [b.station]: v }; renderPrevDayVerdict() })
+    .catch(e => console.warn('ODsay 대중교통 조회 실패:', e.message))
+    .finally(() => transitPending.delete(key))
+}
+
+function transitDetailHtml(route) {
+  if (!route || !route.steps || !route.steps.length) return ''
+  return `<details class="ra-transit"><summary>대중교통 경로 상세</summary><ol>${
+    route.steps.map(s => `<li>${escapeHtml(s.text)}</li>`).join('')}</ol></details>`
+}
+
 function accessLine(b, dest) {
   if (!dest || dest.proxy) return `${escapeHtml(b.station)}역 기준 계산 — 장소를 검색 목록에서 고르면 현장까지 실제 거리로 계산해요`
   const basis = b.accessSrc === 'est' ? `추정 · 역에서 직선 ${b.stationKm}km 기준`
+    : b.accessSrc === 'transit' ? 'ODsay 대중교통 조회'
     : b.accessSrc === 'known' ? '확인값' : '직접 입력'
   const st = KtxRoute.stations && KtxRoute.stations[b.station]
   const links = st && dest && Number.isFinite(dest.lat)
     ? ` <a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', b.station + '역', st, dest.label || '목적지', dest)}">대중교통 경로 ↗</a>` +
       ` <a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', b.station + '역', st, dest.label || '목적지', dest)}">택시 경로 ↗</a>`
     : ''
-  return `대중교통 약 ${b.access}분(${basis})${links}`
+  ensureTransit(b, dest)
+  return `대중교통 약 ${b.access}분(${basis})${links}${transitDetailHtml(b.accessRoute)}`
 }
 
 // 카드4 첫날 이동 안내 패널(넓은 화면은 오른쪽 여백). 탈 기차 시각과 전날 이동 판정을 한눈에 보인다.
@@ -2590,7 +2825,7 @@ function legLine(leg) {
   </div>`
 }
 
-const ACCESS_SRC_LABEL = { known: '확인값', user: '직접 입력', est: '추정' }
+const ACCESS_SRC_LABEL = { known: '확인값', user: '직접 입력', transit: 'ODsay 대중교통 조회', est: '추정' }
 function accessSrcLabel(src) { return ACCESS_SRC_LABEL[src] || '추정' }
 
 // 마스터에 없는 기관이거나 추정값이 실제와 다를 때, 도착역과 이동시간을 직접 넣는 폼.
@@ -2690,7 +2925,7 @@ function computeRoutePlan() {
   return { manual: false, dest, dow, plan: planTrip({
     lat: dest.lat, lon: dest.lon, startMin, dow,
     isMS: state.isMS === true, endMin: toMinutes(state.endTime),
-    destRow: dest.row || null, access: state.accessOverride, only: state.pinStation,
+    destRow: dest.row || null, access: state.accessOverride, transit: state.transitAccess, only: state.pinStation,
   }) }
 }
 
@@ -2766,7 +3001,7 @@ function renderRoutePanel() {
         <div class="route-warn">시작시각 ${state.startTime}에 닿는 당일 열차가 없는 구간입니다. 전날 이동했다면 추가 일당·숙박비가 정산 대상이에요.</div>`)
     }
     const prev = dest ? planPreviousDay({ lat: dest.lat, lon: dest.lon, dow,
-      destRow: dest.row || null, access: state.accessOverride }) : null
+      destRow: dest.row || null, access: state.accessOverride, transit: state.transitAccess }) : null
     const prevHtml = prev && prev.options.length
       ? `<div class="route-alt-title">전날 이동 후보 (${prev.station}역 도착)</div>` +
         prev.options.map(o => `<div class="route-alt">마산 ${fmtTime(o.dep)} → ${prev.station} ${fmtTime(o.arr)} · ${o.legs[0].no}${o.transfers ? ` · ${o.via.join('·')} 환승` : ' · 직통'}</div>`).join('')
@@ -3571,7 +3806,7 @@ function restartFlow() {
     isMS: null, isShortDayTrip: null, isDayTrip: null, prevDayMove: null,
     lodgingProvided: null, mealProvided: null, hasPlane: null, hasShuttle: null,
     startTime: '', endTime: '', placeLat: null, placeLon: null,
-    accessOverride: {}, pinStation: null, fareOverride: null, prevDayAuto: false, appliedMeta: null,
+    accessOverride: {}, pinStation: null, fareOverride: null, prevDayAuto: false, appliedMeta: null, transitAccess: {},
   })
   // 폼 초기화
   ;['input-title','input-start','input-end','input-starthour','input-startmin','input-starttime','input-place','input-region','input-fee','input-dept','input-name'].forEach(id => {

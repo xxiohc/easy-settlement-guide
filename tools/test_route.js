@@ -168,13 +168,13 @@ const WORK_START_MIN = 8 * 60 + 30
 const prevDayCases = [
   // [목적지, 시작시각(분), 기대 판정]  judged: 'yes' | 'no' | 'forced'
   ['삼성서울병원',        13 * 60, 'yes'],    // 수서 07:33 — 12시 기준이면 미인정이던 구간
-  ['삼성서울병원',        14 * 60, 'no'],     // 수서 09:21
+  ['삼성서울병원',        14 * 60, 'yes'],    // 수서 07:33 직통 — 직통 우선(2026-09-26). 전엔 09:21 동대구 환승이라 'no'
   ['서울지방국세청',       9 * 60, 'yes'],    // 서울 04:59
   ['서울지방국세청',      13 * 60, 'no'],     // 서울 09:21 — 서울인데도 미인정
   ['건강보험심사평가원',   9 * 60, 'forced'], // 원주 — 당일 도착 열차 없음
   ['국민건강보험공단',    10 * 60, 'forced'], // 원주 — 당일 도착 열차 없음
   ['대한병원협회',        13 * 60, 'yes'],    // 용산 07:33
-  ['한국보건복지인재원',  13 * 60, 'no'],     // 오송 09:21
+  ['한국보건복지인재원',  13 * 60, 'yes'],    // 오송 07:33 직통 — 직통 우선(2026-09-26). 전엔 09:21 환승이라 'no'
 ]
 
 for (const [name, startMin, judged] of prevDayCases) {
@@ -308,4 +308,13 @@ test('도착역을 직접 골라도 철도 계산은 그대로 하고 버스 우
   assert.ok(p.ok)
   assert.equal(p.best.station, '서울')
   assert.ok(p.busFaster, '직접 고른 역에서도 버스 우세는 알려야 한다')
+})
+
+test('제때 닿는 직통이 있으면 환승보다 직통을 권한다 — 강북삼성병원 12:00은 서울역 직통', () => {
+  const dest = R.findDestination('강북삼성병원')
+  const lat = dest ? dest.lat : 37.5683, lon = dest ? dest.lon : 126.9679
+  const p = R.planTrip({ lat, lon, startMin: 12 * 60, dow: THU, destRow: dest || null })
+  assert.ok(p.ok)
+  assert.equal(p.best.transfers, 0, `환승편 ${R.fmtTime(p.best.dep)} ${p.best.via.join('·')}이 잡혔다`)
+  assert.equal(p.best.station, '서울')
 })
