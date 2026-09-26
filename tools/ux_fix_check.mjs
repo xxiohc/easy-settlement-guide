@@ -110,7 +110,7 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.selectOption('#input-starthour','09'); await p.selectOption('#input-startmin','30')
   await p.fill('#input-region','서울'); await p.waitForTimeout(300)
   const vd = (await p.textContent('#prevday-verdict').catch(()=>'')) || ''
-  check('⑩ 시작시각·지역을 넣으면 카드4에서 바로 전날 이동 판정', await vis(p,'#prevday-verdict') && vd.includes('전날 이동 인정') && vd.includes('135,000'), vd.replace(/\s+/g,' ').trim().slice(0,90))
+  check('⑩ 시작시각·지역을 넣으면 카드4에서 바로 탈 기차 안내', await vis(p,'#prevday-verdict') && vd.includes('이렇게 이동하세요') && /마산역 \d\d:\d\d 출발/.test(vd) && !vd.includes('135,000'), vd.replace(/\s+/g,' ').trim().slice(0,90))
   { const hours = await p.$$eval('#input-starthour option', os=>os.map(o=>o.value).filter(Boolean))
     check('⑬ 시작시각은 16시까지만', hours[hours.length-1]==='16' && hours[0]==='05', hours.join(','))
     await p.selectOption('#input-starthour','16'); await p.waitForTimeout(100)
