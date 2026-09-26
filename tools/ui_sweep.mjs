@@ -127,8 +127,9 @@ async function run(withDoc){
   const c9 = await cur()
   log(P,'카드9 도달', c9==='card-9'?'PASS':'FAIL', `현재 ${c9}`)
   if(c9==='card-9'){
-    const rp = await p.evaluate(()=>{const e=document.getElementById('routePanel'); return {hidden:e.classList.contains('hidden'), text:(e.innerText||'').trim()}})
-    log(P,'KTX 역산 패널(카드9)', (!rp.hidden && /마산|역/.test(rp.text))?'PASS':'FAIL', rp.hidden?'hidden':rp.text.replace(/\s+/g,' ').slice(0,130))
+    // 2026-09-26: 카드9의 '정산 기준' 상자는 없앴다 — 역산이 고른 역은 계산 결과에서 직접 읽는다
+    const rp = await p.evaluate(()=>{const r=computeRoutePlan(); return {text: r && r.plan && r.plan.ok ? `마산역 → ${r.plan.best.station}역` : ''}})
+    log(P,'역산 결과(카드9)', /마산역 → \S+역/.test(rp.text)?'PASS':'FAIL', rp.text)
     const tot = (await p.textContent('#totalAmount')||'').trim()
     const bd  = (await p.innerText('#amountBreakdown')||'').replace(/\n/g,' | ')
     log(P,'카드9 총액 산출', /[0-9],?[0-9]*원/.test(tot)?'PASS':'FAIL', `총액 ${tot}`)

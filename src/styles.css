@@ -2950,83 +2950,12 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   color: var(--muted);
 }
 
-.route-pick {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 12px 14px;
-  background: var(--primary-soft);
-  border-radius: 12px;
-}
-
-.route-pick-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary-dark);
-}
-
-.route-pick-time {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--primary-dark);
-  letter-spacing: -0.02em;
-}
-
-.route-leg {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 12px;
-  padding: 12px 14px;
-  background: var(--surface);
-  border-radius: 12px;
-}
-
-.route-leg-train {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--subtle);
-}
-
-.route-leg-time {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-
-.route-leg-note {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.route-transfer {
-  margin-top: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--subtle);
-  text-align: center;
-}
-
 .route-step {
   margin-top: 10px;
   font-size: 13px;
   line-height: 1.55;
   color: var(--subtle);
   letter-spacing: -0.01em;
-}
-
-.route-tight {
-  display: inline-block;
-  margin-left: 4px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: #fff4e6;
-  color: #c2410c;
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .route-alt-title {
@@ -3077,8 +3006,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 
 .route-fix[open] > summary::before { content: '−'; }
 
-.route-fix-body { margin-top: 12px; }
-
 .route-fix-row {
   display: flex;
   gap: 8px;
@@ -3121,19 +3048,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   color: var(--muted);
 }
 
-.route-fix-clear {
-  display: inline;
-  margin-left: 4px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-family: inherit;
-  font-size: 11px;
-  color: var(--muted);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .route-note {
   margin-top: 18px;
   padding-top: 12px;
@@ -3170,3 +3084,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .ra-transit { margin-top: 6px; }
 .ra-transit summary { cursor: pointer; color: var(--primary); font-weight: 600; font-size: 12px; }
 .ra-transit ol { margin: 6px 0 0; padding-left: 18px; color: var(--subtle); font-size: 12px; line-height: 1.6; }
+
+/* 이동 패널 — 바로 앞 직통편 */
+.ra-earlier { margin-top: 4px; padding: 10px 12px; border-radius: 10px; background: #f7f8fa; font-size: 13px; line-height: 1.55; }
+.ra-earlier-title { font-size: 12px; font-weight: 700; color: var(--subtle); margin-bottom: 2px; }
+.ra-earlier .ra-sub { display: block; color: var(--muted); font-size: 12px; }
