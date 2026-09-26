@@ -555,8 +555,6 @@ async function processUploadedFile(file) {
 
   const ext = file.name.toLowerCase().split('.').pop()
   let text = ''
-  // AI 판독은 서버에서 따로 돈다 — 브라우저 OCR과 동시에 시작해 기다리는 시간을 겹친다
-  const aiPromise = aiReadDoc(file)
 
   try {
     if (ext === 'pdf') {
@@ -600,12 +598,8 @@ async function processUploadedFile(file) {
     return
   }
 
-  setParseProgress(85, '정보 추출 중')
-  const ruleMeta = parseDocMeta(file.name, text)
-  setParseProgress(90, 'AI 판독과 대조 중')
-  const ai = await aiPromise
-  const meta = ai.ok ? mergeAiMeta(ruleMeta, ai.fields) : { ...ruleMeta, ai: false, aiError: ai.error }
-  meta.fileName = file.name
+  setParseProgress(95, '정보 추출 중')
+  const meta = parseDocMeta(file.name, text)
   state.parsedMeta = meta
 
   setParseProgress(100, '완료!')
@@ -1290,129 +1284,6 @@ function parseDocMeta(filename, text) {
            yearGuessed, isTripDoc, docKind, multiSession }
 }
 
-// ── AI 판독 + 교차검증 ───────────────────────────────────────────────────────
-// Claude(api/parse-doc.js)가 원본을 읽은 값과 규칙 판독(parseDocMeta) 값을 항목별로 맞춘다.
-// 금액에 영향을 주는 항목은 둘이 같을 때만 채우고, 다르거나 한쪽만 읽었으면 비운 뒤 후보를 보인다.
-// 틀린 값이 자동으로 들어가는 것보다 한 번 더 고르게 하는 편이 낫다(2026-09-26 지석초이 승인).
-const AI_PARSE_URL = './api/parse-doc'
-const AI_MAX_BYTES = 3 * 1024 * 1024
-const CROSS_CHECKED = ['startDate', 'endDate', 'startTime', 'destination', 'registration']
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result).split(',')[1] || '')
-    r.onerror = () => reject(r.error)
-    r.readAsDataURL(file)
-  })
-}
-
-// 폰 사진은 수 MB라 함수 요청 한도를 넘는다 — 긴 변 2000px JPEG로 줄여 보낸다
-async function imageForAi(file) {
-  const bmp = await createImageBitmap(file)
-  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height))
-  const c = document.createElement('canvas')
-  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale)
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height)
-  return c.toDataURL('image/jpeg', 0.88).split(',')[1]
-}
-
-async function aiReadDoc(file) {
-  const ext = file.name.toLowerCase().split('.').pop()
-  const isPdf = ext === 'pdf'
-  if (!isPdf && !['jpg', 'jpeg', 'png'].includes(ext)) return { ok: false, error: '지원하지 않는 형식' }
-  if (isPdf && file.size > AI_MAX_BYTES) return { ok: false, error: '파일이 커서 AI 판독을 건너뛰었어요' }
-  try {
-    const data = isPdf ? await fileToBase64(file) : await imageForAi(file)
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 75000)
-    const res = await fetch(AI_PARSE_URL, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ data, mediaType: isPdf ? 'application/pdf' : 'image/jpeg' }),
-    })
-    clearTimeout(timer)
-    const body = await res.json().catch(() => ({ ok: false, error: `응답 오류 ${res.status}` }))
-    return body.ok ? body : { ok: false, error: body.error || `응답 오류 ${res.status}` }
-  } catch (e) {
-    return { ok: false, error: e.name === 'AbortError' ? 'AI 판독 시간이 초과됐어요' : e.message }
-  }
-}
-
-function snapTime10(hhmm) {
-  return /^\d{1,2}:\d{2}$/.test(hhmm || '') ? snapTo10(hhmm.padStart(5, '0')) : ''
-}
-
-function recomputePeriod(meta) {
-  if (!meta.startDate || !meta.endDate) {
-    Object.assign(meta, { periodDisplay: '', nights: 0, days: 0 })
-    return
-  }
-  const [sy, sm, sd] = meta.startDate.split('-').map(Number)
-  const [, em, ed] = meta.endDate.split('-').map(Number)
-  const nights = Math.max(0, Math.round((new Date(meta.endDate) - new Date(meta.startDate)) / 86400000))
-  Object.assign(meta, { nights, days: nights + 1,
-    periodDisplay: nights > 0 ? `${sm}월 ${sd}일 ~ ${em}월 ${ed}일` : `${sm}월 ${sd}일` })
-  void sy
-}
-
-// rule: parseDocMeta 결과, ai: api/parse-doc 의 fields. 돌려주는 meta 는 rule 과 같은 모양 + checks.
-function mergeAiMeta(rule, ai) {
-  const v = f => (ai[f] && ai[f].value !== undefined ? ai[f].value : null)
-  const q = f => (ai[f] && ai[f].quote) || ''
-  const aiVals = {
-    startDate: v('startDate') || '', endDate: v('endDate') || v('startDate') || '',
-    startTime: snapTime10(v('startTime')), destination: matchRegion(v('venue') || ''),
-    registration: Number.isInteger(v('registrationFee')) && v('registrationFee') > 0 ? v('registrationFee') : null,
-  }
-  const quotes = { startDate: q('startDate'), endDate: q('endDate') || q('startDate'), startTime: q('startTime'),
-    destination: q('venue'), registration: q('registrationFee') }
-
-  if (ai.docKind && ai.docKind !== 'notice') {
-    const blank = parseDocMeta('', '')
-    return { ...blank, isTripDoc: false, docKind: ai.docKind === 'receipt' ? 'other' : ai.docKind, ai: true, checks: {} }
-  }
-
-  const meta = { ...rule, isTripDoc: true, docKind: 'notice', ai: true, checks: {} }
-  // 제목·장소는 금액에 영향이 없고 AI가 스캔본을 훨씬 잘 읽는다 — AI 값을 쓰고 없으면 규칙 값
-  if (v('title')) meta.title = v('title')
-  if (v('venue')) meta.venue = v('venue')
-  meta.multiSession = !!(rule.multiSession || v('multiSession'))
-  const aiOnline = v('isOnline')
-  if (aiOnline !== null && aiOnline !== rule.isOnline) meta.checks.isOnline = { status: 'conflict', rule: rule.isOnline, ai: aiOnline, quote: q('isOnline') }
-
-  for (const f of CROSS_CHECKED) {
-    const r = rule[f] ?? (f === 'registration' ? null : '')
-    const a = aiVals[f]
-    const has = x => x !== null && x !== ''
-    let status
-    if (has(r) && has(a)) status = String(r) === String(a) ? 'agree' : 'conflict'
-    else status = has(r) ? 'rule-only' : has(a) ? 'ai-only' : 'none'
-    meta.checks[f] = { status, rule: r, ai: a, quote: quotes[f] }
-    if (status !== 'agree') meta[f] = f === 'registration' ? null : ''
-  }
-  if (meta.checks.registration.status !== 'agree') meta.registrationNote = null
-  if (meta.checks.startDate.status === 'agree' && meta.checks.endDate.status !== 'agree') meta.endDate = ''
-  recomputePeriod(meta)
-  meta.yearGuessed = meta.checks.startDate.status === 'agree' ? false : rule.yearGuessed
-  return meta
-}
-
-// 확인 필요 항목의 후보를 사람이 고르면 그 값으로 채운다
-function applyCandidate(field, source) {
-  const meta = state.parsedMeta
-  const c = meta && meta.checks && meta.checks[field]
-  if (!c) return
-  const value = c[source]
-  if (field === 'isOnline') meta.isOnline = value
-  else meta[field] = value
-  if (field === 'startDate' && !meta.endDate) meta.endDate = value
-  recomputePeriod(meta)
-  c.status = 'picked'
-  c.picked = source
-  state.appliedMeta = null
-  renderParseResult(meta.fileName || '', meta, true)
-}
-
 // 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
 function extractTimes(tc) {
   const toHM = (h, m, ampm) => {
@@ -1476,25 +1347,6 @@ function tidyVenue(raw) {
   // 장소 뒤에 딸린 길 안내 "(여의나루역 1번 출구 도보 10분)"는 검색을 방해한다
   v = v.replace(/\s*\([^)]*(?:출구|도보|분 거리|주차)[^)]*\)\s*$/, '')
   return fixLetterSpacing(v).slice(0, 60).trim()
-}
-
-// 교차검증 표시: 일치 ✅, 달라서 비운 칸은 ⚠️ + 후보 버튼(누르면 그 값으로 채움) + AI 근거 문장
-const CHECK_FMT = {
-  registration: v => (v ? `${Number(v).toLocaleString()}원` : ''),
-  isOnline: v => (v ? '온라인' : '오프라인'),
-}
-function checkHtml(meta, field, label) {
-  const c = meta.checks && meta.checks[field]
-  if (!c || c.status === 'none') return ''
-  const fmtV = CHECK_FMT[field] || (v => String(v ?? ''))
-  const quote = c.quote ? `<span class="chk-quote">근거: “${escapeHtml(c.quote.slice(0, 80))}”</span>` : ''
-  const head = label ? `${label} ` : ''
-  if (c.status === 'agree') return `<span class="chk chk-ok">✅ ${head}AI·규칙 일치</span>`
-  if (c.status === 'picked') return `<span class="chk chk-ok">☑️ ${head}${c.picked === 'ai' ? 'AI' : '규칙'} 판독 값을 골랐어요</span>`
-  const btn = src => (c[src] === null || c[src] === '' || c[src] === undefined) ? ''
-    : `<button type="button" class="chk-pick" onclick="applyCandidate('${field}','${src}')">${src === 'ai' ? 'AI' : '규칙'}: ${escapeHtml(fmtV(c[src]))}</button>`
-  const why = c.status === 'conflict' ? '두 판독이 달라요' : c.status === 'ai-only' ? 'AI만 읽었어요' : '규칙 판독만 읽었어요'
-  return `<span class="chk chk-warn">⚠️ ${head}${why} — 맞는 값을 누르세요</span><span class="chk-picks">${btn('ai')}${btn('rule')}</span>${quote}`
 }
 
 function renderParseResult(filename, meta, hasText) {
@@ -1567,21 +1419,15 @@ function renderParseResult(filename, meta, hasText) {
     ? `<div class="result-item full"><label>장소</label><span>${escapeHtml(meta.venue)}</span></div>`
     : `<div class="result-item full"><label>장소</label><span class="empty">확인 안 됨 — 직접 입력</span></div>`
 
-  const aiNote = meta.docKind && meta.docKind !== 'notice' ? ''
-    : meta.ai
-    ? `<div class="result-ai full">🤖 AI 판독과 규칙 판독을 대조했어요. <b>✅</b> 두 판독이 같은 값만 채웠고, <b>⚠️</b> 항목은 달라서 비워 뒀어요 — 공문을 보고 맞는 후보를 누르거나 다음 화면에서 직접 넣어 주세요.</div>`
-    : meta.aiError ? `<div class="result-ai full is-off">AI 판독을 쓰지 못해 규칙 판독만 썼어요(${escapeHtml(meta.aiError)}).</div>` : ''
-
   grid.innerHTML = `
     <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
-    ${aiNote}
     <div class="result-item full"><label>출장/교육명</label>${fmt(meta.title)}</div>
-    <div class="result-item"><label>기간</label>${fmt(periodStr)}${checkHtml(meta, 'startDate', '시작일')}${checkHtml(meta, 'endDate', '종료일')}</div>
-    <div class="result-item"><label>지역</label>${fmt(meta.destination)}${checkHtml(meta, 'destination')}</div>
-    <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}${checkHtml(meta, 'startTime')}</div>
-    <div class="result-item"><label>교육 형태</label><span>${meta.isOnline ? '온라인' : '오프라인'}</span>${checkHtml(meta, 'isOnline')}</div>
+    <div class="result-item"><label>기간</label>${fmt(periodStr)}</div>
+    <div class="result-item"><label>지역</label>${fmt(meta.destination)}</div>
+    <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}</div>
+    <div class="result-item"><label>교육 형태</label><span>${meta.isOnline ? '온라인' : '오프라인'}</span></div>
     ${venueHtml}
-    <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}${checkHtml(meta, 'registration')}</div>
+    <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}</div>
     ${warnHtml}
   `
   resultEl.classList.remove('hidden')
@@ -1680,10 +1526,7 @@ function renderTimeHint(meta) {
   const el = document.getElementById('time-ktx-hint')
   if (!el) return
   const missing = !!meta && !meta.startTime
-  const st = meta && meta.checks && meta.checks.startTime && meta.checks.startTime.status
-  el.textContent = missing && (st === 'conflict' || st === 'ai-only' || st === 'rule-only')
-    ? '⚠️ AI와 규칙 판독이 서로 달라 비워 뒀어요. 공문을 보고 첫날 교육(등록) 시작시각을 직접 골라 주세요.'
-    : missing
+  el.textContent = missing
     ? '⚠️ 공문에서 시작시각을 찾지 못했어요. 첫날 교육(등록) 시작시각을 직접 골라 주세요.'
     : meta ? `📄 공문에서 읽은 시각이에요. ${TIME_HINT_DEFAULT}` : TIME_HINT_DEFAULT
   el.classList.toggle('is-warn', missing)

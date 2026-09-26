@@ -3185,17 +3185,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 .auto-judged strong { color: #1b64da; font-weight: 700; }
 
-/* ── 공문 판독 교차검증 표시 ── */
-.result-grid .result-ai, .result-ai { grid-column: 1 / -1; font-size: 12.5px; line-height: 1.55; color: #1d4ed8; background: #eff6ff; border-radius: 10px; padding: 10px 12px; }
-.result-ai.is-off { color: var(--subtle); background: #f2f4f6; }
-.result-item .chk { display: block; margin-top: 4px; font-size: 12px; font-weight: 600; }
-.result-item .chk-ok { color: #047857; }
-.result-item .chk-warn { color: #c2410c; }
-.result-item .chk-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.chk-pick { font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 8px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
-.chk-pick:hover { background: #ffedd5; }
-.result-item .chk-quote { display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted); }
-
 .ra-transit { margin-top: 6px; }
 .ra-transit summary { cursor: pointer; color: var(--primary); font-weight: 600; font-size: 12px; }
 .ra-transit ol { margin: 6px 0 0; padding-left: 18px; color: var(--subtle); font-size: 12px; line-height: 1.6; }

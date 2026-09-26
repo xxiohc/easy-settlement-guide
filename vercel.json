@@ -1,9 +1,4 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": ".",
-  "functions": {
-    "api/parse-doc.js": {
-      "maxDuration": 60
-    }
-  }
+  "outputDirectory": "."
 }
