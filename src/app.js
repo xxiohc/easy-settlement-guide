@@ -2096,6 +2096,14 @@ function accessLine(b, dest) {
   return `대중교통 약 ${b.access}분(${basis})${links}${transitDetailHtml(b.accessRoute)}`
 }
 
+// 현장 도착 후 교육 시작까지 남는 시간(2026-09-26 지석초이) — 빠듯 15분 미만 / 적당 ~60분 / 넉넉
+function slackPill(min) {
+  if (!Number.isFinite(min)) return ''
+  const cls = min < 15 ? 'is-tight' : min <= 60 ? 'is-ok' : 'is-loose'
+  const word = min < 15 ? '빠듯' : min <= 60 ? '' : '넉넉'
+  return `<span class="slack-pill ${cls}">⏱ 여유 ${fmtDur(min)}${word ? ` · ${word}` : ''}</span>`
+}
+
 // 조금 더 일찍 닿고 싶을 때 — 같은 역으로 가는 바로 앞 직통편(2026-09-26 지석초이).
 // 정산 판정은 권한 편 기준 그대로다. 앞 편을 탄다고 전날 이동이 되지 않는다.
 function earlierTrainHtml(b) {
@@ -2106,7 +2114,7 @@ function earlierTrainHtml(b) {
   if (!prev) return ''
   return `<div class="ra-earlier">
     <div class="ra-earlier-title">조금 더 일찍 가려면</div>
-    <div>마산역 <b>${fmtTime(prev.dep)}</b> 출발 → ${escapeHtml(b.station)}역 ${fmtTime(prev.arr)} 도착 → 현장 ${fmtTime(prev.arr + b.access)} 도착
+    <div>마산역 <b>${fmtTime(prev.dep)}</b> 출발 → ${escapeHtml(b.station)}역 ${fmtTime(prev.arr)} 도착 → 현장 ${fmtTime(prev.arr + b.access)} 도착 ${slackPill(toMinutes(state.startTime) - (prev.arr + b.access))}
       <span class="ra-sub">${escapeHtml(prev.legs[0].type)} ${escapeHtml(prev.legs[0].no)} · 정산은 위 ${fmtTime(b.dep)} 편 기준이에요</span></div>
   </div>`
 }
@@ -2148,6 +2156,7 @@ function renderPrevDayVerdict() {
     rows.push(`<li><span class="ra-t">${fmtTime(b.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(b.station)}역 도착</span></li>`)
     rows.push(`<li><span class="ra-t">${fmtTime(b.arr + b.access)}</span><span class="ra-dot"></span>
       <span>현장 도착<span class="ra-sub">${accessLine(b, j.dest)}</span></span></li>`)
+    rows.push(`<li class="is-slack"><span class="ra-t"></span><span class="ra-dot"></span><span>${slackPill(toMinutes(state.startTime) - (b.arr + b.access))}</span></li>`)
     rows.push(`<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`)
     const verdict = `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>마산역 ${fmtTime(b.dep)} 출발</b></div>
       ${j.move ? '<div class="ra-why">정규 출근시각(08:30) 전에 출발하는 편이에요</div>' : ''}`
