@@ -258,6 +258,16 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .back-btn:hover { background: var(--surface); }
 .back-btn.hidden { visibility: hidden; pointer-events: none; }
 
+/* 단계 표시를 카드 스크롤 상단에 고정 (renderTrails 가 감싼다) */
+.trail-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+  background: var(--bg);
+  box-shadow: 0 1px 0 #f2f4f6;
+}
+
 /* ── 단계 인디케이터 트레일 ── */
 .step-trail {
   flex-shrink: 0;
@@ -479,13 +489,13 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
     /* stretch(기본)면 짝이 되는 칸이 긴 쪽 높이만큼 늘어나 빈 상자가 생긴다 */
     align-items: start;
   }
-  #card-4 .info-fields-wrap .info-field {
+  #card-4 .info-fields-wrap .info-field,
+  #card-4 .route-aside.has-result {
     margin-bottom: 0;
   }
-  /* 교육형태·교육명·등록비는 full width — 등록비는 금액입력·기준안내가 붙어 가장 길다 */
-  #card-4 .info-fields-wrap .info-field:nth-child(1),
-  #card-4 .info-fields-wrap .info-field:nth-child(2),
-  #card-4 .info-fields-wrap .info-field:nth-child(7) {
+  /* 교육형태·교육명·등록비·이동 안내는 한 줄 전체 — 순서 번호(nth-child)로 잡으면 칸을 끼울 때마다 깨진다 */
+  #card-4 .info-fields-wrap .full-row,
+  #card-4 .info-fields-wrap .route-aside {
     grid-column: 1 / -1;
   }
 }
@@ -2840,25 +2850,59 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .time-select:invalid, .time-select option[value=""] { color: #c9cdd2; }
 .time-select option { color: var(--ink); }
 
-/* 첫날 시작시각 바로 아래 전날 이동 판정 */
-.prevday-verdict {
-  margin-top: 10px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* ── 첫날 이동 안내 패널 ─────────────────────────────────────────────────
+   좁은 화면: 시작시각 줄 아래 한 줄 전체. 넓은 화면(1480px~): 본문 오른쪽 여백에 붙어 스크롤을 따라온다. */
+.route-aside { display: none; }
+.route-aside.has-result { display: block; margin-bottom: 16px; }
+.route-aside-inner {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--ink);
-  background: #f2f4f6;
 }
-.prevday-verdict strong { font-size: 14px; }
-.prevday-verdict.is-yes { background: #ecfdf3; }
-.prevday-verdict.is-yes strong { color: #047857; }
-.prevday-verdict.is-no  { background: #f2f4f6; }
-.prevday-verdict.is-info { background: #fff7ed; }
-.prevday-verdict.is-info strong { color: #c2410c; }
+.ra-head { font-size: 13px; font-weight: 700; color: var(--subtle); margin-bottom: 10px; }
+.ra-verdict {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; border-radius: 12px; font-size: 15px; font-weight: 700;
+  background: #f2f4f6; color: var(--ink);
+}
+.ra-verdict b { font-size: 17px; white-space: nowrap; }
+.ra-verdict.is-yes { background: #ecfdf3; color: #047857; }
+.ra-verdict.is-info { background: #fff7ed; color: #c2410c; }
+.ra-why { margin: 8px 2px 0; color: var(--subtle); font-size: 12.5px; }
+.ra-timeline { list-style: none; margin: 14px 0 0; padding: 0; position: relative; }
+.ra-timeline::before {
+  content: ''; position: absolute; left: 44px; top: 8px; bottom: 8px; width: 2px; background: var(--line);
+}
+.ra-timeline li { display: grid; grid-template-columns: 38px 16px 1fr; align-items: start; gap: 0 6px; padding: 5px 0; }
+.ra-timeline .ra-t { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.ra-timeline .ra-dot {
+  width: 10px; height: 10px; margin: 5px 0 0 1px; border-radius: 50%;
+  background: var(--bg); border: 2px solid #c9cdd2; position: relative; z-index: 1;
+}
+.ra-timeline li.is-train .ra-dot { border-color: var(--primary); background: var(--primary); }
+.ra-timeline li.is-goal .ra-dot { border-color: #047857; background: #047857; }
+.ra-timeline .ra-sub { display: block; color: var(--muted); font-size: 12px; }
+.ra-sum { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--subtle); font-size: 12.5px; }
+.ra-rule { margin-top: 10px; color: var(--muted); font-size: 12px; }
+
+@media (min-width: 1480px) {
+  #card-4 .info-fields-wrap { position: relative; }
+  #card-4 .route-aside {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(100% + 40px);
+    width: 280px;
+  }
+  #card-4 .route-aside-inner { position: sticky; top: 112px; }
+}
+
 .seoul-hint-basis { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 
 .date-warn {

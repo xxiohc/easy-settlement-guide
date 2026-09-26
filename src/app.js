@@ -444,6 +444,18 @@ function renderTrails() {
       infoEl.className = 'trail-current-info'
       trailEl.after(infoEl)
     }
+    // 단계 표시·뒤로가기를 한 덩어리로 묶어 카드 상단에 고정한다 — 내용만 스크롤된다
+    let sticky = trailEl.parentElement
+    if (!sticky.classList.contains('trail-sticky')) {
+      sticky = document.createElement('div')
+      sticky.className = 'trail-sticky'
+      trailEl.before(sticky)
+      const back = trailEl.parentElement.querySelector(':scope > .back-btn')
+      if (back) sticky.appendChild(back)
+      sticky.appendChild(trailEl)
+      sticky.appendChild(infoEl)
+    }
+
     // 모바일: 배지 형태 HTML, 데스크톱: 텍스트
     if (isMobile && stepText) {
       const [stepNum, labelPart] = stepText.split(' · ')
@@ -1951,44 +1963,70 @@ function prevDayBasisText(j) {
 
 function prevDayBonusAmount() { return DAILY_RATE + LODGING_RATE }
 
-// 카드4 시작시각 칸 바로 아래 판정 박스
+// 카드4 첫날 이동 안내 패널(넓은 화면은 오른쪽 여백). 탈 기차 시각과 전날 이동 판정을 한눈에 보인다.
 function renderPrevDayVerdict() {
   const el = document.getElementById('prevday-verdict')
-  if (!el) return
+  const aside = document.getElementById('route-aside')
+  if (!el || !aside) return
   const place  = document.getElementById('input-place')?.value.trim()
   const region = document.getElementById('input-region')?.value.trim()
   if (place != null) state.place = place
   if (region != null) state.region = region
-  const hide = () => { el.classList.add('hidden'); el.innerHTML = '' }
-  if (state.isOnline || state.isJeju || !state.startTime || !(state.place || state.region)) return hide()
+
+  const off = state.isOnline || state.isJeju
+  aside.classList.toggle('is-off', off)
+  const RULE = `<div class="ra-rule">마산역 출발이 출근시각 08:30보다 이르면 전날 이동 — 숙박 1박 ${LODGING_RATE.toLocaleString()}원 + 일당 1일 ${DAILY_RATE.toLocaleString()}원이 추가돼요.</div>`
+  const head = '<div class="ra-head">🚄 첫날 이동 안내</div>'
+  const show = (html, hasResult) => {
+    el.innerHTML = head + html
+    aside.classList.toggle('has-result', !!hasResult && !off)
+  }
+  if (off) return show('', false)
+  if (!state.startTime || !(state.place || state.region)) {
+    return show(`<div class="ra-why">첫날 교육 시작시각과 장소를 넣으면 몇 시 기차를 타야 하는지, 전날 이동이 되는지 여기서 바로 보여드려요.</div>${RULE}`, false)
+  }
 
   const j = judgePrevDayMove()
-  const bonus = prevDayBonusAmount().toLocaleString()
-  const plus = `숙박 1박 ${LODGING_RATE.toLocaleString()}원 + 일당 1일 ${DAILY_RATE.toLocaleString()}원 = <strong>+${bonus}원</strong>`
-  let cls = 'is-info', html = ''
-  if (j.kind === 'train' && j.move) {
-    cls = 'is-yes'
-    html = `<strong>✅ 전날 이동 인정</strong><span>${escapeHtml(prevDayBasisText(j))}</span>
-      <span>마산역 출발이 출근시각 08:30보다 일러요 → ${plus}</span>`
-  } else if (j.kind === 'train') {
-    cls = 'is-no'
-    html = `<strong>당일 이동</strong><span>${escapeHtml(prevDayBasisText(j))}</span>
-      <span>마산역 ${fmtTime(j.best.dep)} 출발이면 돼요(08:30 이후) → 전날 이동 대상이 아니에요</span>`
-  } else if (j.kind === 'no-train') {
-    cls = 'is-yes'
-    html = `<strong>✅ 전날 이동 인정</strong><span>${escapeHtml(prevDayBasisText(j))}</span><span>${plus}</span>`
-  } else if (j.kind === 'near') {
-    cls = 'is-no'
-    html = `<strong>당일 이동</strong><span>마산역 인근이라 기차 역산 대상이 아니에요</span>`
-  } else if (j.kind === 'bus') {
-    html = `<strong>역산 불가 — 시외버스 구간</strong><span>버스 시간표 자료가 없어요. 전날 이동 여부는 다음 '추가 확인'에서 여쭤볼게요.</span>`
-  } else if (j.kind === 'noplace') {
-    html = `<strong>장소를 목록에서 골라 주세요</strong><span>출장 장소를 검색해 목록에서 고르면 몇 시 기차를 타야 하는지 바로 계산해요. 못 찾으면 다음 '추가 확인'에서 여쭤볼게요.</span>`
-  } else {
-    return hide()
+  const bonus = `+${prevDayBonusAmount().toLocaleString()}원`
+  const sum = `<div class="ra-sum">숙박 1박 ${LODGING_RATE.toLocaleString()}원 + 일당 1일 ${DAILY_RATE.toLocaleString()}원</div>`
+  if (j.kind === 'train') {
+    const b = j.best
+    const rows = []
+    b.legs.forEach((leg, i) => {
+      rows.push(`<li class="is-train"><span class="ra-t">${fmtTime(leg.dep)}</span><span class="ra-dot"></span>
+        <span>${i === 0 ? '마산역' : escapeHtml(leg.from) + '역 환승'} 출발<span class="ra-sub">${escapeHtml(leg.type)} ${escapeHtml(leg.no)}</span></span></li>`)
+      if (i < b.legs.length - 1) {
+        rows.push(`<li><span class="ra-t">${fmtTime(leg.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(leg.to)}역 도착</span></li>`)
+      }
+    })
+    rows.push(`<li><span class="ra-t">${fmtTime(b.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(b.station)}역 도착</span></li>`)
+    rows.push(`<li><span class="ra-t">${fmtTime(b.arr + b.access)}</span><span class="ra-dot"></span>
+      <span>현장 도착<span class="ra-sub">대중교통 약 ${b.access}분(${accessSrcLabel(b.accessSrc)})</span></span></li>`)
+    rows.push(`<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`)
+    const verdict = j.move
+      ? `<div class="ra-verdict is-yes"><span>전날 이동 인정</span><b>${bonus}</b></div>
+         <div class="ra-why">마산역 ${fmtTime(b.dep)} 출발 — 출근시각 08:30보다 일러요</div>`
+      : `<div class="ra-verdict"><span>당일 이동</span><b>추가 없음</b></div>
+         <div class="ra-why">마산역 ${fmtTime(b.dep)} 출발이면 돼요 — 08:30 이후</div>`
+    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>${j.move ? sum : ''}`, true)
   }
-  el.className = `prevday-verdict ${cls}`
-  el.innerHTML = html
+  if (j.kind === 'no-train') {
+    return show(`<div class="ra-verdict is-yes"><span>전날 이동 인정</span><b>${bonus}</b></div>
+      <div class="ra-why">첫날 ${escapeHtml(state.startTime)} 시작에 닿는 당일 열차가 없어요</div>${sum}`, true)
+  }
+  if (j.kind === 'near') {
+    return show(`<div class="ra-verdict"><span>당일 이동</span><b>추가 없음</b></div>
+      <div class="ra-why">마산역 인근이라 기차 역산 대상이 아니에요</div>`, true)
+  }
+  if (j.kind === 'bus') {
+    return show(`<div class="ra-verdict is-info"><span>자동 계산 불가</span></div>
+      <div class="ra-why">시외버스 구간이라 시간표 자료가 없어요. 전날 이동 여부는 '추가 확인'에서 여쭤볼게요.</div>${RULE}`, true)
+  }
+  if (j.kind === 'noplace') {
+    return show(`<div class="ra-verdict is-info"><span>장소를 목록에서 골라 주세요</span></div>
+      <div class="ra-why">출장 장소를 검색해 목록에서 고르면 탈 기차를 바로 계산해요. 못 찾으면 '추가 확인'에서 여쭤볼게요.</div>`, true)
+  }
+  show(RULE, false)
 }
 
 function applyPrevDayMove() {
