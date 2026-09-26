@@ -3099,3 +3099,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .day-chip b { color: #1b64da; font-size: 13px; }
 .day-chip.is-quarter { background: #fff7ed; }
 .day-chip.is-quarter b { color: #c2410c; }
+
+/* 현장 도착 → 교육 시작 여유 */
+.ra-timeline li.is-slack .ra-dot::before { display: none; }
+.ra-timeline li.is-slack > span:last-child { padding-bottom: 8px; }
+.slack-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.slack-pill.is-ok { background: #ecfdf3; color: #047857; }
+.slack-pill.is-loose { background: #eef6ff; color: #1b64da; }
+.slack-pill.is-tight { background: #fff7ed; color: #c2410c; }
