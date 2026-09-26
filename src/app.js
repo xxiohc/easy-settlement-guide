@@ -2120,6 +2120,71 @@ function korailLinkHtml(leg, picked, earlier) {
     `<span class="ra-hint">${day}${escapeHtml(leg.from)}→${escapeHtml(leg.to)} ${fmtTime(leg.dep)} 편</span></span>${list}`
 }
 
+// ── 마산시외버스터미널 시간표 ────────────────────────────────────────────────
+// 시외버스 구간(부산·울산·전주·순천·여수·광양)은 터미널 공식 홈페이지 시간표(data/bus_masan.json,
+// tools/check_bus_masan.mjs 로 원문 대조)로 탈 버스를 안내한다(2026-09-26 지석초이). 요금은 터미널 고시
+// 참고값이고 정산 운임(rates.json)은 그대로다. 전날 이동 여부는 기차와 달리 아직 사람이 답한다.
+let BUS_MASAN = null
+async function loadBusData() {
+  try { BUS_MASAN = await (await fetch('./data/bus_masan.json')).json() } catch { BUS_MASAN = null }
+}
+
+function busRoutesFor(text) {
+  if (!BUS_MASAN || !text) return []
+  if (text.includes('광양')) return BUS_MASAN.routes.filter(r => r.region === '광양')
+  return BUS_MASAN.routes.filter(r => text.includes(r.region))
+}
+
+// 교육 시작에 닿는 가장 늦은 버스(노선마다) → 터미널에서 현장까지 짧은 노선
+function planBus(startMin) {
+  const routes = busRoutesFor(`${state.place || ''} ${state.region || ''}`)
+  if (!routes.length || startMin == null) return null
+  const dest = state.placeLat && state.placeLon ? { lat: state.placeLat, lon: state.placeLon } : null
+  const cands = routes.map(r => {
+    const access = dest ? accessMinutes(haversineKm(r.lat, r.lon, dest.lat, dest.lon)) : 0
+    const deps = r.times.map(toMinutes)
+    const ok = deps.filter(d => d + r.durationMin + access + 10 <= startMin)
+    return { r, access, deps, dep: ok.length ? Math.max(...ok) : null }
+  })
+  const feasible = cands.filter(c => c.dep != null)
+    .sort((a, b) => (a.r.durationMin + a.access) - (b.r.durationMin + b.access) || b.dep - a.dep)
+  const first = cands.map(c => ({ ...c, dep: Math.min(...c.deps) })).sort((a, b) => a.dep - b.dep)[0]
+  return { best: feasible[0] || null, first, dest, all: cands }
+}
+
+function busListHtml(c, picked) {
+  const day = state.startDate ? `${shortDate(state.startDate)} ` : ''
+  const rows = c.deps.map(d => `<tr class="kt-row${d === picked ? ' is-picked' : ''}"><td>${fmtTime(d)}</td><td>${fmtTime(d + c.r.durationMin)}</td><td>${d === picked ? '<em>권한 편</em>' : ''}</td></tr>`).join('')
+  return `<details class="kt-list"><summary>${day}마산→${escapeHtml(c.r.terminal)} 버스 ${c.deps.length}편 보기</summary>
+    <table class="kt-table"><thead><tr><th>출발</th><th>도착(약)</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="kt-note">마산시외버스터미널 홈페이지 시간표 기준 · 편도 일반 ${c.r.fare.toLocaleString()}원${c.r.fareNote ? ` (${escapeHtml(c.r.fareNote)})` : ''}</div>
+  </details>`
+}
+
+function busVerdictHtml(plan, startMin) {
+  const note = `<div class="ra-why">시외버스는 전날 이동 여부를 '추가 확인'에서 여쭤볼게요.</div>`
+  if (!plan.best) {
+    const f = plan.first
+    return `<div class="ra-verdict is-info"><span>당일 도착하는 버스가 없어요</span></div>
+      <div class="ra-why">첫차 마산시외버스터미널 ${fmtTime(f.dep)} → ${escapeHtml(f.r.terminal)} ${fmtTime(f.dep + f.r.durationMin)} 도착이라 ${escapeHtml(state.startTime)} 교육에 못 닿아요.</div>${note}${busListHtml(f, null)}`
+  }
+  const c = plan.best, arr = c.dep + c.r.durationMin
+  const st = { lat: c.r.lat, lon: c.r.lon }
+  const links = plan.dest ? `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', c.r.terminal, st, state.place || '목적지', plan.dest)}">대중교통 경로 ↗</a><a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', c.r.terminal, st, state.place || '목적지', plan.dest)}">택시 경로 ↗</a></span>` : ''
+  const access = plan.dest
+    ? `대중교통 약 ${c.access}분(추정)${links}`
+    : '장소를 검색 목록에서 고르면 터미널에서 현장까지 시간을 더해요'
+  return `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>마산시외버스터미널 ${fmtTime(c.dep)} 출발</b></div>
+    ${c.dep < WORK_START_MIN ? '<div class="ra-why">정규 출근시각(08:30) 전에 출발하는 편이에요</div>' : ''}
+    <ol class="ra-timeline">
+      <li class="is-train"><span class="ra-t">${fmtTime(c.dep)}</span><span class="ra-dot"></span><span>마산시외버스터미널 출발<span class="ra-sub">시외버스 · 편도 일반 ${c.r.fare.toLocaleString()}원(터미널 고시)</span>${busListHtml(c, c.dep)}</span></li>
+      <li><span class="ra-t">${fmtTime(arr)}</span><span class="ra-dot"></span><span>${escapeHtml(c.r.terminal)} 도착<span class="ra-sub">약 ${fmtDur(c.r.durationMin)}</span></span></li>
+      ${plan.dest ? `<li><span class="ra-t">${fmtTime(arr + c.access)}</span><span class="ra-dot"></span><span>현장 도착<span class="ra-sub">${access}</span></span></li>` : `<li><span class="ra-t"></span><span class="ra-dot"></span><span class="ra-sub">${access}</span></li>`}
+      <li class="is-slack"><span class="ra-t"></span><span class="ra-dot"></span><span>${slackPill(startMin - (arr + c.access))}</span></li>
+      <li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>
+    </ol>${note}`
+}
+
 // 현장 도착 후 교육 시작까지 남는 시간(2026-09-26 지석초이) — 빠듯 15분 미만 / 적당 ~60분 / 넉넉
 function slackPill(min) {
   if (!Number.isFinite(min)) return ''
@@ -2200,6 +2265,10 @@ function renderPrevDayVerdict() {
       <div class="ra-why">마산역 인근이라 기차를 타지 않는 구간이에요</div>`, true)
   }
   if (j.kind === 'bus') {
+    const noDirect = BUS_MASAN && Object.entries(BUS_MASAN.noDirect || {}).find(([k]) => `${state.place} ${state.region}`.includes(k))
+    if (noDirect) return show(`<div class="ra-verdict is-info"><span>직행 버스가 없어요</span></div><div class="ra-why">${escapeHtml(noDirect[1])}</div>`, true)
+    const bp = planBus(toMinutes(state.startTime))
+    if (bp) return show(busVerdictHtml(bp, toMinutes(state.startTime)), true)
     return show(`<div class="ra-verdict is-info"><span>자동 계산 불가</span></div>
       <div class="ra-why">시외버스 구간이라 시간표 자료가 없어요. 출발시각은 '추가 확인'에서 여쭤볼게요.</div>`, true)
   }
@@ -2227,7 +2296,13 @@ function applyPrevDayMove() {
     state.prevDayAuto = false
     document.querySelectorAll('#field-daytrip .yn-btn').forEach(b => b.classList.remove('selected'))
   }
-  if (autoEl && state.startTime) {
+  const bp = j.kind === 'bus' ? planBus(toMinutes(state.startTime)) : null
+  if (autoEl && bp) {
+    autoEl.innerHTML = bp.best
+      ? `터미널 시간표상 <strong>마산시외버스터미널 ${fmtTime(bp.best.dep)}</strong> 버스면 ${escapeHtml(state.startTime)} 교육에 닿아요(${bp.best.dep < WORK_START_MIN ? '정규 출근시각 전' : '정규 출근시각 이후'} 출발). 실제로 08:30 전에 나서야 했는지 골라주세요.`
+      : `첫차(${fmtTime(bp.first.dep)})로도 ${escapeHtml(state.startTime)} 교육에 닿지 않는 구간이에요. 전날 이동했는지 골라주세요.`
+    autoEl.classList.remove('hidden')
+  } else if (autoEl && state.startTime) {
     autoEl.innerHTML = `입력하신 첫날 교육 시작시각은 <strong>${escapeHtml(state.startTime)}</strong>이에요. ` +
       (j.kind === 'bus' ? '시외버스 구간이라 자동 역산을 못 해요 — '
         : j.kind === 'jeju' ? '제주는 항공편이라 자동 역산을 못 해요 — '
@@ -2490,8 +2565,11 @@ function prepareCard9() {
     const detour  = routeDetour()
     const busOnly = busOnlyRegion(state.region || state.place)
     if (busOnly) {
-      breakdown.push({ label: '교통비 (시외버스)', amount: '직접 확인 필요',
-        note: `${busOnly.label}은 시외버스 고정 구간 · 철도는 오송 경유로 돌아가 제외 · ${ORIGIN_BUS} 왕복 요금 확인 필요` })
+      const ref = busRoutesFor(`${state.place || ''} ${state.region || ''}`)[0]
+      breakdown.push({ label: '교통비 (시외버스)', amount: ref ? '영수증 금액' : '직접 확인 필요',
+        note: ref
+          ? `${busOnly.label}은 시외버스 고정 구간 · 터미널 고시 편도 ${ref.fare.toLocaleString()}원(왕복 ${(ref.fare * 2).toLocaleString()}원) — 실제 탄 버스 영수증 금액으로 정산`
+          : `${busOnly.label}은 시외버스 고정 구간 · 철도는 오송 경유로 돌아가 제외 · ${ORIGIN_BUS} 왕복 요금 확인 필요` })
     } else {
       breakdown.push(detour
         ? { label: '교통비 (시외버스)', amount: '직접 확인 필요',
@@ -3829,7 +3907,7 @@ function queueFitPills() {
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  await Promise.all([loadRates(), loadRouteData()])
+  await Promise.all([loadRates(), loadRouteData(), loadBusData()])
   updateProgress()
 
   // 배지가 그려지거나 화면 폭이 바뀔 때마다 한 줄로 다시 맞춘다
