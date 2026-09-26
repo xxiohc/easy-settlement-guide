@@ -34,6 +34,23 @@
     },
     {
       "keywords": [
+        "수원"
+      ],
+      "label": "수원역",
+      "station": "수원",
+      "ktxNormal": 77600,
+      "ktxFirst": 112600,
+      "oneWayNormal": 38800,
+      "oneWayFirst": 56300,
+      "transfers": 1,
+      "path": [
+        "마산",
+        "김천구미",
+        "수원"
+      ]
+    },
+    {
+      "keywords": [
         "천안",
         "아산"
       ],

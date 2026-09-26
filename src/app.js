@@ -84,6 +84,7 @@ let FARE_TABLE = [
 // <fare-table:auto>
   { keywords: ['서울'], label: '서울역', station: '서울', ktxNormal: 97200, ktxFirst: 141000, oneWayNormal: 48600, oneWayFirst: 70500, transfers: 0, path: ['마산', '서울'] },
   { keywords: ['수서'], label: '수서역', station: '수서', ktxNormal: 94400, ktxFirst: 136800, oneWayNormal: 47200, oneWayFirst: 68400, transfers: 0, path: ['마산', '수서'] },
+  { keywords: ['수원'], label: '수원역', station: '수원', ktxNormal: 77600, ktxFirst: 112600, oneWayNormal: 38800, oneWayFirst: 56300, transfers: 1, path: ['마산', '김천구미', '수원'] },
   { keywords: ['천안', '아산'], label: '천안아산역', station: '천안아산', ktxNormal: 72200, ktxFirst: 104600, oneWayNormal: 36100, oneWayFirst: 52300, transfers: 0, path: ['마산', '천안아산'] },
   { keywords: ['오송'], label: '오송역', station: '오송', ktxNormal: 64200, ktxFirst: 93000, oneWayNormal: 32100, oneWayFirst: 46500, transfers: 0, path: ['마산', '오송'] },
   { keywords: ['대전'], label: '대전역', station: '대전', ktxNormal: 54800, ktxFirst: 79400, oneWayNormal: 27400, oneWayFirst: 39700, transfers: 0, path: ['마산', '대전'] },
@@ -981,14 +982,19 @@ function parseDocMeta(filename, text) {
   // ── 장소 → 지역 ──
   const REGION_MAP = [
     ['제주특별자치도|제주도|제주시|서귀포|제주', '제주'],
+    // 수원 — 성균관대 자연과학캠퍼스가 여기다. 운임표에 수원역이 있어 왕복 77,600원이고
+    // 서울역(97,200원)으로 잡으면 19,600원이 부풀려진다. 발신처 주소가 '서울 종로구'인
+    // 공문(성균관대 법인사무국)이 많으므로 서울 규칙보다 반드시 먼저 봐야 한다.
+    ['자연과학캠퍼스|성대\\s*수원|성균관대.*수원|수원', '수원'],
     // 서울 자치구
     ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
     // 서울 주요 병원 (병원명으로 장소 특정되는 경우)
     ['삼성서울병원|세브란스병원|신촌세브란스|강남세브란스|서울대학교병원|서울아산병원|서울성모병원|가톨릭대.*서울|한양대.*서울|이화.*서울|고대.*서울|고려대.*서울|건국대.*병원|경희대.*서울|중앙대.*서울|인하대.*서울', '서울'],
     // 서울 랜드마크
-    ['서울특별시|여의도|여의나루|서울역|수서역|코엑스|COEX|삼성동|잠실|홍대|명동|광화문|시청|강남역', '서울'],
-    // 경기·인천 (서울 출장 처리) — 성균관대는 자연과학캠퍼스(수원)와 인문캠(서울) 구분 필요, 삼성창원병원 제외
-    ['경기도|인천광역시|수원시?|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|자연과학캠퍼스|성균관대학교\s*(?!삼성창원|창원)', '서울'],
+    ['서울특별시|여의도|여의나루|서울역|수서역|코엑스|COEX|삼성동|잠실|홍대|명동|광화문|서울시청|시청역|강남역', '서울'],
+    // 나머지 경기·인천 (서울 출장 처리) — 수원은 위에서 따로 잡는다. 성균관대학교는
+    // 인문사회과학캠퍼스(종로)가 기본이고 삼성창원병원·창원은 뺀다
+    ['경기도|인천광역시|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대학교(?!\\s*(?:삼성창원|창원))', '서울'],
     ['천안시?|아산시?|천안아산역', '천안'],
     ['오송|청주시?', '오송'],
     ['대전광역시|대전시?|을지대.*대전|유성구|서구.*대전|대전.*서구', '대전'],
@@ -1175,7 +1181,9 @@ function parseDocMeta(filename, text) {
   const { startTime, endTime } = extractTimes(tc)
 
   // 출장·교육 공문이 맞는지 — 아니면 화면에서 "못 찾았다"고 말한다.
-  const isTripDoc = /교육|출장|세미나|연수|워크숍|워크샵|학술대회|심포지엄|컨퍼런스|포럼|보수교육|학회|훈련/.test(tn)
+  // 교육 말고도 타 기관에 나가 일하는 공문이 있다 — 세무조정·실사 협조요청처럼
+  // '교육'이라는 말이 한 번도 안 나오는 출장 공문을 영수증 취급해 내치지 않는다.
+  const isTripDoc = /교육|출장|세미나|연수|워크숍|워크샵|학술대회|심포지엄|컨퍼런스|포럼|보수교육|학회|훈련|협조요청|협조부탁|업무협의|파견|실사|현장점검/.test(tn)
 
   return { title, periodDisplay, startDate, endDate, nights, days, destination, registration,
            registrationNote, isOnline, startTime, endTime, venue: extractVenue(tc),
@@ -1218,7 +1226,10 @@ function extractTimes(tc) {
 function extractVenue(tc) {
   const m = tc.match(/(?:장\s*소|위\s*치|개최장소)\s*[:：]?\s*([가-힣A-Za-z0-9()·\s]{2,40})/)
   if (!m) return ''
-  const raw = m[1].trim().replace(/\s{2,}.*$/, '').replace(/[,·]\s*$/, '').slice(0, 40)
+  let raw = m[1].trim().replace(/\s{2,}.*$/, '').replace(/[,·]\s*$/, '').slice(0, 40)
+  // 번호 목록 공문은 다음 항목 번호가 장소 뒤에 붙어 나온다("자연과학캠퍼스3. 담당…").
+  // 끊긴 자리 바로 뒤가 마침표·콜론이면 끝의 숫자는 장소가 아니라 다음 항목 번호다.
+  if (/^\s*[.:：]/.test(tc.slice(m.index + m[0].length))) raw = raw.replace(/\s*\d{1,2}$/, '')
   return fixLetterSpacing(raw.replace(TITLE_BODY_CUT, '')).trim()
 }
 
@@ -1502,7 +1513,7 @@ function updateDateBox(inputId, placeholderId) {
 
 // 출장 지역 자동완성 목록 (교통비 계산 기준 도시)
 const REGION_HINTS = [
-  '서울', '오송', '대전', '동대구', '경주', '울산', '부산',
+  '서울', '수원', '오송', '대전', '동대구', '경주', '울산', '부산',
   '전주', '순천', '여수', '목포', '창원', '진주', '천안', '제주',
 ]
 
@@ -1599,7 +1610,8 @@ function selectPlace(name, addr, lat, lon) {
 // 주소 문자열에서 운임표 기준 지역명 추출
 function guessRegionFromAddress(addr) {
   const pairs = [
-    // 수도권(서울·경기·인천) → '서울'
+    // 수도권 — 수원만 제 운임표(수원역)가 있어 따로 잡고, 나머지 경기·인천은 서울 기준
+    ['수원', '수원'],
     ['서울', '서울'], ['경기', '서울'], ['인천', '서울'],
     // 제주
     ['제주', '제주'],
@@ -3205,7 +3217,7 @@ function restartFlow() {
 const TEST_DOCS = [
   { label: '학술사업 공문 (88,000원 / 서울 / 2025-12-11)',  url: '/test-docs/학술사업_공문.pdf' },
   { label: '삼일아카데미 (510,000원 / 08.08~09)',           url: '/test-docs/삼일아카데미_교육.pdf' },
-  { label: '세무조정 공문 (등록비 없음 / 서울 / 5.15~16)',  url: '/test-docs/세무조정_공문.pdf' },
+  { label: '세무조정 공문 (등록비 없음 / 수원 / 5.15~16)',  url: '/test-docs/세무조정_공문.pdf' },
 ]
 
 async function runTests() {

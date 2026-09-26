@@ -93,3 +93,54 @@ test('등록비가 없는 공문은 null 그대로다', () => {
   const meta = app.parseDocMeta('x.pdf', '제 목 회의 개최 안내\n장소: 서울특별시')
   assert.equal(meta.registration, null)
 })
+
+// ── 성균관대 세무조정 협조요청 공문 (2026-09-26 지석초이 제보) ───────────────
+// PDF 텍스트 추출이 글자를 흩뜨리는 실제 모양 그대로다. 장소는 수원(자연과학캠퍼스)인데
+// 발신처 주소가 '서울 종로구'라 지역이 서울로 잡히던 건.
+const 성균관대세무조정공문 = `학교법인 성균관대학법인 학교 부속병원 포함의 회계연도 법인세 세무조정 업무를( , , ) 2024
+다음과 같이 진행하고자 하오니 협조 부탁드립니다.
+다         음
+내        용 회계연도 법인세 세무조정학교법인 성균관대학1. : 2024 ( )
+기        간 일간2. : 2025.5.15~5.16(2 )
+장        소 성균관대학교 자연과학캠퍼스3. :
+담당회계법인 한울회계법인4. :
+성 균 관 대 학 교
+제    목  회계연도 법인세 세무조정 진행 협조요청2024
+우03063서울 종로구 성균관로 25-2 / http://www.skku.edu
+전화02-760-1164전송02-3673-1240`
+
+test('성균관대 자연과학캠퍼스는 서울이 아니라 수원이다', () => {
+  const meta = app.parseDocMeta('세무조정_공문.pdf', 성균관대세무조정공문)
+  assert.equal(meta.destination, '수원')
+})
+
+test('장소 뒤에 붙은 다음 항목 번호(자연과학캠퍼스3)를 장소로 읽지 않는다', () => {
+  const meta = app.parseDocMeta('세무조정_공문.pdf', 성균관대세무조정공문)
+  assert.equal(meta.venue, '성균관대학교 자연과학캠퍼스')
+})
+
+test('교육이라는 말이 없는 출장 공문도 출장 공문으로 본다', () => {
+  const meta = app.parseDocMeta('세무조정_공문.pdf', 성균관대세무조정공문)
+  assert.equal(meta.isTripDoc, true)
+})
+
+test('발신처가 서울인 공문이어도 장소가 수원이면 수원으로 잡는다 — 기간도 그대로', () => {
+  const meta = app.parseDocMeta('세무조정_공문.pdf', 성균관대세무조정공문)
+  assert.equal(meta.startDate, '2025-05-15')
+  assert.equal(meta.endDate, '2025-05-16')
+})
+
+test('성균관대학교만 적힌 공문은 종전대로 서울(인문사회과학캠퍼스)이다', () => {
+  const meta = app.parseDocMeta('x.pdf', '제 목 교육 안내\n장 소 : 성균관대학교 600주년기념관')
+  assert.equal(meta.destination, '서울')
+})
+
+test('삼성창원병원은 수원·서울 어느 쪽에도 걸리지 않는다', () => {
+  const meta = app.parseDocMeta('x.pdf', '제 목 교육 안내\n장 소 : 성균관대학교 삼성창원병원')
+  assert.equal(meta.destination, '창원')
+})
+
+test('영수증·매출전표는 여전히 출장 공문이 아니다', () => {
+  const meta = app.parseDocMeta('x.pdf', '신용카드 매출전표\n승인번호 12345678\n합계 33,000원')
+  assert.equal(meta.isTripDoc, false)
+})
