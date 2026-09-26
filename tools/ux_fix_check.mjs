@@ -88,6 +88,11 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.fill('#input-region','서울'); await p.waitForTimeout(300)
   const vd = (await p.textContent('#prevday-verdict').catch(()=>'')) || ''
   check('⑩ 시작시각·지역을 넣으면 카드4에서 바로 전날 이동 판정', await vis(p,'#prevday-verdict') && vd.includes('전날 이동 인정') && vd.includes('135,000'), vd.replace(/\s+/g,' ').trim().slice(0,90))
+  { const hours = await p.$$eval('#input-starthour option', os=>os.map(o=>o.value).filter(Boolean))
+    check('⑬ 시작시각은 16시까지만', hours[hours.length-1]==='16' && hours[0]==='05', hours.join(','))
+    await p.selectOption('#input-starthour','16'); await p.waitForTimeout(100)
+    const st = await p.evaluate(()=>[state.startTime, [...document.querySelectorAll('#input-startmin option:not([disabled])')].map(o=>o.value).filter(Boolean).join(',')])
+    check('⑬ 16시를 고르면 00분만', st[0]==='16:00' && st[1]==='00', st.join(' / ')) }
   // 시각을 비우고 다음 → 필수 오류
   await p.selectOption('#input-starthour',''); await p.selectOption('#input-startmin','')
   await p.click('#feeBtn-yes'); await p.waitForTimeout(200)

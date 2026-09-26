@@ -144,3 +144,78 @@ test('영수증·매출전표는 여전히 출장 공문이 아니다', () => {
   const meta = app.parseDocMeta('x.pdf', '신용카드 매출전표\n승인번호 12345678\n합계 33,000원')
   assert.equal(meta.isTripDoc, false)
 })
+
+// ── 2026-09-26 테스트공문 13건 전수점검에서 잡힌 오인식 (합성 문장 — 원문 개인정보 제외) ──
+const P = (t, f = '공문.pdf') => app.parseDocMeta(f, t)
+
+test('시행일자는 교육일이 아니다 — 라벨 "일 자" 뒤 날짜와 끝날만 적힌 범위', () => {
+  const m = P(`제 _ 목 : 제31차 OO학회 학술대회와 연수교육 개최 안내
+가. 행 사 명 : 제31차 OO학회 학술대회
+나. 일   자 : 2026년 5월 28일(목) ~ 29일(금) / 2일간
+다. 장 _ 소 : 스위스 그랜드 호텔 (서울 서대문구 연희로 353)
+- 사전등록 : 2026년 4월 1일(수) 10:00 ~ 5월 18일(월) 17:00
+- 등 록 비 : 정회원 18만원, 비회원 20만원
+시행 대의감관 2026-053 (2026.03.27) 접수`)
+  assert.equal(m.startDate, '2026-05-28')
+  assert.equal(m.endDate, '2026-05-29')
+  assert.equal(m.startTime, '')
+  assert.equal(m.title, '제31차 OO학회 학술대회와 연수교육 개최 안내')
+  assert.equal(m.venue, '스위스 그랜드 호텔 (서울 서대문구 연희로 353)')
+  assert.equal(m.destination, '서울')
+})
+
+test('접수기간은 교육일이 아니다 — "일시" 라벨이 이긴다', () => {
+  const m = P(`제 목 의료기관 교육담당자 역량강화 연수교육 개최 안내
+나. 일시 : 2025. 12.11.(목)
+다. 장소 : 여의도 태영빌딩 T-아트홀 (여의나루역 1번 출구 도보 10분)
+라. 접수인원 : 150명
+교육비 및 접수기간 회원병원 : 88,000원 2025.11.20.(목) ~ 12.5.(금)`)
+  assert.equal(m.startDate, '2025-12-11')
+  assert.equal(m.endDate, '2025-12-11')
+  assert.equal(m.venue, '여의도 태영빌딩 T-아트홀')
+})
+
+test('목록 기준일(<2025. 6. 12. 기준>)은 교육일이 아니다 — 모르면 비운다', () => {
+  const m = P(`제 목 OO협회 온라인 보수교육 프로그램 안내
+운영하오니 많은 활용 바랍니다.
+<2025. 6. 12. 기준>
+8 복부중재시술과 환자간호 8시간 40,000원 108,000원`)
+  assert.equal(m.startDate, '')
+})
+
+test('1차·2차 차수는 한 기간으로 묶지 않고 1차로 채운 뒤 차수 공문이라고 알린다', () => {
+  const m = P(`제목 2026 년 OO 교육 강의 협조 요청
+나 . 일시 및 장소 ○ 1 차 : 2026. 6. 9.( 화 ), 삼성서울병원 암병원 지하 1 층 강당 ○ 2 차 : 2026. 6. 16.( 화 ), 대전을지대학교병원 범석홀 다 . 교육대상`)
+  assert.equal(m.startDate, '2026-06-09')
+  assert.equal(m.endDate, '2026-06-09')
+  assert.equal(m.multiSession, true)
+  assert.equal(m.destination, '서울')
+  assert.equal(m.title, '2026년 OO 교육 강의 협조 요청')
+})
+
+test('연도 없는 날짜는 요일이 맞는 해로 채운다', () => {
+  const m = P(`OO 실무 교육 과정일정 08.08(목) ~ 08.09(금) / 총 2일 과정시간 09:00 ~ 18:00 교육비 510,000원`)
+  assert.equal(m.startDate, '2024-08-08')
+  assert.equal(m.yearGuessed, true)
+})
+
+test('발신 명의가 제목 뒤에 붙고 연도가 끝으로 밀린 제목을 바로잡는다', () => {
+  const m = P(`제   목   회계연도   법인세   세무조정   진행   협조요청 2024  학교법인   성균관대학   이사장
+기 간 : 2025.5.15~5.16`)
+  assert.equal(m.title, '2024 회계연도 법인세 세무조정 진행 협조요청')
+})
+
+test('결재된 출장신청서를 올리면 기안일을 출장일로 채우지 않는다', () => {
+  const m = P(`출 장 신 청 서 기 안 자 홍길동 기 안 일 2025-12-01(월) 사 유 OO 연수교육 출장기간 2025-12-10(수) ~ 2025-12-11(목)`)
+  assert.equal(m.docKind, 'trip-form')
+  assert.equal(m.startDate, '')
+  assert.equal(m.isTripDoc, false)
+})
+
+test('영수증처럼 공문이 아닌 파일은 아무 칸도 채우지 않는다', () => {
+  const m = P(`카드매출전표 거래일자 2026.05.13 12:16:59 매출금액 62,000 원 가맹점주소 부산 해운대구`)
+  assert.equal(m.docKind, 'other')
+  assert.equal(m.startDate, '')
+  assert.equal(m.destination, '')
+  assert.equal(m.title, '')
+})

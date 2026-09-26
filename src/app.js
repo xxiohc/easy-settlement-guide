@@ -822,11 +822,70 @@ const TITLE_BODY_CUT = /\s*(?:\d+\s*\.|[가나다라마바사아자차카타파�
 
 function cleanTitle(raw) {
   return fixLetterSpacing(String(raw || '').replace(TITLE_BODY_CUT, ''))
-    .replace(/^제\s*목\s*[：:]?\s*/, '')
+    .replace(/^제\s*_?\s*목\s*[：:]?\s*/, '')
     .replace(/[─━═│┃_]{2,}.*$/, '')
     .replace(/(\S+)(?:\s+\1)+(?=\s|$)/g, '$1')
+    .replace(/(\d)\s+(년|회|차|월|일|호)(?=\s|$)/g, '$1$2')
+    .replace(/제\s+(\d)/g, '제$1')
+    .replace(/\s+(?:(?:학교법인|재단법인|사단법인|의료법인)\s+)?[가-힣A-Za-z]+\s+(?:이사장|병원장|원장|회장|총장)$/, '')
+    .replace(/^(.*\S)\s+((?:19|20)\d{2})$/, '$2 $1')
     .trim()
 }
+
+// 공문에는 교육일 말고도 날짜가 많다. 시행일자·목록 기준일·신청/접수/납부 기간이 교육일로
+// 잡히던 것을 막으려고 날짜 추출 전에 그 자리를 지운다(2026-09-26 테스트공문 13건 전수점검).
+const DATE_TOKEN = String.raw`\d{4}\s*[.\-년]\s*\d{1,2}\s*[.\-월]\s*\d{1,2}\s*[.일]?`
+const DATE_PART  = String.raw`(?:\d{4}\s*[.\-년]\s*)?(?:\d{1,2}\s*[.\-월]\s*)?\d{1,2}\s*[.일]?(?:\s*\(\s*[가-힣]\s*\))?(?:\s*\d{1,2}:\d{2})?`
+function maskNonEventDates(tc) {
+  return tc
+    .replace(new RegExp(String.raw`(?<![가-힣])시\s*행(?!\s*(?:하|할|합|되|된|중|령|규|에|을|의|계))[\s\S]{0,40}?${DATE_TOKEN}\)?`, 'g'), ' ')
+    .replace(new RegExp(String.raw`${DATE_TOKEN}\s*기\s*준`, 'g'), ' ')
+    .replace(new RegExp(String.raw`(?:신\s*청|접\s*수|사\s*전\s*등\s*록|납\s*부|입\s*금|초\s*록|취\s*소|환\s*불)[^0-9~]{0,20}${DATE_PART}(?:[^~0-9]{0,6}~\s*${DATE_PART})?`, 'g'), ' ')
+}
+
+// 연도 없는 날짜는 요일이 맞는 해를 고른다(올해에 가까운 순). 요일이 없으면 올해.
+// "08.08(목)"은 2026년이면 토요일이라 올해로 채우면 요일이 틀린 날짜가 됐다.
+const DOW_KO = '일월화수목금토'
+function yearForDate(month, day, dowChar, curY) {
+  const want = dowChar ? DOW_KO.indexOf(dowChar) : -1
+  if (want < 0) return curY
+  for (const y of [curY, curY - 1, curY + 1, curY - 2]) {
+    if (new Date(y, month - 1, day).getDay() === want) return y
+  }
+  return curY
+}
+
+// 라벨(일시·일자·기간) 바로 뒤 토막에서 날짜 하나를 읽는다. 토막 안에서 가장 앞에 나온 날짜를 쓴다 —
+// 뒤쪽의 접수기간 범위가 앞의 단일 교육일을 이기면 안 된다. 같은 자리면 범위가 우선.
+const SNIPPET_DATE_FORMS = [
+  [/(\d{4})-(\d{1,2})-(\d{1,2})\s*~\s*(?:(\d{4})-)?(\d{1,2})-(\d{1,2})/,
+    m => ({ s: [+m[1], +m[2], +m[3]], e: [m[4] ? +m[4] : +m[1], +m[5], +m[6]] })],
+  [/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일(?:\s*\(\s*[가-힣]\s*\))?\s*~\s*(?:(\d{4})\s*년\s*)?(?:(\d{1,2})\s*월\s*)?(\d{1,2})\s*일/,
+    m => ({ s: [+m[1], +m[2], +m[3]], e: [m[4] ? +m[4] : +m[1], m[5] ? +m[5] : +m[2], +m[6]] })],
+  [/(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})\.?(?:\s*\(\s*[가-힣]\s*\))?\s*~\s*(?:(\d{4})\s*\.\s*)?(?:(\d{1,2})\s*\.\s*)?(\d{1,2})/,
+    m => ({ s: [+m[1], +m[2], +m[3]], e: [m[4] ? +m[4] : +m[1], m[5] ? +m[5] : +m[2], +m[6]] })],
+  [/(?<!\d)(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\(\s*([가-힣])\s*\))?\s*~\s*(\d{1,2})\s*\.\s*(\d{1,2})/,
+    (m, curY) => {
+      const y = yearForDate(+m[1], +m[2], m[3], curY)
+      return { s: [y, +m[1], +m[2]], e: [+m[4] < +m[1] ? y + 1 : y, +m[4], +m[5]], guessed: true }
+    }],
+  [/(\d{4})-(\d{2})-(\d{2})/, m => ({ s: [+m[1], +m[2], +m[3]], e: [+m[1], +m[2], +m[3]] })],
+  [/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/, m => ({ s: [+m[1], +m[2], +m[3]], e: [+m[1], +m[2], +m[3]] })],
+  [/(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})/, m => ({ s: [+m[1], +m[2], +m[3]], e: [+m[1], +m[2], +m[3]] })],
+]
+function parseDateSnippet(snip, curY) {
+  let best = null
+  for (const [re, build] of SNIPPET_DATE_FORMS) {
+    const m = snip.match(re)
+    if (!m || (best && m.index >= best.index)) continue
+    const r = build(m, curY)
+    if (r.s[0] < 2020) continue
+    best = { index: m.index, r }
+  }
+  return best ? best.r : null
+}
+
+const EVENT_DATE_LABEL = /(?<![가-힣])(?:교\s*육\s*|개\s*최\s*|행\s*사\s*|연\s*수\s*|과\s*정\s*)?(?:일\s*_?\s*시|일\s*_?\s*자|기\s*간|일\s*정)(?![가-힣])/g
 
 function parseDocMeta(filename, text) {
   const norm = s => s.replace(/\s+/g, '')
@@ -841,7 +900,7 @@ function parseDocMeta(filename, text) {
   // ── 제목 ──
   let title = ''
   // normalized text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
-  const titleLineM = normalized.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣\d][^\n]{3,79})/)
+  const titleLineM = normalized.match(/(?:제\s*_?\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣\d][^\n]{3,79})/)
   if (titleLineM) {
     title = cleanTitle(titleLineM[1])
     // 목록 기호 혼입 제거 (끝에 붙은 " 나." " 다." 등)
@@ -849,7 +908,7 @@ function parseDocMeta(filename, text) {
   }
   // 공백 정규화 버전(tc)에서 재시도 — 개행이 없는 PDF OCR 결과에도 대응
   if (!title) {
-    const titleM = tc.match(/(?:제\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。]?\s+([가-힣\d].{3,79})/)
+    const titleM = tc.match(/(?:제\s*_?\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。]?\s+([가-힣\d].{3,79})/)
     if (titleM) {
       // 본문 항목 구분자(숫자. / 가.나.다. / 수신 / 붙임) 이후 잘라냄
       title = cleanTitle(titleM[1])
@@ -875,6 +934,9 @@ function parseDocMeta(filename, text) {
 
   // ── 기간 ──
   let periodDisplay = '', nights = 0, days = 0, startDate = '', endDate = ''
+  let multiSession = false
+  const tcD = maskNonEventDates(tc)
+  const tnD = norm(tcD)
 
   const pad = n => String(n).padStart(2, '0')
   const setRange = (sy, sm, sd, ey, em, ed) => {
@@ -891,28 +953,32 @@ function parseDocMeta(filename, text) {
     periodDisplay = `${+sm}월 ${+sd}일`
   }
 
-  // 패턴0: 차수 목록 "1차:" / "○ 1차" 뒤 날짜 — 복수 차시 공문에서 1차 우선 추출
+  // 패턴0: 차수 목록 "1차: 날짜, 장소 / 2차: 날짜, 장소" — 차수는 따로 열리는 같은 교육이라
+  // 기간으로 묶으면 안 된다(6/9 서울·6/16 대전이 8일 출장이 됐다). 1차로 채우고 확인을 요청한다.
   {
-    const firstM = tc.match(/1\s*차\s*[：:,、]\s*(\d{4}[. ]+\d{1,2}[. ]+\d{1,2}(?:\.?\s*\([가-힣]{1,3}\))?)/)
+    const firstM = tcD.match(/1\s*차\s*[：:,、]\s*(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})/)
     if (firstM) {
-      const dm = firstM[1].match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})/)
-      if (dm) {
-        // 2차가 있으면 범위로 설정
-        const secondM = tc.match(/2\s*차\s*[：:,、]\s*(\d{4}[. ]+\d{1,2}[. ]+\d{1,2})/)
-        if (secondM) {
-          const dm2 = secondM[1].match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})/)
-          if (dm2) setRange(+dm[1],+dm[2],+dm[3], +dm2[1],+dm2[2],+dm2[3])
-          else setSingle(+dm[1],+dm[2],+dm[3])
-        } else {
-          setSingle(+dm[1],+dm[2],+dm[3])
-        }
-      }
+      setSingle(+firstM[1], +firstM[2], +firstM[3])
+      multiSession = /2\s*차\s*[：:,、]\s*\d{4}/.test(tcD)
+    }
+  }
+
+  // 패턴L: 라벨(일시·일자·기간·교육일시·과정일정) 바로 뒤 날짜 — 문서 전체에서 날짜 모양을
+  // 찾기 전에 먼저 본다. 라벨 앞에 한글이 붙은 '신청기간'·'시행일자'·'거래일자'는 라벨이 아니다.
+  if (!startDate) {
+    for (const lm of tcD.matchAll(EVENT_DATE_LABEL)) {
+      const r = parseDateSnippet(tcD.slice(lm.index + lm[0].length, lm.index + lm[0].length + 160), curY)
+      if (!r) continue
+      if (r.guessed) yearGuessed = true
+      if (r.s.join() === r.e.join()) setSingle(...r.s)
+      else setRange(...r.s, ...r.e)
+      break
     }
   }
 
   // 패턴1: YYYY-MM-DD ~ YYYY-MM-DD
   if (!startDate) {
-    const m = tc.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*~\s*(\d{4})-(\d{1,2})-(\d{1,2})/)
+    const m = tcD.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*~\s*(\d{4})-(\d{1,2})-(\d{1,2})/)
     if (m) setRange(+m[1],+m[2],+m[3],+m[4],+m[5],+m[6])
   }
 
@@ -920,7 +986,7 @@ function parseDocMeta(filename, text) {
   // pdfjs 폰트 이슈로 tc에서 숫자 사이 공백이 끼어 패턴2가 실패할 때 대비
   // 형식: YYYY.M.D비숫자*~비숫자*(YYYY.)M.D
   if (!startDate) {
-    const m = tn.match(/(\d{4})\.(\d{1,2})\.(\d{1,2})[^\d~]*~[^\d]*(?:(\d{4})\.)?(\d{1,2})\.(\d{1,2})/)
+    const m = tnD.match(/(\d{4})\.(\d{1,2})\.(\d{1,2})[^\d~]*~[^\d]*(?:(\d{4})\.)?(\d{1,2})\.(\d{1,2})/)
     if (m && +m[1] >= 2020) {
       const ey = m[4] ? +m[4] : +m[1]
       setRange(+m[1], +m[2], +m[3], ey, +m[5], +m[6])
@@ -930,7 +996,7 @@ function parseDocMeta(filename, text) {
   // 패턴2: YYYY.M.D ~ M.D 또는 YYYY.M.D~YYYY.M.D
   // 일자 뒤에 .(수) 같은 점+요일 괄호가 붙는 공문 형식 지원 (예: 2025. 5. 21.(수) ~ 5. 23.(금))
   if (!startDate) {
-    const m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
+    const m = tcD.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
     if (m) {
       const ey = m[4] ? +m[4] : +m[1]
       setRange(+m[1],+m[2],+m[3], ey,+m[5],+m[6])
@@ -939,37 +1005,23 @@ function parseDocMeta(filename, text) {
 
   // 패턴3: 한글 날짜 — YYYY년 M월 D일 ~ M월 D일
   if (!startDate) {
-    const m = tc.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*~\s*(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
+    const m = tcD.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*~\s*(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
     if (m) {
       const ey = m[4] ? +m[4] : +m[1]
       setRange(+m[1],+m[2],+m[3], ey,+m[5],+m[6])
     }
   }
 
-  // 패턴4: MM.DD(요일) ~ MM.DD(요일) — 연도 없는 경우 올해로 설정
+  // 패턴4: MM.DD(요일) ~ MM.DD(요일) — 연도가 없으면 요일이 맞는 해로 추정
   if (!startDate) {
-    const m = tc.match(/(\d{1,2})\.(\d{1,2})(?:\s*\([^)]{1,3}\))?\s*~\s*(\d{1,2})\.(\d{1,2})/)
-    if (m) { yearGuessed = true; setRange(curY,+m[1],+m[2], curY,+m[3],+m[4]) }
-  }
-
-  // 패턴5: 일시·기간·개최기간 라벨 근방에서 날짜 탐색 (대괄호 형식 "[일 시]" 포함)
-  if (!startDate) {
-    const labelM = tc.match(/(?:\[\s*)?(?:일\s*시|기\s*간|개\s*최\s*기\s*간|개\s*최\s*일\s*시)(?:\s*\])?\s*[：:\s]\s*(.{5,80})/)
-    if (labelM) {
-      const snip = labelM[1]
-      let sm = snip.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\.?\s*\([가-힣]{1,3}\))?\.?\s*~\s*(?:(\d{4})[. ]+)?(\d{1,2})[. ]+(\d{1,2})/)
-      if (sm) { const ey = sm[4] ? +sm[4] : +sm[1]; setRange(+sm[1],+sm[2],+sm[3], ey,+sm[5],+sm[6]) }
-      if (!startDate) {
-        sm = snip.match(/(\d{1,2})[. ]+(\d{1,2})(?:\s*\([가-힣]{1,3}\))?\s*~\s*(\d{1,2})[. ]+(\d{1,2})/)
-        if (sm) { yearGuessed = true; setRange(curY,+sm[1],+sm[2], curY,+sm[3],+sm[4]) }
-      }
-    }
+    const r = parseDateSnippet(tcD.match(/(?<!\d)\d{1,2}\s*\.\s*\d{1,2}(?:\s*\([^)]{1,3}\))?\s*~\s*\d{1,2}\s*\.\s*\d{1,2}/)?.[0] || '', curY)
+    if (r) { yearGuessed = !!r.guessed; setRange(...r.s, ...r.e) }
   }
 
   // 패턴6: "교육일시" 테이블 컬럼에서 ISO 날짜 — 납부 안내서·신청 명단 형식
   // 시행일자보다 먼저 체크해서 올바른 교육일 추출
   if (!startDate) {
-    const eduDateM = tc.match(/교\s*육\s*일\s*시\s+(\d{4}-\d{2}-\d{2})/)
+    const eduDateM = tcD.match(/교\s*육\s*일\s*시\s+(\d{4}-\d{2}-\d{2})/)
     if (eduDateM) {
       const [y,mo,d] = eduDateM[1].split('-').map(Number)
       setSingle(y, mo, d)
@@ -987,7 +1039,7 @@ function parseDocMeta(filename, text) {
 
   // 패턴8: 단일 일자 — YYYY. M.D 또는 YYYY.M.D (뒤에 ~ 없음)
   if (!startDate) {
-    const m = tc.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\s*\([^)]{1,3}\))?(?!\s*[~～])/)
+    const m = tcD.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\s*\([^)]{1,3}\))?(?!\s*[~～])/)
     if (m && +m[1] >= 2020) setSingle(+m[1],+m[2],+m[3])
   }
 
@@ -1035,9 +1087,13 @@ function parseDocMeta(filename, text) {
     return ''
   }
 
+  // 형식0: 장소를 읽었으면 그 장소로 판정한다 — 본문에는 발신처 주소가 섞여 있다
+  const venue = extractVenue(tc)
+  destination = matchRegion(venue)
+
   // 형식1: "장소 : XXX" 또는 "개최지 : XXX"
   const placeColonM = tc.match(/(?:장\s*소|개최\s*지|행사\s*장소|개최\s*장소)\s*[：:]\s*([^.0-9]{2,60})/)
-  if (placeColonM) destination = matchRegion(placeColonM[1])
+  if (!destination && placeColonM) destination = matchRegion(placeColonM[1])
 
   // 형식2: "장 소 XXX 숫자." (번호 목록 형식) — 번호 나오기 전까지
   if (!destination) {
@@ -1053,8 +1109,8 @@ function parseDocMeta(filename, text) {
 
   // 형식4: "교육장소" 키워드 이후 텍스트에서 REGION_MAP 직접 검색 (테이블 형식)
   if (!destination) {
-    const eduIdx = tc.indexOf('교육장소')
-    if (eduIdx >= 0) destination = matchRegion(tc.slice(eduIdx, eduIdx + 120))
+    const eduM = tc.match(/교\s*육\s*장\s*소/)
+    if (eduM) destination = matchRegion(tc.slice(eduM.index, eduM.index + 240))
   }
 
   // 장소 라벨 탐색 실패 시 본문 스캔 — 발신처 주소(우편번호 기준) 이전만 탐색
@@ -1190,16 +1246,25 @@ function parseDocMeta(filename, text) {
   // ── 온라인 여부 (제목에 "온라인" 명시된 경우만 true, 없으면 false=오프라인)
   const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300))
 
-  const { startTime, endTime } = extractTimes(tc)
+  const { startTime, endTime } = extractTimes(tcD)
 
   // 출장·교육 공문이 맞는지 — 아니면 화면에서 "못 찾았다"고 말한다.
   // 교육 말고도 타 기관에 나가 일하는 공문이 있다 — 세무조정·실사 협조요청처럼
   // '교육'이라는 말이 한 번도 안 나오는 출장 공문을 영수증 취급해 내치지 않는다.
   const isTripDoc = /교육|출장|세미나|연수|워크숍|워크샵|학술대회|심포지엄|컨퍼런스|포럼|보수교육|학회|훈련|협조요청|협조부탁|업무협의|파견|실사|현장점검/.test(tn)
 
+  // 결재된 출장신청서 자체를 올린 경우 — 기안일이 출장일로 잡혔다. 공문이 아니라고 말한다.
+  const docKind = /출\s*장\s*신\s*청\s*서/.test(tc.slice(0, 60)) && /기\s*안/.test(tc) ? 'trip-form'
+    : isTripDoc ? 'notice' : 'other'
+  if (docKind !== 'notice') {
+    return { title: '', periodDisplay: '', startDate: '', endDate: '', nights: 0, days: 0, destination: '',
+             registration: null, registrationNote: null, isOnline: false, startTime: '', endTime: '',
+             venue: '', yearGuessed: false, isTripDoc: false, docKind, multiSession: false }
+  }
+
   return { title, periodDisplay, startDate, endDate, nights, days, destination, registration,
-           registrationNote, isOnline, startTime, endTime, venue: extractVenue(tc),
-           yearGuessed, isTripDoc }
+           registrationNote, isOnline, startTime, endTime, venue,
+           yearGuessed, isTripDoc, docKind, multiSession }
 }
 
 // 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
@@ -1235,26 +1300,58 @@ function extractTimes(tc) {
 }
 
 // 공문의 장소 줄에서 기관·건물명을 뽑는다(카카오 장소 검색에 그대로 넣는다).
+// tc 는 공백을 하나로 접은 본문이라 '다. 참가회비' 같은 다음 항목이 장소 뒤에 붙어 온다.
 function extractVenue(tc) {
-  const m = tc.match(/(?:장\s*소|위\s*치|개최장소)\s*[:：]?\s*([가-힣A-Za-z0-9()·\s]{2,40})/)
-  if (!m) return ''
-  let raw = m[1].trim().replace(/\s{2,}.*$/, '').replace(/[,·]\s*$/, '').slice(0, 40)
-  // 번호 목록 공문은 다음 항목 번호가 장소 뒤에 붙어 나온다("자연과학캠퍼스3. 담당…").
-  // 끊긴 자리 바로 뒤가 마침표·콜론이면 끝의 숫자는 장소가 아니라 다음 항목 번호다.
-  if (/^\s*[.:：]/.test(tc.slice(m.index + m[0].length))) raw = raw.replace(/\s*\d{1,2}$/, '')
-  return fixLetterSpacing(raw.replace(TITLE_BODY_CUT, '')).trim()
+  // 차수 목록: "1차: 2026. 6. 9.(화), 삼성서울병원 암병원 지하 1층 강당 ○ 2차: …" → 1차 장소
+  const session = tc.match(/1\s*차\s*[：:]\s*\d{4}[^,]{2,30},\s*(.{2,60}?)(?=\s*[○◦•]|\s+2\s*차|$)/)
+  if (session) return tidyVenue(session[1])
+  // 신청자 명단 표: "교육일시 성명 교육장소 … 2026-06-01 (10:00 ~ 13:00) 홍길동 부산-부산교육원"
+  // 성명과 장소가 자간 벌어진 채 붙어 와("이 화수 부 산 - 부 산교 육 원") 공백을 걷고 '지역-기관' 꼴을 찾는다
+  const table = tc.match(/교\s*육\s*장\s*소[\s\S]{0,240}?\d{4}-\d{2}-\d{2}\s*\([^)]*\)\s*([가-힣][가-힣\s-]{2,40})/)
+  if (table) {
+    const squeezed = table[1].replace(/\s+/g, '')
+    const hy = squeezed.match(/[가-힣]{2}-[가-힣]{2,}/)
+    if (hy) return hy[0]
+  }
+  const m = tc.match(/(?<![가-힣])(?:장\s*_?\s*소|개\s*최\s*장\s*소|행\s*사\s*장\s*소)(?![가-힣])\s*(?:[：:]|[\]】])?\s*(.{2,90})/)
+  return m ? tidyVenue(m[1]) : ''
+}
+
+function tidyVenue(raw) {
+  let v = String(raw || '')
+    .replace(/\s*\(?\s*(?:www\.|https?:\/\/).*$/i, '')        // (www.glad-hotels.com/…) 홈페이지 주소
+    .replace(/\s+[가나다라마바사아자차카타파하]\s*\.\s.*$/, '')  // 다음 항목 "다. 참가회비"
+    .replace(/\s+\d{1,2}\s*[.)]\s.*$/, '')                      // 다음 항목 "4. 담당회계법인"
+    .replace(/(?<=[가-힣A-Za-z])\d{1,2}\s*\.(?:\s|$).*$/, '')      // 글자에 붙은 다음 항목 번호 "캠퍼스3. :"
+    .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|문의|※).*$/, '')
+    .replace(/\s+[-–]\s.*$/, '')                                // 다음 줄 목록 "- 사전등록"
+    .replace(/[,·|｜\s]+$/, '')
+    .trim()
+  // 장소 뒤에 딸린 길 안내 "(여의나루역 1번 출구 도보 10분)"는 검색을 방해한다
+  v = v.replace(/\s*\([^)]*(?:출구|도보|분 거리|주차)[^)]*\)\s*$/, '')
+  return fixLetterSpacing(v).slice(0, 60).trim()
 }
 
 function renderParseResult(filename, meta, hasText) {
   const grid = document.getElementById('resultGrid')
   const resultEl = document.getElementById('parseResult')
 
-  const fmt = v => v ? `<span>${escapeHtml(String(v))}</span>` : `<span class="empty">확인 안 됨</span>`
+  // 못 읽은 칸은 추측으로 채우지 않고 모른다고 말한다 — 다음 화면에서 직접 넣어야 한다
+  const fmt = v => v ? `<span>${escapeHtml(String(v))}</span>` : `<span class="empty">확인 안 됨 — 직접 입력</span>`
   const feeStr = meta.registration ? `${meta.registration.toLocaleString()}원` : ''
 
   let warnHtml = ''
   // 출장·교육 공문이 아니면(영수증·매출전표 등) 읽은 척하지 않는다
-  if (hasText && meta.isTripDoc === false) {
+  if (hasText && meta.docKind === 'trip-form') {
+    warnHtml += `
+      <div class="result-warn full">
+        <span>❌</span>
+        <div>
+          <strong>출장신청서예요 — 공문이 아니에요</strong>
+          <p>기안일이 출장일로 잘못 들어가지 않게 아무것도 채우지 않았어요.<br>행사 공문(안내문)을 올리시거나, 다음 단계에서 직접 입력해주세요.</p>
+        </div>
+      </div>`
+  } else if (hasText && meta.isTripDoc === false) {
     warnHtml += `
       <div class="result-warn full">
         <span>❌</span>
@@ -1281,15 +1378,37 @@ function renderParseResult(filename, meta, hasText) {
 
   // 지역은 읽었지만 건물·기관명(장소)은 못 읽는 공문이 많다.
   // 예전에는 그걸 "장소"로 보여줘 다음 화면에서 "출장 지역" 오류로 막혔다.
+  if (meta.multiSession) {
+    warnHtml += `
+      <div class="result-warn full">
+        <span>⚠️</span>
+        <div>
+          <strong>1차·2차처럼 차수가 나뉜 공문이에요</strong>
+          <p>1차 날짜·장소로 채웠어요. 다른 차수에 가셨다면 다음 화면에서 날짜와 장소를 고쳐주세요.</p>
+        </div>
+      </div>`
+  }
+  if (meta.yearGuessed && meta.startDate) {
+    warnHtml += `
+      <div class="result-warn full">
+        <span>⚠️</span>
+        <div>
+          <strong>공문에 연도가 없어요</strong>
+          <p>요일이 맞는 ${meta.startDate.slice(0, 4)}년으로 채웠어요. 다르면 다음 화면에서 고쳐주세요.</p>
+        </div>
+      </div>`
+  }
   const venueHtml = meta.venue
     ? `<div class="result-item full"><label>장소</label><span>${escapeHtml(meta.venue)}</span></div>`
-    : `<div class="result-item full"><label>장소</label><span class="empty">확인 안 됨 — 다음 화면에서 직접 넣어주세요</span></div>`
+    : `<div class="result-item full"><label>장소</label><span class="empty">확인 안 됨 — 직접 입력</span></div>`
 
   grid.innerHTML = `
     <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
     <div class="result-item full"><label>출장/교육명</label>${fmt(meta.title)}</div>
     <div class="result-item"><label>기간</label>${fmt(periodStr)}</div>
     <div class="result-item"><label>지역</label>${fmt(meta.destination)}</div>
+    <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}</div>
+    <div class="result-item"><label>교육 형태</label><span>${meta.isOnline ? '온라인' : '오프라인'}</span></div>
     ${venueHtml}
     <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}</div>
     ${warnHtml}
@@ -2270,10 +2389,14 @@ function prepareCard9() {
 }
 
 // 시·분 두 칸으로만 받는다 — 분은 10분 단위 선택지뿐이라 역산 기준이 늘 10분 단위다.
+// 시작시각은 05:00~16:00까지만 고른다(2026-09-26 지석초이 지시). 16시를 고르면 00분만 남긴다.
+const LATEST_START = '16:00'
 function onTimeChange() {
   const hourEl = document.getElementById('input-starthour')
   const minEl  = document.getElementById('input-startmin')
-  if (hourEl?.value && !minEl.value) minEl.value = '00'
+  const lastHour = hourEl?.value === LATEST_START.slice(0, 2)
+  minEl?.querySelectorAll('option').forEach(o => { o.disabled = lastHour && o.value !== '' && o.value !== '00' })
+  if (hourEl?.value && (!minEl.value || lastHour)) minEl.value = '00'
   state.startTime = hourEl?.value && minEl?.value ? `${hourEl.value}:${minEl.value}` : ''
   const hidden = document.getElementById('input-starttime')
   if (hidden) hidden.value = state.startTime
@@ -2282,13 +2405,13 @@ function onTimeChange() {
   renderPrevDayVerdict()
 }
 
-// 공문에서 읽은 시각을 두 칸에 나눠 넣는다. 선택지 밖(05~22시)이면 비워 두고 사람이 고르게 한다.
+// 공문에서 읽은 시각을 두 칸에 나눠 넣는다. 선택지 밖(05:00~16:00)이면 비워 두고 사람이 고르게 한다.
 function setStartTime(hhmm, autofilled) {
   const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '')
   const hourEl = document.getElementById('input-starthour')
   const minEl  = document.getElementById('input-startmin')
   if (!hourEl || !minEl) return
-  const hasHour = m && [...hourEl.options].some(o => o.value === m[1])
+  const hasHour = m && hhmm <= LATEST_START && [...hourEl.options].some(o => o.value === m[1])
   hourEl.value = hasHour ? m[1] : ''
   minEl.value  = hasHour ? m[2] : ''
   ;[hourEl, minEl].forEach(el => {
