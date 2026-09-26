@@ -23,7 +23,7 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   check('A 카드4 도달', await active(p) === 'card-4')
   await p.fill('#input-title','전산세무회계 실무교육')
   await p.fill('#input-start','2026-10-12'); await p.fill('#input-end','2026-10-12')
-  await p.fill('#input-starttime','09:30'); await p.fill('#input-endtime','17:00')
+  await p.fill('#input-starttime','09:30')
   await p.fill('#input-region','부산'); await p.waitForTimeout(300)
   // ① 온라인 → 없어요 버튼이 남아 있는가
   await p.click('#modeBtn-online'); await p.waitForTimeout(200)
@@ -50,7 +50,7 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.fill('#input-place','')
   await p.click('#ctaNext4'); await p.waitForTimeout(600)
   check('A 등록비 없음 → 카드8', await active(p) === 'card-8')
-  check('⑦ 8시간 질문에 교육시간 표시', (await p.textContent('#shortday-auto') || '').includes('7시간 30분'),
+  check('⑦ 8시간 질문에 시작시각 표시', (await p.textContent('#shortday-auto') || '').includes('09:30'),
         (await p.textContent('#shortday-auto')||'').trim().slice(0,60))
   await p.click('#field-shortdaytrip .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
   await p.click('#field-rank .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
@@ -79,7 +79,7 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
   await p.fill('#input-title','의료기관 평가 연수')
   await p.fill('#input-start','2026-10-12'); await p.fill('#input-end','2026-10-13')
-  await p.fill('#input-starttime','09:30'); await p.fill('#input-endtime','17:00')
+  await p.fill('#input-starttime','09:30')
   await p.fill('#input-region','서울'); await p.waitForTimeout(300)
   await p.click('#feeBtn-yes'); await p.waitForTimeout(200)
   await p.fill('#input-fee','510000'); await p.waitForTimeout(200)

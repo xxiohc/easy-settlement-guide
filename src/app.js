@@ -1404,9 +1404,8 @@ function prepareCard4WithMeta() {
     // 넘어가면 아래 토글이 비어 있어 "교육/등록비 유무 선택" 오류로 막혔다.
     selectFeePresence(true)
   }
-  if (meta.startTime) setAutofilled('input-starttime', meta.startTime)
-  if (meta.endTime)   setAutofilled('input-endtime', meta.endTime)
-  if (meta.startTime || meta.endTime) onTimeChange()
+  if (meta.startTime) setAutofilled('input-starttime', snapTo10(meta.startTime))
+  if (meta.startTime) onTimeChange()
   if (meta.venue && !state.place) setAutofilled('input-place', meta.venue)
 
   // 확인 뷰 메시지
@@ -1844,18 +1843,16 @@ function prepareCard8() {
 
   const startMin = toMinutes(state.startTime)
 
-  // 8시간 판정은 자동으로 못 한다 — 시외버스 구간(부산·울산·전주 등)은 소요시간
-  // 자료가 없어 왕복 이동시간을 더할 수 없다. 대신 앱이 아는 교육시간을 보여준다.
+  // 8시간 판정은 자동으로 못 한다 — 종료시각을 받지 않고(2026-09-26), 시외버스 구간
+  // (부산·울산·전주 등)은 소요시간 자료도 없어 왕복 이동시간을 더할 수 없다.
   const shortAutoEl = document.getElementById('shortday-auto')
   if (shortAutoEl) {
-    const endMin = toMinutes(state.endTime)
-    const known  = (startMin != null && endMin != null && endMin > startMin)
-      ? `입력하신 교육 시간은 <strong>${fmtDur(endMin - startMin)}</strong>이에요. `
-      : ''
-    shortAutoEl.innerHTML = known +
+    const startLine = startMin != null
+      ? `입력하신 교육 시작시각은 <strong>${escapeHtml(state.startTime)}</strong>이에요. ` : ''
+    shortAutoEl.innerHTML = startLine +
       ((fare && fare.bus) || busOnlyRegion(state.region || state.place)
         ? '시외버스 구간은 소요시간 자료가 없어 왕복 이동시간까지 자동으로 더하지 못해요 — 직접 골라주세요.'
-        : '여기에 왕복 이동시간을 더해 8시간을 넘는지 골라주세요.')
+        : '교육시간에 왕복 이동시간을 더해 8시간을 넘는지 골라주세요.')
     shortAutoEl.classList.toggle('hidden', !showShortDay)
   }
 
@@ -2168,8 +2165,23 @@ function prepareCard9() {
 }
 
 function onTimeChange() {
-  state.startTime = document.getElementById('input-starttime')?.value || ''
-  state.endTime   = document.getElementById('input-endtime')?.value   || ''
+  // 입력칸은 10분 단위(step=600)지만 직접 타이핑하면 1분 값도 들어온다 — 내림으로 맞춘다.
+  // 내림이라 역산 여유가 줄지 않는다(더 이른 기차를 고른다).
+  const el = document.getElementById('input-starttime')
+  if (el && el.value) {
+    const snapped = snapTo10(el.value)
+    if (snapped !== el.value) el.value = snapped
+  }
+  state.startTime = el?.value || ''
+  state.endTime   = ''  // 종료시각 입력칸 제거 (2026-09-26) — 귀가편 역산은 쓰지 않는다
+}
+
+// 'HH:MM' → 10분 단위로 내린 'HH:MM'
+function snapTo10(hhmm) {
+  const min = toMinutes(hhmm)
+  if (min == null) return hhmm
+  const f = Math.floor(min / 10) * 10
+  return String(Math.floor(f / 60)).padStart(2, '0') + ':' + String(f % 60).padStart(2, '0')
 }
 
 function toMinutes(hhmm) {
@@ -2359,8 +2371,8 @@ function renderRoutePanel() {
   if (r.skip === 'data')   return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
   if (r.skip === 'notime') {
     return hide(isDone
-      ? '🚄 교육 시작시각을 넣으면 도착역과 정산 기준 운임을 계산해 드려요. (정보 확인 화면 → 교육 시각)'
-      : '🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시각)')
+      ? '🚄 교육 시작시각을 넣으면 도착역과 정산 기준 운임을 계산해 드려요. (정보 확인 화면 → 교육 시작시각)'
+      : '🚄 교육 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요. (정보 확인 화면 → 교육 시작시각)')
   }
   if (r.skip === 'needmanual') {
     el.className = 'route-panel route-panel-bare'

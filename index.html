@@ -302,17 +302,15 @@
                 <div class="duration-tag hidden" id="duration-tag"></div>
               </div>
 
-              <!-- 교육 시작·종료 시각 (KTX 역산 안내에 쓰임) -->
+              <!-- 교육 시작시각 (KTX 역산 안내에 쓰임) -->
               <div class="info-field" id="field-time">
-                <label class="info-label">교육 시각</label>
+                <label class="info-label" for="input-starttime">교육 시작시각</label>
                 <div class="time-row">
                   <input class="info-input time-input" type="time" id="input-starttime"
-                    onchange="onTimeChange()" />
-                  <span class="time-sep">~</span>
-                  <input class="info-input time-input" type="time" id="input-endtime"
+                    step="600" aria-label="교육 시작시각"
                     onchange="onTimeChange()" />
                 </div>
-                <p class="info-subhint" id="time-ktx-hint">🚄 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요 (종료시각은 귀가편용, 선택)</p>
+                <p class="info-subhint" id="time-ktx-hint">🚄 시작시각을 넣으면 마산역에서 몇 시 기차를 타야 하는지 역산해 드려요 (10분 단위)</p>
               </div>
 
               <!-- 출장 장소 (구체적 장소 + 카카오 장소 검색) -->
