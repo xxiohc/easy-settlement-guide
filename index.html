@@ -227,7 +227,7 @@
             <div class="info-fields-wrap">
 
               <!-- 온라인 / 오프라인 -->
-              <div class="info-field" id="field-online-mode">
+              <div class="info-field full-row" id="field-online-mode">
                 <label class="info-label">교육 형태</label>
                 <div class="fee-toggle-group">
                   <button class="fee-toggle-btn" id="modeBtn-offline" onclick="selectOnlineMode(false)">
@@ -241,7 +241,7 @@
               </div>
 
               <!-- 출장 / 교육명 -->
-              <div class="info-field">
+              <div class="info-field full-row">
                 <label class="info-label" for="input-title" id="label-title">출장 / 교육명</label>
                 <input class="info-input" type="text" id="input-title"
                   placeholder="예: 의료기관 교육담당자 역량강화 연수"
@@ -299,9 +299,13 @@
                   </select>
                   <input type="hidden" id="input-starttime" />
                 </div>
-                <p class="info-subhint" id="time-ktx-hint">등록·오리엔테이션이 먼저 있으면 그 시각을 넣어 주세요. 마산역 역산 출발이 출근시각(08:30)보다 이르면 전날 이동으로 숙박 1박·일당 1일이 추가돼요.</p>
-                <div class="prevday-verdict hidden" id="prevday-verdict" aria-live="polite"></div>
+                <p class="info-subhint" id="time-ktx-hint">등록·오리엔테이션이 먼저 있으면 그 시각으로 골라 주세요.</p>
               </div>
+
+              <!-- 첫날 이동 안내 — 넓은 화면은 오른쪽 여백 패널, 좁으면 한 줄 전체 -->
+              <aside class="route-aside" id="route-aside" aria-live="polite">
+                <div class="route-aside-inner" id="prevday-verdict"></div>
+              </aside>
 
               <!-- 출장 장소 (구체적 장소 + 카카오 장소 검색) -->
               <div class="info-field" id="field-place">
@@ -329,7 +333,7 @@
               </div>
 
               <!-- 교육비 / 등록비 유무 -->
-              <div class="info-field fee-field" id="field-fee">
+              <div class="info-field fee-field full-row" id="field-fee">
                 <label class="info-label">교육 / 등록비</label>
                 <p class="fee-toggle-desc">교육비 또는 등록비가 있나요?</p>
                 <div class="fee-toggle-group">
