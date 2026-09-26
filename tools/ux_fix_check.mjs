@@ -30,6 +30,8 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.fill('#input-start','2026-10-12'); await p.fill('#input-end','2026-10-12')
   await p.selectOption('#input-starthour','09'); await p.selectOption('#input-startmin','30')
   await p.fill('#input-region','부산'); await p.waitForTimeout(300)
+  { const vd = ((await p.textContent('#prevday-verdict').catch(()=>''))||'').replace(/\s+/g,' ')
+    check('⑮ 시외버스 구간은 터미널 시간표로 탈 버스를 안내', /마산시외버스터미널 \d\d:\d\d 출발/.test(vd), vd.slice(0,80)) }
   // ① 온라인 → 없어요 버튼이 남아 있는가
   await p.click('#modeBtn-online'); await p.waitForTimeout(200)
   check('① 온라인에서도 "없어요" 노출', await vis(p,'#feeBtn-no'))
