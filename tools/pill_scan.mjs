@@ -40,7 +40,6 @@ for (const width of [320, 390, 430]) {
     document.getElementById('input-region').value = '제주'
     onRegionInput()
     document.getElementById('input-starttime').value = '14:00'
-    document.getElementById('input-endtime').value = '17:00'
     onTimeChange()
   })
   await p.click('#feeBtn-yes'); await p.waitForTimeout(150)

@@ -115,7 +115,7 @@ for (const width of WIDTHS) {
       // 카드4 채우기 (ui_sweep과 같은 순서 — 실제 입력 이벤트)
       for (const [id, v] of [['input-start','2026-10-12'],['input-end','2026-10-14'],
         ['input-title','2026년 병원 원가관리 실무 교육과정'],['input-place','삼성서울병원 암병원 지하 1층 강당'],
-        ['input-region','서울'],['input-starttime','14:00'],['input-endtime','17:00']]) {
+        ['input-region','서울'],['input-starttime','14:00']]) {
         await p.fill('#' + id, v).catch(() => {}); await p.waitForTimeout(150)
       }
       await p.click('#modeBtn-offline').catch(() => {}); await p.waitForTimeout(200)

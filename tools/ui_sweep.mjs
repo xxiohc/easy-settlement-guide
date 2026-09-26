@@ -57,7 +57,7 @@ async function run(withDoc){
     const got=await p.inputValue('#'+id).catch(()=>null)
     log(P,label, got===v?'PASS':'FAIL', `값=${got}`)
   }
-  for(const [id,label,v] of [['input-starttime','교육 시작시각','14:00'],['input-endtime','교육 종료시각','17:00']]){
+  for(const [id,label,v] of [['input-starttime','교육 시작시각','14:00']]){
     await p.fill('#'+id, v).catch(()=>{}); await p.waitForTimeout(250)
     const got=await p.inputValue('#'+id).catch(()=>null)
     log(P,label, got===v?'PASS':'FAIL', `값=${got}`)
