@@ -2088,12 +2088,23 @@ function accessLine(b, dest) {
     : b.accessSrc === 'transit' ? '서울시 대중교통 조회'
     : b.accessSrc === 'known' ? '확인값' : '직접 입력'
   const st = KtxRoute.stations && KtxRoute.stations[b.station]
+  // 경로 링크는 설명 아래 한 줄에 모은다(2026-09-26 지석초이)
   const links = st && dest && Number.isFinite(dest.lat)
-    ? ` <a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', b.station + '역', st, dest.label || '목적지', dest)}">대중교통 경로 ↗</a>` +
-      ` <a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', b.station + '역', st, dest.label || '목적지', dest)}">택시 경로 ↗</a>`
+    ? `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', b.station + '역', st, dest.label || '목적지', dest)}">대중교통 경로 ↗</a>` +
+      `<a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', b.station + '역', st, dest.label || '목적지', dest)}">택시 경로 ↗</a></span>`
     : ''
   ensureTransit(b, dest)
   return `대중교통 약 ${b.access}분(${basis})${links}${transitDetailHtml(b.accessRoute)}`
+}
+
+// 코레일 예매 화면. 새 코레일 사이트는 매크로 방지로 요청을 암호화해 주소에 구간·날짜를 넣어도
+// 버린다(2026-09-26 실측 — 예전 letskorail 주소도 빈 예매 화면으로 넘어간다). 그래서 예매 화면만 열고
+// 찾을 편(구간·날짜·시각·열차번호)을 옆에 적어 둔다.
+const KORAIL_SEARCH_URL = 'https://www.korail.com/ticket/search/general'
+function korailLinkHtml(leg) {
+  const day = state.startDate ? `${shortDate(state.startDate)} ` : ''
+  return `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${KORAIL_SEARCH_URL}">코레일 예매 ↗</a>` +
+    `<span class="ra-hint">${day}${escapeHtml(leg.from)}→${escapeHtml(leg.to)} ${fmtTime(leg.dep)} 편</span></span>`
 }
 
 // 현장 도착 후 교육 시작까지 남는 시간(2026-09-26 지석초이) — 빠듯 15분 미만 / 적당 ~60분 / 넉넉
@@ -2148,7 +2159,8 @@ function renderPrevDayVerdict() {
     const rows = []
     b.legs.forEach((leg, i) => {
       rows.push(`<li class="is-train"><span class="ra-t">${fmtTime(leg.dep)}</span><span class="ra-dot"></span>
-        <span>${i === 0 ? '마산역' : escapeHtml(leg.from) + '역 환승'} 출발<span class="ra-sub">${escapeHtml(leg.type)} ${escapeHtml(leg.no)}</span></span></li>`)
+        <span>${i === 0 ? '마산역' : escapeHtml(leg.from) + '역 환승'} 출발<span class="ra-sub">${escapeHtml(leg.type)} ${escapeHtml(leg.no)}</span>
+        ${korailLinkHtml(leg)}</span></li>`)
       if (i < b.legs.length - 1) {
         rows.push(`<li><span class="ra-t">${fmtTime(leg.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(leg.to)}역 도착</span></li>`)
       }
