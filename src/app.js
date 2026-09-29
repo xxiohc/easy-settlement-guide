@@ -100,6 +100,7 @@ let FARE_TABLE = [
   { keywords: ['순천'], label: '순천', bus: 23800 },
   { keywords: ['여수'], label: '여수', bus: 33600 },
   { keywords: ['제주'], label: '제주', jeju: true },
+  { keywords: ['창원'], label: '창원', cityBus: 1650 },
 // </fare-table:auto>
 ]
 
@@ -2797,6 +2798,8 @@ function judgePrevDayMove() {
   // 시외버스 구간은 집에서 오가는 거리라 전날 이동을 인정하지 않는다(2026-09-26 지석초이)
   if (r.skip === 'bus' || r.skip === 'busonly') return { auto: true, move: false, kind: 'bus' }
   if (r.skip === 'needmanual') return { auto: false, kind: 'noplace' }
+  // 창원 시내는 병원에서 시내버스로 가는 거리라 전날 이동이 없다
+  if (r.skip === 'citybus') return { auto: true, move: false, kind: 'citybus', fare: r.busFare }
   if (r.skip) return { auto: false, kind: 'unknown' }
   const plan = r.plan
   if (plan && plan.ok && plan.best) {
@@ -3054,6 +3057,10 @@ function renderPrevDayVerdict() {
     return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>전날 이동</b></div>
       <div class="ra-why">첫날 ${escapeHtml(state.startTime)} 시작에 닿는 당일 열차가 없어요</div>`, true)
   }
+  if (j.kind === 'citybus') {
+    return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>시내버스 · 당일 이동</b></div>
+      <div class="ra-why">창원 시내라 기차·시외버스를 타지 않아요. 교통비는 시내버스 요금(교통카드 편도 ${j.fare.cityBus.toLocaleString()}원 × 왕복)으로 정산해요</div>`, true)
+  }
   if (j.kind === 'near') {
     return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>당일 이동</b></div>
       <div class="ra-why">마산역 인근이라 기차를 타지 않는 구간이에요</div>`, true)
@@ -3081,7 +3088,7 @@ function applyPrevDayMove() {
   if (j.auto) {
     state.prevDayMove = j.kind === 'na' ? null : j.move
     state.prevDayAuto = true
-    return { mode: j.kind === 'near' ? 'skip' : j.kind === 'no-train' ? 'forced' : 'auto', judgment: j }
+    return { mode: j.kind === 'near' || j.kind === 'citybus' ? 'skip' : j.kind === 'no-train' ? 'forced' : 'auto', judgment: j }
   }
 
   // 자동으로 골라 뒀던 답이 남아 있으면 사람이 새로 답하게 비운다
@@ -3340,6 +3347,9 @@ function prepareCard9() {
       note: `마산역 ${fmtTime(rf.dep)} 출발 · ${kind} · 편도 ${rf.oneWay.toLocaleString()}원 × 2회${busNote}`,
     })
     total += rf.roundTrip
+  } else if (fare && fare.cityBus) {
+    breakdown.push({ label: '시내버스 (창원)', amount: cityBusRoundTrip(fare), note: cityBusNote(fare) })
+    total += cityBusRoundTrip(fare)
   } else if (fare) {
     const useFirst = state.isMS && fare.ktxFirst
     const fareAmt = useFirst ? fare.ktxFirst : (fare.ktxNormal ?? fare.bus ?? 0)
@@ -3648,6 +3658,7 @@ function computeRoutePlan() {
   if (busOnly) return { skip: 'busonly', busOnly }
   const busFare = getFare(state.region || state.place)
   if (busFare && busFare.bus) return { skip: 'bus', busFare }
+  if (busFare && busFare.cityBus) return { skip: 'citybus', busFare }
   if (!KtxRoute.ready) return { skip: 'data' }
 
   const startMin = toMinutes(state.startTime)
@@ -3718,6 +3729,7 @@ function renderRoutePanel() {
     return hide(`🚌 ${escapeHtml(r.busFare.label)}은 시외버스 구간이라 기차 시간표 역산 대상이 아니에요. ${ORIGIN_BUS}에서 출발합니다. (왕복 ${r.busFare.bus.toLocaleString()}원)`)
   }
   if (r.skip === 'busonly') return show(busOnlyHtml(r.busOnly))
+  if (r.skip === 'citybus') return hide('')
   if (r.skip === 'data')   return hide('🚄 시간표 데이터를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.')
   if (r.skip === 'notime') {
     return hide(isDone
@@ -3830,6 +3842,11 @@ function busFasterHtml(b) {
     ${fareLine}
     <div class="route-note">버스 소요시간은 직선 ${b.directKm}km에 도로 보정을 적용한 <strong>추정치</strong>이고 시간표 조회 결과가 아닙니다. 터미널 시간표를 직접 확인해 주세요. 기차로 가실 경우의 안내는 아래에 그대로 있습니다.</div>`
 }
+
+// 창원 시내버스(2026-09-29 지석초이) — 운임표의 cityBus 는 일반·성인·교통카드 편도 1회 요금이다.
+// 정산은 왕복 2회. 관리자 화면에서 고칠 수 있고, 원문은 tools/build_fares.py 의 KEEP 주석(창원시 고시)이다.
+function cityBusRoundTrip(fare) { return fare && fare.cityBus ? fare.cityBus * 2 : 0 }
+const cityBusNote = fare => `창원 시내버스 일반버스 교통카드 편도 ${fare.cityBus.toLocaleString()}원 × 왕복 2회 · 창원시 고시 요금(2025.8.1. 시행)`
 
 function getFare(place) {
   if (!place) return null
@@ -3963,7 +3980,18 @@ function renderTripFormPreview() {
       </tr>`
   } else {
     const fare = getFare(state.region || state.place)
-    if (fare) {
+    if (fare && fare.cityBus) {
+      const one = fare.cityBus
+      fareTotal = cityBusRoundTrip(fare)
+      fareRows = `
+        <tr>
+          <th class="tf-th tf-th-multi" rowspan="2">교통비</th>
+          <td class="tf-td">삼성창원병원 → ${escapeHtml(state.place || '창원 시내')}&nbsp;&nbsp;@ ${one.toLocaleString()} × 1회 × 1명 = ₩ ${one.toLocaleString()} (시내버스 편)</td>
+        </tr>
+        <tr>
+          <td class="tf-td">${escapeHtml(state.place || '창원 시내')} → 삼성창원병원&nbsp;&nbsp;@ ${one.toLocaleString()} × 1회 × 1명 = ₩ ${one.toLocaleString()} (시내버스 편)</td>
+        </tr>`
+    } else if (fare) {
       const useFirst  = state.isMS && fare.ktxFirst
       const fareAmt   = useFirst ? fare.ktxFirst : (fare.ktxNormal ?? fare.bus ?? 0)
       const half      = fareAmt / 2
@@ -4022,11 +4050,12 @@ function renderTripFormPreview() {
     // 숙박비 (제주 포함 동일 기준)
     if (state.lodgingProvided) totalAmt += prevDayBonus * LODGING_RATE
     else totalAmt += baseNights * LODGING_RATE
-    // 교통비: fareOverride 있으면 우선
-    totalAmt += (state.fareOverride !== null && !isJeju) ? state.fareOverride : fareTotal
-    if (state.fee > 0 && (state.feeStatus === 'paid' || state.feeStatus === 'not-paid')) {
-      totalAmt += state.fee
-    }
+  }
+  // 교통비·등록비는 8시간 이하 당일 출장이어도 정산한다 — 일당만 없다. 예전엔 이 둘까지 if (!isShort) 안에 있어
+  // 신청서 합계가 ₩0으로 나오고 예상 금액 화면(교통비 포함)과 달랐다(2026-09-29 창원 시내버스 점검 중 발견).
+  totalAmt += (state.fareOverride !== null && !isJeju) ? state.fareOverride : fareTotal
+  if (state.fee > 0 && (state.feeStatus === 'paid' || state.feeStatus === 'not-paid')) {
+    totalAmt += state.fee
   }
   // 제주: 항공료는 실비(별도)이므로 합계에 "+ 항공료 실비" 표기
   const totalStr = isJeju
