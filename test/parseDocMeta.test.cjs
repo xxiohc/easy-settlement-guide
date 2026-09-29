@@ -340,3 +340,10 @@ test('1차가 없는 차수 표(2차 대전·3차 서울)도 차수 공문으로
   assert.equal(m.venueSearch, '대전무역회관')
   assert.equal(m.registration, null)
 })
+
+test('창원은 운임표에서 시내버스(교통카드 편도) 요금 행이다 — 창원시 고시 1,650원(2025.8.1.)', () => {
+  const f = app.getFare('창원')
+  assert.equal(f.cityBus, 1650)
+  assert.equal(app.cityBusRoundTrip(f), 3300)
+  assert.equal(app.getFare('부산').cityBus, undefined)
+})

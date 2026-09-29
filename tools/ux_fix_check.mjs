@@ -168,6 +168,33 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await ctx.close()
 }
 
+// ── D. 창원 시내버스 + 8시간 이하 당일 출장 합계 (2026-09-29) ──
+// 창원은 기차·시외버스 대신 시내버스 요금(교통카드 편도 × 2)으로 정산하고, 8시간 이하 당일 출장이어도
+// 교통비는 신청서 합계에 들어가야 한다(예전엔 신청서 합계만 ₩0이라 예상 금액과 달랐다).
+{
+  const [ctx,p] = await newPage()
+  await p.click('[data-choice="planned"]'); await p.waitForTimeout(300)
+  await p.click('[data-choice="no-doc"]').catch(()=>{}); await p.waitForTimeout(300)
+  await p.evaluate(() => {
+    Object.assign(state, { title: '창원 교류회', startDate: '2026-10-13', endDate: '2026-10-13', nights: 0, days: 1,
+      place: '창원컨벤션센터', region: '창원', startTime: '09:30', fee: 0, hasFee: false, feeStatus: 'no-fee',
+      isMS: false, isShortDayTrip: true, isOnline: false, isJeju: false, dept: '경영지원팀', name: '홍길동' })
+    // 앱은 장소·지역을 카드4 입력칸에서 다시 읽는다 — 상태만 넣으면 빈 입력칸 값으로 덮인다(점검 스크립트 첫 실패 원인)
+    document.getElementById('input-place').value = '창원컨벤션센터'
+    document.getElementById('input-region').value = '창원'
+    goToCard(9)
+  })
+  await p.waitForTimeout(700)
+  const c9 = await p.evaluate(() => document.getElementById('card-9').innerText.replace(/\s+/g, ' '))
+  const city = await p.evaluate(() => getFare('창원')?.cityBus)
+  check('D 창원 → 시내버스 요금(편도×2)', !!city && c9.includes('시내버스 (창원)') && c9.includes((city * 2).toLocaleString() + '원'), `편도 ${city}`)
+  await p.evaluate(() => goToCard(10)); await p.waitForTimeout(700)
+  const form = await p.evaluate(() => document.getElementById('tripFormWrap').innerText.replace(/\s+/g, ' '))
+  const tot = (form.match(/출장비 합계\s*₩\s*([\d,]+)/) || [])[1]
+  check('D 8시간 이하 당일이어도 신청서 합계에 교통비 포함', tot === (city * 2).toLocaleString(), `합계 ${tot}`)
+  await ctx.close()
+}
+
 await b.close()
 console.log('\n── 요약 ──')
 console.log(`총 ${out.length}건 · FAIL ${out.filter(l=>l.startsWith('FAIL')).length}건`)

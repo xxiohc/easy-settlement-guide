@@ -159,6 +159,7 @@ REGION_TO_STATION = [
     (['순천'],         '순천',      None),   # 시외버스
     (['여수'],         '여수',      None),   # 시외버스
     (['제주'],         '제주',      None),   # 항공
+    (['창원'],         '창원',      None),   # 시내버스 (병원 소재지 — 2026-09-29 지석초이)
 ]
 # 시외버스는 마산시외버스터미널 고시 '일반' 편도 요금 × 왕복이다(2026-09-26 지석초이 — 우등 아님).
 # 원문: data/bus_masan.json (tools/check_bus_masan.mjs 로 터미널 홈페이지와 대조). 부산은 서부(사상) 기준.
@@ -170,6 +171,10 @@ KEEP = {                       # 운임표 대상이 아닌 행
     '순천': {'bus': 23800},     # 11,900 × 2
     '여수': {'bus': 33600},     # 16,800 × 2
     '제주': {'jeju': True},
+    # 창원 시내버스 일반·성인·교통카드 편도 1회 요금. 창원시 고시(2025.8.1. 시행, 200원 인상):
+    # https://www.changwon.go.kr/cwportal/depart/11064/13466/13584.web — 현금 1,700원, 좌석 1,950원.
+    # 정산은 왕복 2회. 같은 요금 안의 환승은 무료라 1회로 본다.
+    '창원': {'cityBus': 1650},
 }
 
 
@@ -201,7 +206,7 @@ def js_literal(rows):
         parts = [f"keywords: [{', '.join(repr(k).replace(chr(39), chr(39)) for k in r['keywords'])}]",
                  f"label: '{r['label']}'"]
         for k in ('station', 'ktxNormal', 'ktxFirst', 'oneWayNormal', 'oneWayFirst',
-                  'transfers', 'bus'):
+                  'transfers', 'bus', 'cityBus'):
             if k in r:
                 parts.append(f"{k}: {r[k] if not isinstance(r[k], str) else repr(r[k])}")
         if 'path' in r:

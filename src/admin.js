@@ -26,6 +26,7 @@ const DEFAULT_RATES = {
   { keywords: ['순천'], label: '순천', bus: 23800 },
   { keywords: ['여수'], label: '여수', bus: 33600 },
   { keywords: ['제주'], label: '제주', jeju: true },
+  { keywords: ['창원'], label: '창원', cityBus: 1650 },
 // </fare-table:auto>
   ],
 
@@ -118,11 +119,13 @@ function renderFareTable() {
     const isKtx  = row.ktxNormal !== undefined
     const isBus  = row.bus !== undefined
     const isJeju = !!row.jeju
+    const isCity = row.cityBus !== undefined
 
     let modeTag
     if (isKtx)       modeTag = '<span class="fare-tag ktx">KTX</span>'
     else if (isBus)  modeTag = '<span class="fare-tag bus">버스</span>'
     else if (isJeju) modeTag = '<span class="fare-tag jeju">제주</span>'
+    else if (isCity) modeTag = '<span class="fare-tag bus">시내</span>'
 
     // 운임표에서 뽑은 경로 (직통/환승) — 표시 전용, 편집 대상 아님
     const routeNote = Array.isArray(row.path) && row.path.length > 1
@@ -138,7 +141,7 @@ function renderFareTable() {
       <tr>
         <td class="fare-label-cell">${row.label}${modeTag}${routeNote}</td>
         <td style="text-align:center;color:#8b95a1;font-size:12px">
-          ${isKtx ? 'KTX' : isBus ? '시외버스' : '항공'}
+          ${isKtx ? 'KTX' : isBus ? '시외버스' : isCity ? '시내버스(편도)' : '항공'}
         </td>
         <td style="text-align:center">
           ${isKtx
@@ -153,6 +156,8 @@ function renderFareTable() {
         <td style="text-align:center">
           ${isBus
             ? `${fareInput('bus', row.bus)}<span class="fare-unit">원</span>`
+            : isCity
+              ? `${fareInput('cityBus', row.cityBus)}<span class="fare-unit">원 × 2</span>`
             : isJeju
               ? '<span style="font-size:12px;color:#d97706">실비 정산</span>'
               : '<span style="color:#e5e8ec">—</span>'}

@@ -180,12 +180,19 @@
       ],
       "label": "제주",
       "jeju": true
+    },
+    {
+      "keywords": [
+        "창원"
+      ],
+      "label": "창원",
+      "cityBus": 1650
     }
   ],
   "dailyRate": 35000,
   "dailyRate25p": 8750,
   "lodgingRate": 100000,
   "mealCap": 10000,
-  "updatedAt": "2026-09-24",
+  "updatedAt": "2026-09-29",
   "fareBasis": "KTX 운임표 (202609기준).xls"
 }
