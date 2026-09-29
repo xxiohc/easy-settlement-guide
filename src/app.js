@@ -562,7 +562,7 @@ async function processUploadedFile(file) {
   document.getElementById('parseLoading').classList.remove('hidden')
   setParseProgress(0, '준비 중')
 
-  const ext = file.name.toLowerCase().split('.').pop()
+  const ext = await sniffDocExt(file)
   let text = ''
 
   try {
@@ -602,6 +602,8 @@ async function processUploadedFile(file) {
       setParseProgress(20, ext === 'hwpx' ? '한글 문서 읽는 중' : '워드 문서 읽는 중')
       try {
         text = await extractZipDocText(file, ext)
+        // 확장자 없이 온 zip 문서는 워드로 먼저 보고, 비면 한글(HWPX)로 다시 연다
+        if (!text.trim()) text = await extractZipDocText(file, ext === 'docx' ? 'hwpx' : 'docx')
         console.log(`${ext} 본문 길이:`, text.replace(/\s/g, '').length)
       } catch (e) {
         console.warn(`${ext} 읽기 실패:`, e)
@@ -654,6 +656,21 @@ async function processUploadedFile(file) {
   cta.disabled = false
   cta.classList.remove('disabled')
   updateDocStrip()
+}
+
+// 확장자가 내용과 다른 파일이 온다 — 메일 첨부 이미지가 "attach(1).txt"로 저장되는 식이다.
+// 파일 머리 바이트로 실제 형식을 가리고, 알 수 없으면 확장자를 그대로 쓴다.
+async function sniffDocExt(file) {
+  const byName = file.name.toLowerCase().split('.').pop()
+  let head
+  try { head = new Uint8Array(await file.slice(0, 8).arrayBuffer()) } catch (_) { return byName }
+  const starts = (...b) => b.every((v, i) => head[i] === v)
+  if (starts(0x25, 0x50, 0x44, 0x46)) return 'pdf'
+  if (starts(0x89, 0x50, 0x4E, 0x47)) return 'png'
+  if (starts(0xFF, 0xD8, 0xFF)) return 'jpg'
+  if (starts(0xD0, 0xCF, 0x11, 0xE0)) return 'hwp'
+  if (starts(0x50, 0x4B, 0x03, 0x04)) return ZIP_TEXT_EXTS.includes(byName) ? byName : 'docx'
+  return byName
 }
 
 function showUploadError(msg) {
@@ -1387,8 +1404,9 @@ function cleanTitle(raw) {
     .replace(/(\S+)(?:\s+\1)+(?=\s|$)/g, '$1')
     .replace(/(\d)\s+(년|회|차|월|일|호)(?=\s|$)/g, '$1$2')
     .replace(/제\s+(\d)/g, '제$1')
-    .replace(/\s+(?:(?:학교법인|재단법인|사단법인|의료법인)\s+)?[가-힣A-Za-z]+\s+(?:이사장|병원장|원장|회장|총장)$/, '')
+    .replace(/\s+(?:(?:학교법인|재단법인|사단법인|의료법인)\s+)?[가-힣A-Za-z]+\s+(?:이사장|병원장|원장|회장|총장)(?:\s.*)?$/, '')
     .replace(/^(.*\S)\s+((?:19|20)\d{2})$/, '$2 $1')
+    .replace(/([(「『\[])\s+/g, '$1').replace(/\s+([)」』\]])/g, '$1')
     .trim()
 }
 
@@ -1405,10 +1423,22 @@ function normalizeOcrArtifacts(text) {
     .replace(/(?<![가-힣])(기)\s*2\s*(?=[:;])/g, '$1간 ')
     .replace(/\s*;\s*:/g, ' :')
     // 공문 머리의 "제 목"에서 '목'이 '='·'＝'로 읽히는 일이 잦다(크롬 OCR: "제 = 2026 …정기세미나")
-    .replace(/(?<![가-힣])제\s*[=＝]+\s*(?=[가-힣\d])/g, '제 목 ')
+    .replace(/(?<![가-힣])제\s*[=＝]+\s*[：:』」]*\s*(?=[가-힣\d])/g, '제 목 ')
     // 크롬 OCR은 같은 자리를 "제   2 2026 …"로 읽는다. '제2조'·'제 2 회'를 망치지 않게
     // 뒤에 연도(네 자리)가 바로 오는 경우만 제목 라벨로 돌린다.
     .replace(/(?<![가-힣])제\s+2\s+(?=(?:19|20)\d{2}\s)/g, '제 목 ')
+    // 글자마다 따로 놓인 PDF(메드트로닉 공문)는 숫자가 "20 2 6 년 0 9 월"·"1 6 : 5 0"으로 쪼개져 나온다.
+    // 연도·월일·시각 자리에서만 붙인다.
+    .replace(/(?<!\d)2\s*0\s*(\d)\s*(\d)(?=\s*(?:년|\.\s*\d))/g, '20$1$2')
+    .replace(/(?<![\d.])(\d) (\d)(?= ?[월일])/g, '$1$2')
+    .replace(/(?<!\d)(\d)\s(\d)(?=\s*:\s*\d)/g, '$1$2')
+    .replace(/(\d)\s*:\s*(\d)\s?(\d)(?!\d)/g, '$1:$2$3')
+    // 두 자리 연도 "'26.10. 1." — 스캔에서는 따옴표가 `"·"로도 읽힌다
+    .replace(/[’'‘"`＇“”´]+\s*(\d{2})\s*\.\s*(?=\d{1,2}\s*\.)/g, '20$1.')
+    // 사진 판독에서 '월'이 '%'로, '년'이 '4'로 읽힌다("2026 10% 14일", "20264 09% 20일")
+    .replace(/(?<!\d)(20\d{2})4?\s*년?\s+(\d{1,2})\s*%\s*(\d{1,2})\s*일/g, '$1년 $2월 $3일')
+    // '월'이 '9'로 붙어 읽히기도 한다("2026년 109 13일(화)" = 10월 13일). 년·일 사이 세 자리일 때만
+    .replace(/(?<!\d)(20\d{2})\s*년\s*(1[0-2]|[1-9])9\s+(\d{1,2})\s*일/g, '$1년 $2월 $3일')
 }
 
 // 공문에는 교육일 말고도 날짜가 많다. 시행일자·목록 기준일·신청/접수/납부 기간이 교육일로
@@ -1419,7 +1449,10 @@ function maskNonEventDates(tc) {
   return tc
     .replace(new RegExp(String.raw`(?<![가-힣])시\s*행(?!\s*(?:하|할|합|되|된|중|령|규|에|을|의|계))[\s\S]{0,40}?${DATE_TOKEN}\)?`, 'g'), ' ')
     .replace(new RegExp(String.raw`${DATE_TOKEN}\s*기\s*준`, 'g'), ' ')
-    .replace(new RegExp(String.raw`(?:신\s*청|접\s*수|사\s*전\s*등\s*록|납\s*부|입\s*금|초\s*록|취\s*소|환\s*불)[^0-9~]{0,20}${DATE_PART}(?:[^~0-9]{0,6}~\s*${DATE_PART})?`, 'g'), ' ')
+    // 관련 문서 번호에 딸린 날짜 "병약 제2026-131호(2026.03.11.)", 문서 머리의 "날 짜: 2026년 09월 01일"
+    .replace(new RegExp(String.raw`호\s*\(\s*${DATE_TOKEN}\s*\)`, 'g'), '호 ')
+    .replace(new RegExp(String.raw`(?<![가-힣])날\s*짜\s*[:：]?\s*${DATE_TOKEN}`, 'g'), ' ')
+    .replace(new RegExp(String.raw`(?:신\s*청|접\s*수|사\s*전\s*등\s*록|등\s*록\s*기\s*간|납\s*부|입\s*금|초\s*록|취\s*소|환\s*불)[^0-9~]{0,20}${DATE_PART}(?:[^~0-9]{0,6}~\s*${DATE_PART})?`, 'g'), ' ')
 }
 
 // 연도 없는 날짜는 요일이 맞는 해를 고른다(올해에 가까운 순). 요일이 없으면 올해.
@@ -1439,11 +1472,11 @@ function yearForDate(month, day, dowChar, curY) {
 const SNIPPET_DATE_FORMS = [
   [/(\d{4})-(\d{1,2})-(\d{1,2})\s*~\s*(?:(\d{4})-)?(\d{1,2})-(\d{1,2})/,
     m => ({ s: [+m[1], +m[2], +m[3]], e: [m[4] ? +m[4] : +m[1], +m[5], +m[6]] })],
-  [/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일(?:\s*\(\s*[가-힣]\s*\))?\s*~\s*(?:(\d{4})\s*년\s*)?(?:(\d{1,2})\s*월\s*)?(\d{1,2})\s*일/,
+  [/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일(?:\s*\(\s*[가-힣\u4E00-\u9FFF]\s*\))?\s*~\s*(?:(\d{4})\s*년\s*)?(?:(\d{1,2})\s*월\s*)?(\d{1,2})\s*일/,
     m => ({ s: [+m[1], +m[2], +m[3]], e: [m[4] ? +m[4] : +m[1], m[5] ? +m[5] : +m[2], +m[6]] })],
-  [/(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})\.?(?:\s*\(\s*[가-힣]\s*\))?\s*~\s*(?:(\d{4})\s*\.\s*)?(?:(\d{1,2})\s*\.\s*)?(\d{1,2})/,
+  [/(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})\.?(?:\s*\(\s*[가-힣\u4E00-\u9FFF]\s*\))?\s*~\s*(?:(\d{4})\s*\.\s*)?(?:(\d{1,2})\s*\.\s*)?(\d{1,2})/,
     m => ({ s: [+m[1], +m[2], +m[3]], e: [m[4] ? +m[4] : +m[1], m[5] ? +m[5] : +m[2], +m[6]] })],
-  [/(?<!\d)(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\(\s*([가-힣])\s*\))?\s*~\s*(\d{1,2})\s*\.\s*(\d{1,2})/,
+  [/(?<!\d)(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\(\s*([가-힣\u4E00-\u9FFF])\s*\))?\s*~\s*(\d{1,2})\s*\.\s*(\d{1,2})/,
     (m, curY) => {
       const y = yearForDate(+m[1], +m[2], m[3], curY)
       return { s: [y, +m[1], +m[2]], e: [+m[4] < +m[1] ? y + 1 : y, +m[4], +m[5]], guessed: true }
@@ -1472,7 +1505,8 @@ const REGION_MAP = [
   // 수원 — 성균관대 자연과학캠퍼스가 여기다. 운임표에 수원역이 있어 왕복 77,600원이고
   // 서울역(97,200원)으로 잡으면 19,600원이 부풀려진다. 발신처 주소가 '서울 종로구'인
   // 공문(성균관대 법인사무국)이 많으므로 서울 규칙보다 반드시 먼저 봐야 한다.
-  ['자연과학캠퍼스|성대\\s*수원|성균관대.*수원|수원', '수원'],
+  // '서천연수원'(삼성전자 연수원, 용인)의 '수원'을 잡지 않도록 앞에 한글이 붙은 '수원'은 뺀다
+  ['자연과학캠퍼스|성대\\s*수원|성균관대.*수원|(?<![가-힣])수원', '수원'],
   // 서울 자치구
   ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
   // 서울 주요 병원 (병원명으로 장소 특정되는 경우)
@@ -1482,7 +1516,8 @@ const REGION_MAP = [
   // 나머지 경기·인천 (서울 출장 처리) — 수원은 위에서 따로 잡는다. 성균관대학교는
   // 인문사회과학캠퍼스(종로)가 기본이고 삼성창원병원·창원은 뺀다
   ['경기도|인천광역시|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대학교(?!\\s*(?:삼성창원|창원))', '서울'],
-  ['천안시?|아산시?|천안아산역', '천안'],
+  // '서울아산병원'(OCR로 '서물아산병원')의 '아산'을 충남 아산으로 잡지 않는다
+  ['천안시?|(?<![가-힣])아산시?|천안아산역', '천안'],
   ['오송|청주시?', '오송'],
   ['대전광역시|대전시?|을지대.*대전|유성구|서구.*대전|대전.*서구', '대전'],
   // 부산 (해운대구에 "대구"가 들어 있어 반드시 동대구보다 앞에 둔다 — 순서를 바꾸면
@@ -1518,7 +1553,7 @@ function matchRegionInVenue(text) {
   const hit = matchRegion(text)
   if (hit) return hit
   for (const region of BARE_REGION_NAMES) {
-    if (text.includes(region)) return region
+    if (new RegExp(`(?<![가-힣])${region}`).test(text)) return region
   }
   return ''
 }
@@ -1536,15 +1571,20 @@ function parseDocMeta(filename, text) {
   // ── 제목 ──
   let title = ''
   // normalized text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
-  const titleLineM = normalized.match(/(?:제\s*_?\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n]*[：:。]?[^\S\n]*([가-힣\d][^\n]{3,79})/)
+  const titleLineM = normalized.match(/(?:제\s*_?\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n_]*[：:。』」_=]*[^\S\n]*([가-힣\dA-Za-z「『\[(][^\n]{3,119})/)
   if (titleLineM) {
-    title = cleanTitle(titleLineM[1])
+    // 긴 제목이 다음 줄로 넘어간 공문("…교육 이수 협조 / 요청(병의원, 보건소용)") — 제목이 끝맺음 말로
+    // 끝나지 않았고 다음 줄이 본문 항목(1. 가. 수신…)이 아니면 한 줄 더 붙인다.
+    const nextLine = (normalized.slice(titleLineM.index + titleLineM[0].length).match(/^\n([^\n]{2,40})/) || [])[1] || ''
+    const ended = /(?:안내|건|개최|요청|알림|공고|모집|초청|계획|신청|회의|세미나|교육|과정|[)」』])\s*$/.test(titleLineM[1])
+    const bodyStart = /^\s*(?:\d+\s*\.|[가나다라마바사아자차카타파하]\s*\.|\(?\s*경\s*유|수\s*신|참\s*조|붙\s*임|[-─━═_]{2,})/.test(nextLine)
+    title = cleanTitle(titleLineM[1] + (!ended && nextLine && !bodyStart ? ' ' + nextLine : ''))
     // 목록 기호 혼입 제거 (끝에 붙은 " 나." " 다." 등)
     title = title.replace(/\s+[가나다라마바사아자차카타파하]\s*\.?\s*$/, '').trim()
   }
   // 공백 정규화 버전(tc)에서 재시도 — 개행이 없는 PDF OCR 결과에도 대응
   if (!title) {
-    const titleM = tc.match(/(?:제\s*_?\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。]?\s+([가-힣\d].{3,79})/)
+    const titleM = tc.match(/(?:제\s*_?\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)\s*[：:。』」_=]*\s+([가-힣\dA-Za-z「『\[(].{3,119})/)
     if (titleM) {
       // 본문 항목 구분자(숫자. / 가.나.다. / 수신 / 붙임) 이후 잘라냄
       title = cleanTitle(titleM[1])
@@ -1552,7 +1592,7 @@ function parseDocMeta(filename, text) {
   }
   // 파일명에서 추출 (숫자+언더스코어로만 구성된 파일명은 제외)
   if (!title) {
-    const fnBase = filename.replace(/\.[^.]+$/, '').replace(/[_\-]/g, ' ').trim()
+    const fnBase = filename.replace(/(?:\.[A-Za-z0-9]{2,4})+$/, '').replace(/[_\-]/g, ' ').trim()
     // 파일명에 한글이 있고 너무 짧거나 길지 않으면 사용
     if (fnBase.length > 4 && fnBase.length < 80 && /[가-힣]/.test(fnBase)) title = fnBase
     else if (fnBase.length > 4 && fnBase.length < 80 && !/^\d/.test(fnBase)) title = fnBase
@@ -1677,6 +1717,12 @@ function parseDocMeta(filename, text) {
   if (!startDate) {
     const m = tcD.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\s*\([^)]{1,3}\))?(?!\s*[~～])/)
     if (m && +m[1] >= 2020) setSingle(+m[1],+m[2],+m[3])
+  }
+
+  // 패턴9: 라벨 없이 한글 날짜 하나만 있는 안내문(메일·포스터 사진) — "2026년 10월 14일(수) 오후 1시"
+  if (!startDate) {
+    const m = tcD.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
+    if (m && +m[1] >= 2020) setSingle(+m[1], +m[2], +m[3])
   }
 
   // 패턴L-2: "2026.11.05.(목), 14시~11.06.(금)" — 시작시각이 날짜와 종료일 사이에 끼어 있어
@@ -1821,7 +1867,7 @@ function parseDocMeta(filename, text) {
   // 우선순위4: 교육비·등록비·참가비·참가회비 등 키워드 뒤 금액 (만원 단위 포함)
   // "1인당", "1인" 같은 중간 수식어 허용 (예: 참가회비 1인당 450,000원)
   if (!registration) {
-    const kwRegex = /(?:사전\s*등록비|사전\s*등록|참\s*가\s*회\s*비|등록\s*비|참\s*가\s*비|교육\s*비|수강\s*료)\s*[：:\-]?\s*(?:1\s*인\s*당\s*)?(?:([\d,]+)\s*만\s*원|([\d,]+)\s*원)/
+    const kwRegex = /(?:사전\s*등\s*록\s*비|사전\s*등록|참\s*가\s*회\s*비|등\s*록\s*비|참\s*가\s*비|교\s*육\s*비|수\s*강\s*료)\s*[：:\-]?\s*(?:1\s*인\s*당\s*)?(?:([\d,]+)\s*만\s*원|([\d,]+)\s*원)/
     const kwM = tcFee.match(kwRegex)
     if (kwM) {
       registration = kwM[1]
@@ -1833,37 +1879,47 @@ function parseDocMeta(filename, text) {
   // 우선순위5: 정규화 텍스트에서 키워드+금액 슬라이딩 검색 (만원 포함)
   if (!registration) {
     const kwPats = ['사전등록비','사전등록','참가회비','등록비','참가비','교육비','수강료']
+    // 첫 등장만 보면 "교육비 납부방법을 안내하오니"처럼 금액 없는 문장에서 멈춘다 — 모든 등장을 본다
     for (const kw of kwPats) {
-      const ki = tnFee.indexOf(kw)
-      if (ki >= 0) {
-        const snip = tnFee.slice(ki, ki + kw.length + 50)
-        const amtM = snip.match(amtPat)
-        if (amtM) {
-          registration = amtM[1]
-            ? parseInt(amtM[1].replace(/,/g,'')) * 10000
-            : parseAmt(amtM[2])
-          if (registration) break
-        }
+      for (let ki = tnFee.indexOf(kw); ki >= 0 && !registration; ki = tnFee.indexOf(kw, ki + kw.length)) {
+        const amtM = tnFee.slice(ki, ki + kw.length + 50).match(amtPat)
+        if (amtM) registration = amtM[1] ? parseInt(amtM[1].replace(/,/g,'')) * 10000 : parseAmt(amtM[2])
       }
+      if (registration) break
     }
   }
 
   // 간호사 보수교육 공문은 금액을 못 읽어도 기본값을 채운다.
   // 의료법 시행규칙 제20조에 따라 연간 8시간 이상 이수 의무이고, 8시간 프로그램 회원가는 40,000원으로 같다.
-  if (!registration && /보수교육/.test(tnFee) && /간호/.test(tnFee)) {
+  // 라벨 없이 회원가·비회원가 두 금액만 나란히 찍힌 교육 안내 화면(간호협회 에듀센터 캡처) — 작은 쪽이 회원가
+  if (!registration) {
+    const pairM = tc.match(/(?<![\d,])(\d{1,3}(?:,\d{3})+)\s*원\s+(\d{1,3}(?:,\d{3})+)\s*원/)
+    const [a, b] = pairM ? [parseAmt(pairM[1]), parseAmt(pairM[2])] : []
+    if (a && b && a < b) {
+      registration = a
+      registrationNote = '공문에 금액이 두 개 있어 낮은 쪽(회원가)으로 넣었어요. 맞나요?'
+    }
+  }
+
+  // 오프라인이라고 밝힌 병원 주관 과정(서울아산병원 코칭 과정 80,000원)은 간협 온라인 가격과 달라 기본값을 쓰지 않는다
+  const offlineOnly = /오프라인/.test(tnFee) && !/온라인/.test(tnFee)
+  if (!registration && /보수교육/.test(tnFee) && /간호/.test(tnFee) && !offlineOnly) {
     registration = 40000
     registrationNote = '간호사 보수교육 8시간·회원 기준 기본값이에요. 다르면 고쳐주세요.'
   }
 
   // ── 온라인 여부 (제목에 "온라인" 명시된 경우만 true, 없으면 false=오프라인)
-  const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300))
+  // 교육장소 칸이 '온라인'인 공문(방사선진흥협회 직장교육)도 온라인이다
+  const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300)) || /^온\s*라\s*인/.test(venue)
+  if (isOnline && /^온\s*라\s*인/.test(venue)) destination = ''
 
   const { startTime, endTime } = extractTimes(tcD)
 
   // 출장·교육 공문이 맞는지 — 아니면 화면에서 "못 찾았다"고 말한다.
   // 교육 말고도 타 기관에 나가 일하는 공문이 있다 — 세무조정·실사 협조요청처럼
   // '교육'이라는 말이 한 번도 안 나오는 출장 공문을 영수증 취급해 내치지 않는다.
-  const isTripDoc = /교육|출장|세미나|연수|워크숍|워크샵|학술대회|심포지엄|컨퍼런스|포럼|보수교육|학회|훈련|협조요청|협조부탁|업무협의|파견|실사|현장점검/.test(tn)
+  const isTripDoc = /교육|출장|세미나|연수|워크숍|워크샵|학술대회|심포지엄|컨퍼런스|포럼|보수교육|학회|훈련|협조요청|협조부탁|업무협의|파견|실사|현장점검|교류회|간담회|이사회|총회|강좌/.test(tn)
+    || /seminar|workshop|conference|symposium|forum|training|test\s*drive|venue|registration/i.test(tc)
 
   // 결재된 출장신청서 자체를 올린 경우 — 기안일이 출장일로 잡혔다. 공문이 아니라고 말한다.
   const docKind = /출\s*장\s*신\s*청\s*서/.test(tc.slice(0, 60)) && /기\s*안/.test(tc) ? 'trip-form'
@@ -1902,12 +1958,23 @@ function extractTimes(tc) {
   }
   const AMPM = '(오전|오후)?\\s*'
   // "8시간 65,000원"처럼 교육 '시간'(지속시간)을 시작시각으로 읽지 않도록 시 뒤의 '간'을 막는다
-  const T = '(\\d{1,2})\\s*(?::|시(?!\\s*간))\\s*(\\d{1,2})?\\s*분?'
+  // '7 시나리오'처럼 '시'로 시작하는 낱말도 막는다(간호협회 프로그램 표에서 07:00으로 읽혔다)
+  const T = '(\\d{1,2})\\s*(?::|시(?!\\s*간)(?![가-힣])|시(?=부터|까지|에|경))\\s*(\\d{1,2})?\\s*분?'
   const rangeRe = new RegExp(AMPM + T + '\\s*(?:~|-|–|부터)\\s*' + AMPM + T)
   const singleRe = new RegExp(AMPM + T)
   // ① 라벨(일시·일자·기간·시작) 뒤 토막에서 날짜를 지운 뒤 시각을 찾는다.
   // 토막은 70자까지만 인정하되 뒤에 20자를 더 붙여 읽는다 — 토막이 "5시"에서 끊기면
   // 뒤에 오는 '간'을 못 보고 교육시간(8시간)을 시작시각으로 읽었다(방사선안전교육 공문).
+  // ⓪ 날짜 바로 뒤에 붙은 시각 "20일(일요일) 14:00~18:00", "14일(수) 오후 1시 ~" — 라벨이 OCR로 뭉개져도
+  // (방사선사협회 스캔 "mg 시 :") 교육일 옆의 시각은 남는다. 라벨 규칙은 '이수시간'·'(시간엄수)' 같은
+  // 엉뚱한 '시간' 뒤의 접수 마감 시각(18:00)을 먼저 집었다. 시작 뒤에 ~ 가 있어야 인정한다.
+  const dayAdj = tc.match(new RegExp('\\d{1,2}\\s*[일.]\\s*(?:\\(\\s*[^)]{1,4}\\s*\\))?\\s*,?\\s*' + AMPM + T + '\\s*~'))
+  if (dayAdj) {
+    const start = toHM(dayAdj[2], dayAdj[3], dayAdj[1])
+    const tail = tc.slice(dayAdj.index + dayAdj[0].length).match(new RegExp('^\\s*' + AMPM + T))
+    const end = tail ? toHM(tail[2], tail[3], tail[1] || dayAdj[1]) : ''
+    if (start) return { startTime: start, endTime: end && end > start ? end : '' }
+  }
   const NEAR = 70, LOOKAHEAD = 20
   for (const lm of tc.matchAll(TIME_LABEL_RE)) {
     const from = lm.index + lm[0].length
@@ -1959,8 +2026,15 @@ function extractVenue(tc) {
     const hy = squeezed.match(/[가-힣]{2}-[가-힣]{2,}/)
     if (hy) return hy[0]
   }
-  const m = tc.match(/(?<![가-힣])(?:장\s*_?\s*소|개\s*최\s*장\s*소|행\s*사\s*장\s*소)(?![가-힣])\s*(?:[：:]|[\]】])?\s*(.{2,90})/)
-  return m ? tidyVenue(m[1]) : ''
+  const m = tc.match(/(?<![가-힣])(?:장\s*_?\s*소|개\s*최\s*장\s*소|행\s*사\s*장\s*소|교\s*육\s*장\s*소|교\s*육\s*장)(?![가-힣])\s*(?:[：:]|[\]】])?\s*(.{2,90})/)
+  if (!m) return ''
+  // 포스터는 라벨(일정·장소·접수)이 먼저 모두 나오고 값이 뒤에 온다 — 장소 칸에 다른 라벨이 오면
+  // 그 값은 장소가 아니다. 대신 본문에서 행사장 이름(컨벤션센터·호텔…)을 찾는다.
+  if (/^(?:접\s*수|대\s*상|일\s*[시정자]|기\s*간|시\s*간)(?![가-힣])/.test(m[1])) {
+    const hall = tc.match(/[가-힣A-Za-z]{2,}(?:컨벤션센터|컨벤션|호텔|리조트|연수원|박물관|아트홀)(?:\s*\([A-Za-z]{2,10}\))?(?:\s*[\dA-Z]{1,5}\s*홀)?/)
+    return hall ? tidyVenue(hall[0]) : ''
+  }
+  return tidyVenue(m[1])
 }
 
 function tidyVenue(raw) {
@@ -1970,7 +2044,10 @@ function tidyVenue(raw) {
     .replace(/\s+\d{1,2}\s*[.)]\s.*$/, '')                      // 다음 항목 "4. 담당회계법인"
     .replace(/(?<=[가-힣A-Za-z])\d{1,2}\s*\.(?:\s|$).*$/, '')      // 글자에 붙은 다음 항목 번호 "캠퍼스3. :"
     .replace(/\s+[A-Za-z]{1,3}\s*\.\s+(?=[가-힣])/, ' ').replace(/\s+[A-Za-z]{1,3}\s*\.\s.*$/, '')  // OCR이 항목기호 "라."를 "gt."로 읽은 경우
-    .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|사전등록|등록방법|등록비|입금|초록|프로그램|숙박|문의|※).*$/, '')
+    .replace(/^[\/\s:：\-]+/, '')                               // 포스터 "/ 장소 / 중앙대학교병원"
+    .replace(/\s*[▪■◼•ㆍ○◦].*$/, '')                           // 다음 항목 글머리표 "▪ 참석 대상자", "ㆍ사내 강사"
+    .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|사전등록|등록방법|등록비|입금|초록|프로그램|숙박|문의|※|소요|발표자).*$/, '')
+    .replace(/\s*(?:현장\s*참여|ZOOM|Zoom|zoom).*$/, '')           // 하이브리드 교육의 온라인 병기
     .replace(/\s+[-–]\s.*$/, '')                                // 다음 줄 목록 "- 사전등록"
     .replace(/[,·|｜\-–\s]+$/, '')
     .trim()
@@ -1982,11 +2059,15 @@ function tidyVenue(raw) {
 // 공문 장소에서 '검색할 이름'만 남긴다(2026-09-29 지석초이). 카카오 장소 검색은 "CFO 아카데미4층2강의실"
 // 같은 세부 위치가 붙으면 아무것도 못 찾고, 좌표가 없으면 역→현장 이동시간·경로 링크가 통째로 빠진다.
 // 층·호·강의실·강당 같은 건물 안 위치와 괄호 안내를 떼고 건물·기관 이름만 남긴다.
-const VENUE_DETAIL_HEAD = /(지하\s*)?\d+\s*(층|호실|호관|호|F)(?![가-힣])|(지하|B)\s*\d+\s*층/
-const VENUE_DETAIL_WORD = /^(?:제?\s*\d*\s*)?(?:대?강의실|대?회의실|세미나실|중?소회의실|강당|대강당|교육장|교육실|다목적홀|컨벤션홀|컨퍼런스룸|국제회의실|시청각실|실습실|홀|룸)$/
+// '%'는 사진 판독에서 '호'가 바뀌어 나온 것("107%, 206%"), 'B2F'는 지하 층
+const VENUE_DETAIL_HEAD = /(?:지하\s*|B)?\d+\s*(층|호실|호관|호|F|%)(?![가-힣])|(지하|B)\s*\d+\s*층|\d+[A-Z]?\s*홀/
+const VENUE_DETAIL_WORD = /^(?:제?\s*\d*\s*)?(?:대?강의실|대?회의실|세미나실|중?소회의실|강당|대강당|교육장|교육실|다목적홀|컨벤션홀|컨퍼런스룸|국제회의실|시청각실|실습실|홀|룸)$|^[가-힣]{1,6}팀$/
 
 function venueSearchName(venue) {
-  let v = String(venue || '').replace(/[∎■□▪◼]/g, ' ').replace(/\s*\([^)]*\)?\s*$/, ' ').trim()
+  let v = String(venue || '').replace(/[∎■□▪◼]/g, ' ')
+  // 괄호 안 안내·주소는 겹괄호("(ICC) (*제주특별자치도 …224(중문동))")까지 안쪽부터 걷는다
+  for (let prev = ''; prev !== v; ) { prev = v; v = v.replace(/\s*\([^()]*\)/g, ' ') }
+  v = v.replace(/\s*\([^)]*$/, ' ').trim()
   if (!v) return ''
   // 주소 + 기관명이 함께 온 경우("부산 해운대구 …298번길 24, 팔레드시즈")는 쉼표 뒤 이름이 검색어다
   const tail = v.split(',').map(x => x.trim()).filter(Boolean).pop()
@@ -1994,7 +2075,8 @@ function venueSearchName(venue) {
   const cut = v.search(VENUE_DETAIL_HEAD)
   if (cut > 1) v = v.slice(0, cut)
   const words = v.split(/\s+/).filter(Boolean)
-  while (words.length > 1 && VENUE_DETAIL_WORD.test(words[words.length - 1])) words.pop()
+  while (words.length > 1 && (VENUE_DETAIL_WORD.test(words[words.length - 1])
+    || /^[가-힣A-Za-z]{2,}(?:홀|룸|Ballroom|Hall|Room)$/.test(words[words.length - 1]))) words.pop()
   v = words.join(' ').replace(/[,·\-–|]+$/, '').trim()
   return v.length >= 2 ? v : String(venue || '').trim()
 }
@@ -2176,10 +2258,13 @@ function renderTimeHint(meta) {
   const el = document.getElementById('time-ktx-hint')
   if (!el) return
   const missing = !!meta && !meta.startTime
+  // 저녁 행사(17:30 총회·18:20 세미나)는 공문 시각이 선택지(~16:00) 밖이라 칸이 빈다 — 읽었다고만 하면 틀린 안내다
+  const late = !!meta?.startTime && snapTo10(meta.startTime) > LATEST_START
   el.textContent = missing
     ? '⚠️ 공문에서 시작시각을 찾지 못했어요. 첫날 교육(등록) 시작시각을 직접 골라 주세요.'
+    : late ? `⚠️ 공문 시작시각은 ${meta.startTime}인데 선택지는 16시까지예요. 16:00을 골라 주세요 — 16시 이후 시작은 모두 당일 이동이라 정산은 같아요.`
     : meta ? `📄 공문에서 읽은 시각이에요. ${TIME_HINT_DEFAULT}` : TIME_HINT_DEFAULT
-  el.classList.toggle('is-warn', missing)
+  el.classList.toggle('is-warn', missing || late)
 }
 
 // 공문에서 읽은 장소는 글자뿐이라 좌표가 없다. 좌표가 없으면 역산이 '지역 대표역' 기준이 돼

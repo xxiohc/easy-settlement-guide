@@ -219,3 +219,70 @@ test('영수증처럼 공문이 아닌 파일은 아무 칸도 채우지 않는�
   assert.equal(m.destination, '')
   assert.equal(m.title, '')
 })
+
+// ── 2026-09-29 지석초이 테스트 공문 20건(../공문테스트)에서 나온 판독 누락 ───────────────
+test('두 자리 연도 "\'26.10. 1.(목)"을 2026-10-01로 읽는다(국민건강보험공단 간담회 사진)', () => {
+  const m = app.parseDocMeta('x.jpeg', `제목 _ 간호ㆍ간병통합서비스 교육전담간호사 간담회 개최 안내
+가. 일시: \`"26.10. 1.(목) 13:30 ~ 16:30
+나. 장소: 한성백제박물관 한성백제홀 B2F 강당(서울특별시 송파구 위례성대로71)`)
+  assert.equal(m.startDate, '2026-10-01')
+  assert.equal(m.startTime, '13:30')
+  assert.equal(m.title, '간호ㆍ간병통합서비스 교육전담간호사 간담회 개최 안내')
+  assert.equal(m.venueSearch, '한성백제박물관')
+})
+
+test('글자마다 쪼개진 PDF 숫자 "20 2 6 년 10 월 07 일"과 영문 제목을 읽는다(메드트로닉 공문)', () => {
+  const m = app.parseDocMeta('x.pdf', `날 짜 :   20 2 6 년   0 9 월   01 일  제   목 :   Medtronic OR   Nurse Expert Hands - on Workshop   초청의   건
+▪   일   시   :   20 2 6 년   10 월   07 일 ( 수 )  ▪   장   소   :   웨스틴   조선   부산   오키드   룸  ▪   참석   대상자   :   각   병원`)
+  assert.equal(m.startDate, '2026-10-07')
+  assert.equal(m.destination, '부산')
+  assert.equal(m.venue, '웨스틴 조선 부산 오키드 룸')
+  assert.match(m.title, /^Medtronic OR Nurse Expert/)
+})
+
+test("'서천연수원'은 수원이 아니고 '서울아산병원'은 천안(아산)이 아니다", () => {
+  const a = app.parseDocMeta('x.png', `과정명 통합 AX TF 프로세스 재설계 과정 (3차)
+일정 2026.09.29(화) ~ 10.02(금), 4일간 - 08:30 ~ 17:30
+장소 The UniverSE(서천연수원)
+주소 경기도 용인시 기흥구 서천동로 59`)
+  assert.equal(a.destination, '서울')
+  assert.equal(app.matchRegion('서물아산병원 아카데미'), '')
+  assert.equal(app.matchRegion('충남 아산시 배방읍'), '천안')
+})
+
+test('교육장소가 "온라인"이면 온라인 교육이고 발신처 주소를 지역으로 잡지 않는다', () => {
+  const m = app.parseDocMeta('x.jpg', `제목 (2026년) 방사선작업종사자 직장교육(신규)_9월
+2.금번 신청하신 교육의 교육 대상자 및 교육비 납부방법을 아래와 같이 안내하오니
+나.교육기간: 2026-09-01 ~ 2026-09-30
+다.교육장소 : 온라인
+마.교 육 비 : 30,000원
+접수 (04790) 서울 성동구 성수일로 77`)
+  assert.equal(m.isOnline, true)
+  assert.equal(m.destination, '')
+  assert.equal(m.registration, 30000)
+})
+
+test('라벨이 뭉개진 스캔에서도 교육일 옆 시각을 쓴다 — 접수 마감 18:00을 집지 않는다', () => {
+  const m = app.parseDocMeta('x.pdf', `제 목 2026년 경상남도회 제2차 보수교육 개최 안내
+mg   시 : 20264 09% 20일(일요일) 14:00~18:00
+WH 이수시간 : 4시간
+* 2026년 08월 31일(월) ~ 09월 16일(수) 18:00까지(시간엄수) 이후 접수 불가.
+* 등록 후 부득이하게 불참 시 교육 3일전(09월 17일 18:00시) 까지만 등록비를 환불해`)
+  assert.equal(m.startDate, '2026-09-20')
+  assert.equal(m.startTime, '14:00')
+})
+
+test("프로그램 표의 '7 시나리오'를 07:00으로 읽지 않는다", () => {
+  const { startTime } = app.extractTimes('이수시간 교육비 6 상처 및 장루 관리 8 시간 40,000 원 7 시나리오 기반 핵심기본간호술')
+  assert.equal(startTime, '')
+})
+
+test('영문 포스터(SEMINAR·Registration)도 출장 공문으로 본다', () => {
+  const m = app.parseDocMeta('솔벤텀멸균세미나.png', `STERILIZATION
+VENUE
+2026.10.08            18:20-20:30           롯데호텔부산
+18:00     Registration`)
+  assert.equal(m.docKind, 'notice')
+  assert.equal(m.startDate, '2026-10-08')
+  assert.equal(m.destination, '부산')
+})
