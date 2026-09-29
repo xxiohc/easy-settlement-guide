@@ -61,10 +61,9 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
         (await p.textContent('#shortday-auto')||'').trim().slice(0,60))
   await p.click('#field-shortdaytrip .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
   await p.click('#field-rank .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
-  // 부산은 시외버스 구간이라 역산이 안 된다 — 전날 이동을 직접 묻는 갈래(④)
-  check('④ 역산 불가 구간은 전날이동을 08:30 기준으로 직접 묻는다',
-        await vis(p,'#field-daytrip') && (await p.evaluate(()=>state.prevDayMove)) === null)
-  await p.click('#field-daytrip .yn-btn:nth-child(2)'); await p.waitForTimeout(200)
+  // 부산은 시외버스 구간 — 집에서 오가는 거리라 전날 이동을 묻지도 인정하지도 않는다(2026-09-26 지석초이)
+  check('④ 시외버스 구간은 전날 이동을 묻지 않고 해당 없음',
+        !(await vis(p,'#field-daytrip')) && (await p.evaluate(()=>state.prevDayMove)) === false)
   await p.click('#ctaNext8'); await p.waitForTimeout(800)
   check('A 카드9 도달', await active(p) === 'card-9')
   check('⑨ 다녀온 출장 버튼 문구', (await p.textContent('#card9-next-btn')).includes('내용 확인'),

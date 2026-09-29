@@ -109,13 +109,13 @@ test('우회 구간은 기차편 대신 시외버스를 안내한다', () => {
   assert.ok(!html.includes('이 기차를 타세요'))
 })
 
-test('우회 구간 요금이 운임표에 없으면 없다고 밝힌다', () => {
-  assert.ok(renderDetour('여수시청').includes('아직 운임표에 없어'))
+test('우회 구간 요금이 운임표에 없으면 없다고 밝힌다 (목포 — 직행 버스 없음)', () => {
+  assert.ok(renderDetour('목포시청').includes('아직 운임표에 없어'))
 })
 
 test('우회 구간 요금이 운임표에 있으면 그 금액을 보여준다', () => {
   const html = renderDetour('부산진구청', '부산')
-  assert.ok(html.includes('19,600원'))
+  assert.ok(html.includes('8,600원'))   // 터미널 일반 4,300원 × 왕복 (2026-09-26 일반 기준)
   assert.ok(!html.includes('아직 운임표에 없어'))
 })
 
@@ -205,7 +205,7 @@ function busOnlyApp(place, region, fares) {
 }
 
 test('목포·여수·순천은 computeRoutePlan 단계에서 시외버스로 고정된다', () => {
-  for (const [place, label] of [['목포시청', '목포'], ['여수시청', '여수'], ['순천대학교', '순천'], ['광양보건소', '순천']]) {
+  for (const [place, label] of [['목포시청', '목포'], ['여수시청', '여수'], ['순천대학교', '순천'], ['광양보건소', '광양']]) {
     const app = busOnlyApp(place)
     const r = app.evalIn('computeRoutePlan()')
     assert.strictEqual(r.skip, 'busonly', `${place} 가 버스 고정으로 잡히지 않았다`)
@@ -226,10 +226,13 @@ test('시외버스 고정 구간 안내는 기차를 왜 뺐는지 밝힌다', (
   assert.ok(!html.includes('이 기차를 타세요'), '기차편 추천이 남아 있다')
 })
 
-test('시외버스 고정 구간은 요금이 운임표에 없다고 밝힌다', () => {
+test('시외버스 고정 구간 요금은 터미널 일반 요금 왕복으로 보인다 (여수 16,800 × 2)', () => {
   const app = busOnlyApp('여수시청', '여수')
   app.render()
-  assert.ok(app.panel.innerHTML.includes('아직 운임표에 없어'))
+  assert.ok(app.panel.innerHTML.includes('33,600원'))
+  const m = busOnlyApp('목포시청', '목포')
+  m.render()
+  assert.ok(m.panel.innerHTML.includes('아직 운임표에 없어'), '직행 없는 목포는 없다고 밝힌다')
 })
 
 test('시외버스 고정 구간 신청서는 터미널 ↔ 목적지 왕복 2행으로 적는다', () => {

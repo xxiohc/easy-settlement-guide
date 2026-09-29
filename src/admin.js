@@ -17,11 +17,14 @@ const DEFAULT_RATES = {
   { keywords: ['천안', '아산'], label: '천안아산역', station: '천안아산', ktxNormal: 72200, ktxFirst: 104600, oneWayNormal: 36100, oneWayFirst: 52300, transfers: 0, path: ['마산', '천안아산'] },
   { keywords: ['오송'], label: '오송역', station: '오송', ktxNormal: 64200, ktxFirst: 93000, oneWayNormal: 32100, oneWayFirst: 46500, transfers: 0, path: ['마산', '오송'] },
   { keywords: ['대전'], label: '대전역', station: '대전', ktxNormal: 54800, ktxFirst: 79400, oneWayNormal: 27400, oneWayFirst: 39700, transfers: 0, path: ['마산', '대전'] },
-  { keywords: ['부산', '해운대'], label: '부산', bus: 19600 },
+  { keywords: ['부산', '해운대'], label: '부산', bus: 8600 },
   { keywords: ['대구'], label: '동대구역', station: '동대구', ktxNormal: 21400, ktxFirst: 31000, oneWayNormal: 10700, oneWayFirst: 15500, transfers: 0, path: ['마산', '동대구'] },
-  { keywords: ['울산'], label: '울산', bus: 29000 },
+  { keywords: ['울산'], label: '울산', bus: 18400 },
   { keywords: ['경주'], label: '경주역', station: '경주', ktxNormal: 36400, ktxFirst: 52800, oneWayNormal: 18200, oneWayFirst: 26400, transfers: 1, path: ['마산', '동대구', '경주'] },
-  { keywords: ['전주'], label: '전주', bus: 46000 },
+  { keywords: ['전주'], label: '전주', bus: 34600 },
+  { keywords: ['광양'], label: '광양', bus: 24000 },
+  { keywords: ['순천'], label: '순천', bus: 23800 },
+  { keywords: ['여수'], label: '여수', bus: 33600 },
   { keywords: ['제주'], label: '제주', jeju: true },
 // </fare-table:auto>
   ],
@@ -29,6 +32,7 @@ const DEFAULT_RATES = {
   dailyRate:    35000,
   dailyRate25p: 8750,
   lodgingRate:  100000,
+  mealCap:      10000,
 }
 
 // 현재 편집 중인 데이터
@@ -185,6 +189,12 @@ function renderRateInputs() {
   })
   attachCommaInput(daily25, num => { currentRates.dailyRate25p = num })
   attachCommaInput(lodging, num => { currentRates.lodgingRate  = num })
+
+  const mealCap = document.getElementById('inputMealCap')
+  if (mealCap) {
+    mealCap.value = fmt(currentRates.mealCap ?? 10000)
+    attachCommaInput(mealCap, num => { currentRates.mealCap = num })
+  }
 }
 
 function toggleAuto25p() {

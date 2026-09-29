@@ -2379,6 +2379,10 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   flex-shrink: 0;
 }
 
+.breakdown-amount-emph {
+  font-size: 15px;
+}
+
 .breakdown-amount-text {
   font-size: 13px;
   color: var(--muted);
