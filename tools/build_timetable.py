@@ -12,7 +12,7 @@ import openpyxl
 
 APP = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ktx_source import latest
+from ktx_source import latest, basis_label, write_if_changed
 SRC = latest("시간표")  # ../KTX 운임표·시간표/ 에서 기준월이 가장 늦은 시간표
 OUT = APP / "data" / "ktx_timetable.json"
 
@@ -120,16 +120,16 @@ def main():
     stations = sorted({st["s"] for t in trains for st in t["stops"]})
     out = {
         "source": SRC.name,
-        "basis": "KORAIL KTX 시간표 (2026년 10월 기준)",
+        "basis": f"KORAIL KTX 시간표 ({basis_label(SRC)})",
         "note": "t = 00:00부터의 분(초 단위는 버림 — 출발편을 늦게 보지 않기 위함). 1440 이상은 익일. 00:00:00 셀은 미정차로 처리.",
-        "updatedAt": datetime.now().strftime("%Y-%m-%d"),
+        "updatedAt": None,
         "trainCount": len(trains),
         "stationCount": len(stations),
         "stations": stations,
         "trains": trains,
     }
-    OUT.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"열차 {len(trains)}편 · 역 {len(stations)}개 → {OUT}")
+    changed = write_if_changed(OUT, out, lambda d: json.dumps(d, ensure_ascii=False, separators=(",", ":")))
+    print(f"열차 {len(trains)}편 · 역 {len(stations)}개 → {OUT.name}" + ("" if changed else " (변경 없음)"))
     masan = [t for t in trains if any(s["s"] == "마산" for s in t["stops"])]
     print(f"마산 정차 {len(masan)}편")
 

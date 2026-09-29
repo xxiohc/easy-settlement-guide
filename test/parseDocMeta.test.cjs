@@ -159,7 +159,7 @@ test('시행일자는 교육일이 아니다 — 라벨 "일 자" 뒤 날짜와 
   assert.equal(m.startDate, '2026-05-28')
   assert.equal(m.endDate, '2026-05-29')
   assert.equal(m.startTime, '')
-  assert.equal(m.title, '제31차 OO학회 학술대회와 연수교육 개최 안내')
+  assert.equal(m.title, '제31차 OO학회 학술대회와 연수교육')
   assert.equal(m.venue, '스위스 그랜드 호텔 (서울 서대문구 연희로 353)')
   assert.equal(m.destination, '서울')
 })
@@ -190,7 +190,7 @@ test('1차·2차 차수는 한 기간으로 묶지 않고 1차로 채운 뒤 차
   assert.equal(m.endDate, '2026-06-09')
   assert.equal(m.multiSession, true)
   assert.equal(m.destination, '서울')
-  assert.equal(m.title, '2026년 OO 교육 강의 협조 요청')
+  assert.equal(m.title, '2026년 OO 교육 강의')
 })
 
 test('연도 없는 날짜는 요일이 맞는 해로 채운다', () => {
@@ -202,7 +202,7 @@ test('연도 없는 날짜는 요일이 맞는 해로 채운다', () => {
 test('발신 명의가 제목 뒤에 붙고 연도가 끝으로 밀린 제목을 바로잡는다', () => {
   const m = P(`제   목   회계연도   법인세   세무조정   진행   협조요청 2024  학교법인   성균관대학   이사장
 기 간 : 2025.5.15~5.16`)
-  assert.equal(m.title, '2024 회계연도 법인세 세무조정 진행 협조요청')
+  assert.equal(m.title, '2024 회계연도 법인세 세무조정')
 })
 
 test('결재된 출장신청서를 올리면 기안일을 출장일로 채우지 않는다', () => {
@@ -227,7 +227,7 @@ test('두 자리 연도 "\'26.10. 1.(목)"을 2026-10-01로 읽는다(국민건�
 나. 장소: 한성백제박물관 한성백제홀 B2F 강당(서울특별시 송파구 위례성대로71)`)
   assert.equal(m.startDate, '2026-10-01')
   assert.equal(m.startTime, '13:30')
-  assert.equal(m.title, '간호ㆍ간병통합서비스 교육전담간호사 간담회 개최 안내')
+  assert.equal(m.title, '간호·간병통합서비스 교육전담간호사 간담회')
   assert.equal(m.venueSearch, '한성백제박물관')
 })
 
@@ -292,4 +292,17 @@ test('용인·기흥은 서울역이 아니라 수원역 기준이다(2026-09-29
   assert.equal(a.destination, '수원')
   assert.equal(app.matchRegion('용인 기흥구 삼성전자'), '수원')
   assert.equal(app.guessRegionFromAddress('경기 용인시 기흥구 서천동로 59'), '수원')
+})
+
+test('출장/교육명은 공문 행정 문구(개최 안내·참여 요청·의 건)를 떼고 행사명만 남긴다(2026-09-29 지석초이)', () => {
+  const cases = [
+    ['2026 년도 한국병원홍보협회 부산 · 울산 · 경남지회 하반기 이사회 안내', '2026년도 한국병원홍보협회 부산·울산·경남지회 하반기 이사회'],
+    ['「2026년 제64회 대한임상병리사 종합학술대회 및 국제컨퍼런스」개최 안내 및 교육 이수 협조 요청(병의원, 보건소용)', '2026년 제64회 대한임상병리사 종합학술대회 및 국제컨퍼런스'],
+    ['Medtronic OR Nurse Expert Hands-on Workshop 초청의 건', 'Medtronic OR Nurse Expert Hands-on Workshop'],
+    ['2026년 병원약학분과협의회 온라인 교육 수강 신청 안내', '2026년 병원약학분과협의회 온라인 교육'],
+    ['(2026년) 방사선작업종사자 직장교육(신규)_9월', '2026년 방사선작업종사자 직장교육(신규) 9월'],
+    ['AI로 앞서가는 스마트재무(엑셀자동화와 워크플로우 자동화까지)', 'AI로 앞서가는 스마트재무(엑셀자동화와 워크플로우 자동화까지)'],
+    ['개최 안내', '개최 안내'],
+  ]
+  for (const [raw, want] of cases) assert.equal(app.tripTitle(raw), want)
 })
