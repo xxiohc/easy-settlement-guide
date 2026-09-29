@@ -410,3 +410,17 @@ test('금액·날짜가 섞인 장소 값은 버리고 실시기관으로 넘어
   const m = app.parseDocMeta('x.pdf', '[2024201] 간호사를 위한 코칭 역량 향상 과정\n교육형태 오프라인\n실시기관 서울아산병원   교육장소 80,000 원 148,000 원 교육일정 2026.09.30~2026.09.30(1일)')
   assert.equal(m.venue, '서울아산병원')
 })
+
+test('크롬 스캔 판독의 영문 찌꺼기 장소("MEBHERAYR 은명대강당")는 버리고 문서 다른 곳의 "세브란스병원 은명대강당"을 쓴다', () => {
+  const m = app.parseDocMeta('x.pdf', `제 목 의료기관 회계기준 및 세무회계 연수교육 개최 안내
+나, 일시 |: 2025, 11.21.(3)
+다. 장소 : MEBHERAYR 은명대강당 (본관 6%)
+oh 접수인원 : 200명
+의료기관 회계기준 및 세무회계 연수교육
+일 시; 2025. 11. 21 (금)
+O&A 소 : 세브란스병원 은명대강당
+니 프로그램(안)`)
+  assert.equal(m.venueSearch, '세브란스병원')
+  assert.equal(m.destination, '서울')
+  assert.equal(app.venueLooksWrong('COEX 그랜드볼룸'), false)
+})

@@ -2190,11 +2190,22 @@ function extractVenue(tc) {
   // 장소가 아니다 — 판독 순서가 뒤섞인 표에서 "80,000원 148,000원 교육일정 2026.09.30…"이 장소로 들어갔다(코칭 과정, 2026-09-29).
   const LABEL = /(?<![가-힣])(?:장\s*_?\s*소|개\s*최\s*장\s*소|행\s*사\s*장\s*소|교\s*육\s*장\s*소|교\s*육\s*장)(?![가-힣])\s*(?:[：:]|[\]】])?\s*(.{2,90})/g
   let posterLike = false
+  const rejected = []
   for (const m of tc.matchAll(LABEL)) {
     // 포스터는 라벨(일정·장소·접수)이 먼저 모두 나오고 값이 뒤에 온다 — 장소 칸에 다른 라벨이 오면 그 값은 장소가 아니다
     if (/^(?:접\s*수|대\s*상|일\s*[시정자]|기\s*간|시\s*간)(?![가-힣])/.test(m[1])) { posterLike = true; continue }
     const v = tidyVenue(m[1])
     if (v && !venueLooksWrong(v)) return v
+    if (v) rejected.push(v)
+  }
+  // 깨진 값에 온전한 부분이 남아 있으면("MEBHERAYR 은명대강당" — 크롬 스캔 판독) 문서 다른 곳에서 그 부분 앞의 이름을 찾는다
+  // ("세브란스병원 은명대강당" — 3쪽 프로그램 표, 거기선 '장 소' 라벨이 'O&A 소'로 깨져 라벨로 못 잡았다)
+  for (const v of rejected) {
+    // 장소처럼 끝나는 조각만 이어 찾는다 — '교육일정' 같은 표 머리글을 이어 붙이면 '일정 교육일정'이 됐다(코칭 과정)
+    for (const tail of v.split(/\s+/).filter(w => /^[가-힣]{2,}(?:강당|홀|관|실|센터|병원|호텔|회관|빌딩|타워|캠퍼스)$/.test(w))) {
+      const again = tc.match(new RegExp(String.raw`([가-힣][가-힣A-Za-z]{1,19})\s*${tail}`))
+      if (again && !venueLooksWrong(again[1]) && !PLACE_GENERIC_ONLY.test(again[1])) { extractVenue.rule = 'label'; return tidyVenue(`${again[1]} ${tail}`) }
+    }
   }
   // 라벨 값이 모두 틀렸거나 라벨이 없으면: 실시기관(교육을 여는 병원·기관) → 행사장 이름(호텔·컨벤션센터…, 붙어 있는 지역명까지)
   const host = tc.match(/(?<![가-힣])(?:실\s*시\s*기\s*관|교\s*육\s*기\s*관)(?![가-힣])\s*[：:]?\s*([가-힣A-Za-z][가-힣A-Za-z0-9 ]{1,30}?)(?=\s{2,}|\s+(?:교육|장소|일정|기간|접수|대상)|$)/)
@@ -2205,7 +2216,10 @@ function extractVenue(tc) {
 }
 
 // 장소 칸에 들어가면 안 되는 모양 — 금액·연월일·교육시간·일정 표 머리글
+// 대문자 영문 7자 이상이 한글 장소에 섞이면 스캔 판독 찌꺼기다('MEBHERAYR 은명대강당'). COEX·BEXCO·ICC 같은 짧은 영문 이름은 둔다.
+const PLACE_GENERIC_ONLY = /^(?:장소|교육장|강당|대강당|회의실|본관|별관)$/
 function venueLooksWrong(v) {
+  if (/[가-힣]/.test(String(v || '')) && /(?<![A-Za-z])[A-Z]{7,}(?![A-Za-z])/.test(String(v || ''))) return true
   return /\d[\d,]{2,}\s*원|(?:19|20)\d{2,4}\s*[.\-년]\s*\d|\d{6}[.]\d|교육\s*일정|총\s*교육\s*시간|\d+\s*시간\s*\(/.test(String(v || ''))
 }
 
