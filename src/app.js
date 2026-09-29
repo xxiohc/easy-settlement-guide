@@ -613,12 +613,24 @@ async function processUploadedFile(file) {
         return
       }
     } else if (ext === 'hwp') {
-      document.getElementById('parseLoading').classList.add('hidden')
-      showUploadError('옛 한글 파일(.hwp)은 이 화면에서 읽을 수 없어요. 한글에서 [다른 이름으로 저장 → PDF] 또는 [HWPX]로 저장해 올려주세요.')
-      return
+      setParseProgress(20, '한글 문서 읽는 중')
+      let reason = 'NO_BODYTEXT'
+      try {
+        text = await extractHwpText(file)
+        console.log('hwp 본문 길이:', text.replace(/\s/g, '').length)
+      } catch (e) {
+        console.warn('hwp 읽기 실패:', e && e.message)
+        reason = (e && e.message) || 'NO_BODYTEXT'
+        text = ''
+      }
+      if (text.replace(/\s/g, '').length < 20) {
+        document.getElementById('parseLoading').classList.add('hidden')
+        showUploadError(HWP_ERROR_MESSAGES[reason] || HWP_ERROR_MESSAGES.NO_BODYTEXT)
+        return
+      }
     } else {
       document.getElementById('parseLoading').classList.add('hidden')
-      showUploadError('PDF·JPG·PNG·HWPX·DOCX만 읽을 수 있어요. 공문을 PDF로 저장해 올려주세요.')
+      showUploadError('PDF·JPG·PNG·HWP·HWPX·DOCX만 읽을 수 있어요. 공문을 PDF로 저장해 올려주세요.')
       return
     }
   } catch (e) {
@@ -670,6 +682,32 @@ async function inflateRaw(bytes) {
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
+// .hwp 본문 스트림은 압축 데이터 뒤에 패딩이 붙어 있어 DecompressionStream이
+// 끝에서 "trailing junk"로 거부한다. 오류는 이미 나온 출력 뒤에 오므로,
+// 조각을 모아 두고 오류가 나면 모아 둔 만큼을 쓴다(정상 종료면 동일 결과).
+async function inflateRawPartial(bytes) {
+  if (typeof DecompressionStream !== 'function') throw new Error('NO_DECOMPRESSION')
+  const reader = new Blob([bytes]).stream()
+    .pipeThrough(new DecompressionStream('deflate-raw')).getReader()
+  const chunks = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      total += value.byteLength
+    }
+  } catch (e) {
+    if (!total) throw e
+    console.warn('deflate 꼬리 무시:', e.message, `(${total}바이트 확보)`)
+  }
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const c of chunks) { out.set(c, at); at += c.byteLength }
+  return out
+}
+
 // zip 지역 헤더를 훑어 이름이 조건에 맞는 항목만 푼다(중앙 디렉터리는 쓰지 않는다 —
 // 공문 zip은 항목이 적어 순차 훑기로 충분하다).
 async function readZipEntries(buffer, wanted) {
@@ -719,6 +757,266 @@ async function extractZipDocText(file, ext) {
   const entries = await readZipEntries(buffer, wanted)
   entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))
   return entries.map(e => xmlToText(e.text)).filter(Boolean).join('\n')
+}
+
+// ── 옛 한글(.hwp, HWP 5.0 이진) 공문 ────────────────────────────────────────
+// 병원 공문 상당수가 아직 .hwp로 온다. .hwp는 zip이 아니라 MS 복합문서(CFB/OLE2)
+// 컨테이너이고, 본문 BodyText/Section* 스트림이 raw deflate로 눌려 있다.
+// 브라우저 기본 DecompressionStream('deflate-raw')로 풀 수 있으므로
+// CFB 디렉터리만 직접 읽으면 CDN·라이브러리 없이 본문을 꺼낼 수 있다.
+const CFB_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]
+const HWP5_TAG_PARA_TEXT = 67   // HWPTAG_BEGIN(16) + 51
+
+// CFB 컨테이너를 열어 경로→스트림(Uint8Array) 맵으로 만든다.
+function readCfb(buffer) {
+  const dv = new DataView(buffer)
+  const u8 = new Uint8Array(buffer)
+  for (let i = 0; i < 8; i++) {
+    if (u8[i] !== CFB_SIGNATURE[i]) throw new Error('NOT_CFB')
+  }
+  const sectorSize = 1 << dv.getUint16(30, true)
+  const miniSectorSize = 1 << dv.getUint16(32, true)
+  const fatCount = dv.getUint32(44, true)
+  const dirStart = dv.getUint32(48, true)
+  const miniCutoff = dv.getUint32(56, true)
+  const miniFatStart = dv.getUint32(60, true)
+  const difatStart = dv.getUint32(68, true)
+  const difatCount = dv.getUint32(72, true)
+  const sectorAt = s => (s + 1) * sectorSize
+  const FREE = 0xffffffff, ENDOFCHAIN = 0xfffffffe
+
+  // DIFAT: 헤더에 109개, 넘치면 DIFAT 섹터를 따라간다.
+  const fatSectors = []
+  for (let i = 0; i < 109 && fatSectors.length < fatCount; i++) {
+    const s = dv.getUint32(76 + i * 4, true)
+    if (s === FREE || s === ENDOFCHAIN) break
+    fatSectors.push(s)
+  }
+  let next = difatStart
+  const perDifat = sectorSize / 4 - 1
+  for (let n = 0; n < difatCount && next !== ENDOFCHAIN && next !== FREE; n++) {
+    const base = sectorAt(next)
+    if (base + sectorSize > u8.length) break
+    for (let i = 0; i < perDifat && fatSectors.length < fatCount; i++) {
+      const s = dv.getUint32(base + i * 4, true)
+      if (s === FREE || s === ENDOFCHAIN) break
+      fatSectors.push(s)
+    }
+    next = dv.getUint32(base + perDifat * 4, true)
+  }
+
+  // FAT(섹터 연결 테이블)을 통째로 펼친다.
+  const fat = new Uint32Array(fatSectors.length * (sectorSize / 4))
+  fatSectors.forEach((s, idx) => {
+    const base = sectorAt(s)
+    for (let i = 0; i < sectorSize / 4; i++) {
+      fat[idx * (sectorSize / 4) + i] =
+        base + i * 4 + 4 <= u8.length ? dv.getUint32(base + i * 4, true) : ENDOFCHAIN
+    }
+  })
+
+  function chain(start) {
+    const out = []
+    let s = start, guard = 0
+    while (s !== ENDOFCHAIN && s !== FREE && s < fat.length && guard++ < 1e6) {
+      out.push(s)
+      s = fat[s]
+    }
+    return out
+  }
+  function readChain(start, size, secSize, getOffset) {
+    const out = new Uint8Array(size)
+    let filled = 0
+    for (const s of start) {
+      const from = getOffset(s)
+      const len = Math.min(secSize, size - filled)
+      if (len <= 0) break
+      if (from + len > u8.length) break
+      out.set(u8.subarray(from, from + len), filled)
+      filled += len
+    }
+    return filled === size ? out : out.subarray(0, filled)
+  }
+  const readMain = (start, size) => readChain(chain(start), size, sectorSize, sectorAt)
+
+  // 디렉터리 엔트리(128바이트)를 모두 읽는다.
+  const dirBytes = readMain(dirStart, chain(dirStart).length * sectorSize)
+  const dirDv = new DataView(dirBytes.buffer, dirBytes.byteOffset, dirBytes.byteLength)
+  const entries = []
+  for (let off = 0; off + 128 <= dirBytes.byteLength; off += 128) {
+    const nameLen = dirDv.getUint16(off + 64, true)
+    const type = dirBytes[off + 66]
+    if (type === 0) { entries.push(null); continue }
+    let name = ''
+    for (let i = 0; i + 1 < Math.max(0, nameLen - 2); i += 2) {
+      name += String.fromCharCode(dirDv.getUint16(off + i, true))
+    }
+    entries.push({
+      name, type,
+      child: dirDv.getUint32(off + 76, true),
+      left: dirDv.getUint32(off + 68, true),
+      right: dirDv.getUint32(off + 72, true),
+      start: dirDv.getUint32(off + 116, true),
+      size: dirDv.getUint32(off + 120, true),
+    })
+  }
+  const root = entries[0]
+  if (!root) throw new Error('NO_ROOT')
+
+  // 미니 스트림(4096바이트 미만 스트림 저장소)
+  let miniStream = null, miniFat = null
+  function ensureMini() {
+    if (miniStream) return
+    miniStream = readMain(root.start, root.size)
+    const bytes = readMain(miniFatStart, chain(miniFatStart).length * sectorSize)
+    const d = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    miniFat = new Uint32Array(Math.floor(bytes.byteLength / 4))
+    for (let i = 0; i < miniFat.length; i++) miniFat[i] = d.getUint32(i * 4, true)
+  }
+  function readEntry(e) {
+    if (e.size === 0) return new Uint8Array(0)
+    if (e.size >= miniCutoff) return readMain(e.start, e.size)
+    ensureMini()
+    const out = new Uint8Array(e.size)
+    let s = e.start, filled = 0, guard = 0
+    while (s !== ENDOFCHAIN && s !== FREE && filled < e.size && guard++ < 1e6) {
+      const from = s * miniSectorSize
+      const len = Math.min(miniSectorSize, e.size - filled)
+      if (from + len > miniStream.byteLength) break
+      out.set(miniStream.subarray(from, from + len), filled)
+      filled += len
+      s = s < miniFat.length ? miniFat[s] : ENDOFCHAIN
+    }
+    return filled === e.size ? out : out.subarray(0, filled)
+  }
+
+  // 디렉터리는 레드블랙 트리다 — 루트의 자식부터 훑어 경로 맵을 만든다.
+  const files = new Map()
+  const seen = new Set()
+  ;(function walk(idx, prefix) {
+    if (idx === FREE || idx == null || seen.has(idx)) return
+    const e = entries[idx]
+    if (!e) return
+    seen.add(idx)
+    walk(e.left, prefix)
+    walk(e.right, prefix)
+    const path = prefix ? `${prefix}/${e.name}` : e.name
+    if (e.type === 2) files.set(path, e)
+    else if (e.type === 1) walk(e.child, path)
+  })(root.child, '')
+
+  return { files, read: readEntry }
+}
+
+// FileHeader: 32바이트 서명 + 버전 4 + 속성 4(bit0 압축, bit1 암호, bit2 배포용)
+function hwpFileHeaderFlags(bytes) {
+  if (!bytes || bytes.byteLength < 40) return { compressed: true, encrypted: false, distributed: false }
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const flags = dv.getUint32(36, true)
+  return { compressed: !!(flags & 1), encrypted: !!(flags & 2), distributed: !!(flags & 4) }
+}
+
+// 문단 텍스트 레코드를 글자로 옮긴다. 제어문자 중 1~23(10·13 제외)은
+// 8글자(16바이트)를 차지하는 확장·인라인 제어라 통째로 건너뛴다.
+const HWP_SKIP16 = new Set([1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
+function hwpDecodeParaText(dv, from, size) {
+  let out = ''
+  for (let p = from; p + 1 < from + size; p += 2) {
+    const code = dv.getUint16(p, true)
+    if (code === 9) { out += '\t'; p += 14; continue }        // 탭도 인라인 제어다
+    if (HWP_SKIP16.has(code)) { p += 14; continue }
+    if (code === 10 || code === 13) { out += '\n'; continue }
+    if (code === 24) { out += '-'; continue }
+    if (code === 28 || code === 29) { out += ' '; continue }
+    if (code < 32) continue
+    out += String.fromCharCode(code)
+  }
+  return out
+}
+
+// 레코드 헤더 4바이트: tag(10) + level(10) + size(12), size가 0xFFF면 다음 4바이트가 실제 크기.
+function hwpSectionText(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const paras = []
+  let p = 0
+  while (p + 4 <= bytes.byteLength) {
+    const header = dv.getUint32(p, true)
+    p += 4
+    const tag = header & 0x3ff
+    let size = (header >>> 20) & 0xfff
+    if (size === 0xfff) {
+      if (p + 4 > bytes.byteLength) break
+      size = dv.getUint32(p, true)
+      p += 4
+    }
+    if (size < 0 || p + size > bytes.byteLength) break
+    if (tag === HWP5_TAG_PARA_TEXT) paras.push(hwpDecodeParaText(dv, p, size))
+    p += size
+  }
+  return paras
+}
+
+function hwpCleanText(raw) {
+  return String(raw || '')
+    .replace(/\u0000/g, '')
+    .replace(/[\r\v\f]/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+// .hwp 본문 추출. 실패 사유는 코드로 던져 화면 안내 문구를 가른다.
+async function extractHwpText(file) {
+  const buffer = await file.arrayBuffer()
+  const head = new Uint8Array(buffer, 0, Math.min(32, buffer.byteLength))
+  if (String.fromCharCode(...head).startsWith('HWP Document File V3')) throw new Error('HWP3')
+  const cfb = readCfb(buffer)                       // NOT_CFB면 호출부에서 안내
+  const headerEntry = [...cfb.files.keys()].find(k => /(^|\/)FileHeader$/i.test(k))
+  const flags = hwpFileHeaderFlags(headerEntry ? cfb.read(cfb.files.get(headerEntry)) : null)
+  if (flags.encrypted) throw new Error('HWP_ENCRYPTED')
+
+  const sections = [...cfb.files.keys()]
+    .filter(k => /^BodyText\/Section\d+$/i.test(k))
+    .sort((a, b) => Number(a.match(/(\d+)$/)[1]) - Number(b.match(/(\d+)$/)[1]))
+  if (!sections.length) {
+    if ([...cfb.files.keys()].some(k => /^ViewText\//i.test(k))) throw new Error('HWP_DISTRIBUTED')
+    throw new Error('NO_BODYTEXT')
+  }
+
+  const parts = []
+  for (const key of sections) {
+    let bytes = cfb.read(cfb.files.get(key))
+    if (flags.compressed) {
+      try {
+        bytes = await inflateRawPartial(bytes)
+      } catch (e) {
+        console.warn(`${key} 압축 해제 실패:`, e.message)
+        continue
+      }
+    }
+    parts.push(hwpSectionText(bytes).join('\n'))
+  }
+  const text = hwpCleanText(parts.join('\n'))
+  if (text.replace(/\s/g, '').length >= 20) return text
+
+  // 본문을 못 읽었으면 미리보기 텍스트(PrvText, UTF-16LE 평문)라도 쓴다.
+  const prv = [...cfb.files.keys()].find(k => /(^|\/)PrvText$/i.test(k))
+  if (prv) {
+    const bytes = cfb.read(cfb.files.get(prv))
+    const preview = hwpCleanText(new TextDecoder('utf-16le').decode(bytes))
+    if (preview.replace(/\s/g, '').length >= 20) return preview
+  }
+  return text
+}
+
+const HWP_ERROR_MESSAGES = {
+  HWP3: '아주 옛 한글 파일(한글 97 이하, .hwp V3)이에요. 한글에서 [다른 이름으로 저장 → PDF]로 올려주세요.',
+  NOT_CFB: '한글 파일 형식을 알아볼 수 없어요. 한글에서 [다른 이름으로 저장 → PDF 또는 HWPX]로 올려주세요.',
+  HWP_ENCRYPTED: '암호가 걸린 한글 파일이에요. 한글에서 암호를 풀고 저장하거나 PDF로 올려주세요.',
+  HWP_DISTRIBUTED: '배포용(읽기 전용 암호화) 한글 파일이에요. 한글에서 PDF로 저장해 올려주세요.',
+  NO_BODYTEXT: '한글 파일에서 본문을 찾지 못했어요. 한글에서 PDF로 저장해 올려주세요.',
+  NO_DECOMPRESSION: '이 브라우저는 한글 파일 압축을 못 풀어요. 사파리·크롬 최신 버전이나 PDF로 올려주세요.',
 }
 
 // pdfjs-dist CDN 로드 보장 (미로드 시 동적 재시도)
@@ -1211,6 +1509,20 @@ function matchRegion(text) {
   return ''
 }
 
+// 장소 라벨에서 읽은 글자에는 발신처 주소가 섞이지 않는다 — 그래서 '로카우스 호텔
+// 서울 용산'처럼 시·도 이름만 적힌 경우도 지역으로 인정한다. 본문 전체에 같은 규칙을
+// 쓰면 공문 아래쪽 발신처 주소("서울특별시 서초구 …")를 행사 지역으로 잡는다.
+const BARE_REGION_NAMES = [...new Set(REGION_MAP.map(([, region]) => region))]
+function matchRegionInVenue(text) {
+  if (!text) return ''
+  const hit = matchRegion(text)
+  if (hit) return hit
+  for (const region of BARE_REGION_NAMES) {
+    if (text.includes(region)) return region
+  }
+  return ''
+}
+
 function parseDocMeta(filename, text) {
   const norm = s => s.replace(/\s+/g, '')
   const col  = s => s.replace(/\s+/g, ' ').trim()
@@ -1389,28 +1701,28 @@ function parseDocMeta(filename, text) {
 
   // 형식0: 장소를 읽었으면 그 장소로 판정한다 — 본문에는 발신처 주소가 섞여 있다
   const venue = extractVenue(tc)
-  destination = matchRegion(venue)
+  destination = matchRegionInVenue(venue)
 
   // 형식1: "장소 : XXX" 또는 "개최지 : XXX"
   const placeColonM = tc.match(/(?:장\s*소|개최\s*지|행사\s*장소|개최\s*장소)\s*[：:]\s*([^.0-9]{2,60})/)
-  if (!destination && placeColonM) destination = matchRegion(placeColonM[1])
+  if (!destination && placeColonM) destination = matchRegionInVenue(placeColonM[1])
 
   // 형식2: "장 소 XXX 숫자." (번호 목록 형식) — 번호 나오기 전까지
   if (!destination) {
     const placeListM = tc.match(/장\s*소\s+([가-힣][^0-9]{2,50})(?:\s*\d+\s*[.:]|$)/)
-    if (placeListM) destination = matchRegion(placeListM[1])
+    if (placeListM) destination = matchRegionInVenue(placeListM[1])
   }
 
   // 형식3: "1차: 날짜, 장소" 목록 형식 (강의 협조 요청 등)
   if (!destination) {
     const firstPlaceM = tc.match(/1\s*차\s*[：:,、].*?,\s*([가-힣].{3,40})/)
-    if (firstPlaceM) destination = matchRegion(firstPlaceM[1])
+    if (firstPlaceM) destination = matchRegionInVenue(firstPlaceM[1])
   }
 
   // 형식4: "교육장소" 키워드 이후 텍스트에서 REGION_MAP 직접 검색 (테이블 형식)
   if (!destination) {
     const eduM = tc.match(/교\s*육\s*장\s*소/)
-    if (eduM) destination = matchRegion(tc.slice(eduM.index, eduM.index + 240))
+    if (eduM) destination = matchRegionInVenue(tc.slice(eduM.index, eduM.index + 240))
   }
 
   // 장소 라벨 탐색 실패 시 본문 스캔 — 발신처 주소(우편번호 기준) 이전만 탐색

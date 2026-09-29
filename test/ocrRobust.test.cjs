@@ -188,3 +188,72 @@ test('XML 문단 태그는 줄바꿈으로, 나머지 태그는 지운다', () =
   const { evalIn } = loadApp()
   assert.equal(evalIn('xmlToText("<w:p><w:t>가</w:t></w:p><w:p><w:t>나 &amp; 다</w:t></w:p>")'), '가\n나 & 다')
 })
+
+// ── 옛 한글(.hwp, HWP 5.0 이진) 공문 ────────────────────────────────────────
+// 실제 파일 검증은 tools/hwp_check.mjs + tools/parse_sweep.mjs(보험심사 관리자워크숍 공문)로 한다.
+// 여기서는 브라우저가 대신해 주지 않는 부분 — 압축 꼬리 무시, 레코드 해석, 제어문자 건너뛰기 —
+// 를 바이트 단위로 고정한다.
+
+// 문단 텍스트 레코드 한 개를 만든다: 헤더 4바이트(tag 67 + level + size) + UTF-16LE 본문.
+function paraTextRecord(codes) {
+  const body = new Uint8Array(codes.length * 2)
+  const bd = new DataView(body.buffer)
+  codes.forEach((c, i) => bd.setUint16(i * 2, c, true))
+  const out = new Uint8Array(4 + body.length)
+  new DataView(out.buffer).setUint32(0, (67 & 0x3ff) | (0 << 10) | (body.length << 20), true)
+  out.set(body, 4)
+  return out
+}
+const codesOf = s => [...s].map(ch => ch.charCodeAt(0))
+
+test('.hwp 문단 레코드에서 글자만 뽑고 인라인 제어문자 16바이트는 건너뛴다', () => {
+  const { evalIn, context } = loadApp()
+  // 표 시작 제어문자(11) 뒤에는 14바이트가 더 붙는다 — 그 안의 글자처럼 보이는 값에 속으면 안 된다.
+  const codes = [...codesOf('일 시'), 11, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
+    ...codesOf('2026년 10월 13일'), 13, ...codesOf('장 소')]
+  context.__bytes = paraTextRecord(codes)
+  const paras = evalIn('hwpSectionText(__bytes)')
+  assert.equal(paras.length, 1)
+  assert.equal(paras[0], '일 시2026년 10월 13일\n장 소')   // ABCDEFG(제어 데이터)는 안 섞인다
+})
+
+test('.hwp 본문 스트림 뒤에 패딩이 붙어도 압축을 푼 만큼 쓴다', async () => {
+  const { evalIn, context } = loadApp()
+  const zlib = require('node:zlib')
+  const record = paraTextRecord(codesOf('제 목 2026 관리자 워크숍 개최 안내'))
+  const packed = zlib.deflateRawSync(Buffer.from(record))
+  context.__padded = new Uint8Array(Buffer.concat([packed, Buffer.alloc(64, 0)]))   // 꼬리 패딩
+  const bytes = await evalIn('inflateRawPartial(__padded)')
+  context.__bytes = bytes
+  assert.equal(evalIn('hwpSectionText(__bytes)')[0], '제 목 2026 관리자 워크숍 개최 안내')
+})
+
+test('.hwp FileHeader 속성에서 압축·암호 여부를 읽는다', () => {
+  const { evalIn, context } = loadApp()
+  const mk = flags => {
+    const b = new Uint8Array(64)
+    new DataView(b.buffer).setUint32(36, flags, true)
+    return b
+  }
+  context.__plain = mk(0); context.__zipped = mk(1); context.__locked = mk(3)
+  assert.deepEqual(evalIn('hwpFileHeaderFlags(__plain)'), { compressed: false, encrypted: false, distributed: false })
+  assert.equal(evalIn('hwpFileHeaderFlags(__zipped)').compressed, true)
+  assert.equal(evalIn('hwpFileHeaderFlags(__locked)').encrypted, true)
+})
+
+test('.hwp가 아닌 파일을 올리면 사유별 안내 문구가 있다', () => {
+  const { evalIn } = loadApp()
+  for (const key of ['HWP3', 'NOT_CFB', 'HWP_ENCRYPTED', 'HWP_DISTRIBUTED', 'NO_BODYTEXT']) {
+    assert.equal(typeof evalIn(`HWP_ERROR_MESSAGES[${JSON.stringify(key)}]`), 'string',
+      `${key} 안내 문구가 없다`)
+  }
+})
+
+test('장소 칸의 시·도 이름만으로도 지역을 잡고, 본문 발신처 주소로는 잡지 않는다', () => {
+  const { evalIn } = loadApp()
+  // 로카우스 호텔 서울 용산 — '용산구'가 아니라 '용산'이라 기존 규칙으로는 못 잡았다.
+  assert.equal(evalIn('matchRegionInVenue("로카우스 호텔 서울 용산 6층 플로리스홀")'), '서울')
+  assert.equal(evalIn('matchRegion("로카우스 호텔 서울 용산 6층 플로리스홀")'), '')
+  // 장소가 창원이면 발신처가 서울이어도 창원이다(장소 칸을 먼저 본다).
+  assert.equal(evalIn('matchRegionInVenue("삼성창원병원 본관 대강당")'), '창원')
+})
