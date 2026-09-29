@@ -80,7 +80,7 @@ function busOnlyRegion(place) {
 }
 
 // ── KTX / 버스 운임표 (마산역·마산시외버스터미널 출발 왕복) ───────────────────
-// 금액·경로는 tools/build_fares.py 가 data/source 의 KORAIL 운임표에서 생성한다.
+// 금액·경로는 tools/build_fares.py 가 ../KTX 운임표·시간표/ 의 KORAIL 운임표(기준월 최신)에서 생성한다.
 // 직접 고치지 말 것 — 고치면 다음 생성 때 되돌아간다. 실제 값은 data/rates.json
 // 에서 덮어쓰며, 아래 배열은 로드 실패 시 쓰는 같은 값의 사본이다.
 let FARE_TABLE = [
