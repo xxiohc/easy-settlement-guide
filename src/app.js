@@ -147,9 +147,9 @@ function goToCard(n) {
     selectOnlineMode(state.isOnline)              // 토글 UI 동기화
   }
   if (n === 6)  resetCard6()
-  if (n === 8)  prepareCard8()
+  if (n === 8)  { prepareCard8(); prefillProfileCard8() }
   if (n === 9)  prepareCard9()
-  if (n === 10) prepareCard10()
+  if (n === 10) { prefillProfileCard10(); prepareCard10() }
   if (n === 11) prepareCard11()
 
   if (n > state.currentCard) {
@@ -2290,6 +2290,7 @@ function setDocField(id, value) {
   const el = document.getElementById(id)
   if (!el) return
   el.value = value || ''
+  if (id === 'input-fee') sizeFeeInput(el)
   el.classList.toggle('input-autofilled', !!value)
   if (value) el.addEventListener('input', () => el.classList.remove('input-autofilled'), { once: true })
 }
@@ -2538,6 +2539,7 @@ function onPlaceInput() {
   state.pinStation = null
   state.transitAccess = {}
   document.getElementById('place-geo-note')?.classList.add('hidden')
+  guessRegionFromPlaceText(val)
   renderPrevDayVerdict()
 
   const suggest = document.getElementById('placeSuggest')
@@ -2611,6 +2613,7 @@ function selectPlace(name, addr, lat, lon) {
     if (regionGuess) {
       document.getElementById('input-region').value = regionGuess
       state.region  = regionGuess
+      state.regionFromPlace = false   // 검색 목록에서 고른 주소 기준 — 글자 추측으로 다시 덮지 않는다
       state.isJeju  = regionGuess.includes('제주')
       state.isSeoul = regionGuess.includes('서울')
       document.getElementById('jeju-hint').classList.toggle('hidden', !state.isJeju)
@@ -2646,8 +2649,24 @@ function guessRegionFromAddress(addr) {
   return ''
 }
 
+// 장소 글자에 지역이 드러나면("부산 벡스코", "삼성창원병원") 지역 칸을 바로 채운다(2026-09-29 사용자 관점 점검 —
+// 장소를 쳐 놓고 지역을 또 쳐야 했다. 검색 목록을 눌러야만 지역이 채워졌다). 공문 판독과 같은 규칙(matchRegionInVenue)을 쓰고,
+// 지역 칸이 비었거나 앞서 이렇게 자동으로 채운 경우에만 바꾼다 — 사람이 직접 친 지역은 덮어쓰지 않는다.
+function guessRegionFromPlaceText(place) {
+  const el = document.getElementById('input-region')
+  if (!el || (el.value.trim() && !state.regionFromPlace)) return
+  const guess = matchRegionInVenue(place)
+  if (!guess || guess === el.value.trim()) return
+  el.value = guess
+  onRegionInput()
+  state.regionFromPlace = true
+  document.getElementById('regionSuggest')?.classList.add('hidden')
+  clearCard4Error('input-region')
+}
+
 function onRegionInput() {
   const val = document.getElementById('input-region').value.trim()
+  state.regionFromPlace = false
   state.region  = val
   state.isJeju  = val.includes('제주')
   state.isSeoul = val.includes('서울') || val.includes('여의도')
@@ -2677,6 +2696,7 @@ function onRegionInput() {
 
 function selectRegion(region) {
   document.getElementById('input-region').value = region
+  state.regionFromPlace = false
   document.getElementById('regionSuggest').classList.add('hidden')
   state.region  = region
   state.isJeju  = region.includes('제주')
@@ -2707,7 +2727,7 @@ function selectFeePresence(hasIt) {
   // 없어요 선택 시 fee 초기화
   if (!hasIt) {
     const feeEl = document.getElementById('input-fee')
-    if (feeEl) feeEl.value = ''
+    if (feeEl) { feeEl.value = ''; sizeFeeInput(feeEl) }
     state.fee = 0
     state.feeStatus = 'no-fee'
     state.receiptType = null
@@ -2724,6 +2744,14 @@ function formatFeeInput(input) {
   const raw = input.value.replace(/[^0-9]/g, '')
   state.fee = parseInt(raw) || 0
   input.value = raw ? Number(raw).toLocaleString() : ''
+  sizeFeeInput(input)
+}
+
+// 금액 칸을 숫자 길이만큼만 넓혀 '원'을 숫자 바로 뒤에 붙인다(2026-09-29 지석초이 — 칸 끝의 '원'이 숫자와 너무 떨어져 있었다)
+function sizeFeeInput(input = document.getElementById('input-fee')) {
+  if (!input) return
+  const len = Math.max(2, (input.value || input.placeholder || '').length)
+  input.style.width = `calc(${len}ch + 4px)`
 }
 
 // ── CARD 6: 등록비 납부 (납부 여부 + 납부 형태 통합) ────────────────────────
@@ -3220,6 +3248,7 @@ function goFromCard8() {
 // Y/N 버튼 선택 + 조건부 필드 show/hide
 function setYN(field, val) {
   state[field] = val
+  if (field === 'isMS') saveProfile({ isMS: val })
   if (field === 'prevDayMove') state.prevDayAuto = false
 
   // 전날 이동이 붙으면 당일 출장이 아니다 — 8시간 질문을 숨기고 답을 비운다.
@@ -4322,10 +4351,44 @@ function prepareCard10() {
   renderTripFormPreview()
 }
 
+// ── 본인 정보 기억(2026-09-29 지석초이 "다시 입력해야 하는 사항") ─────────────────────
+// 소속·성명·직급(MS 여부)은 정산할 때마다 같은 답인데 매번 새로 입력했다. 이 기기 브라우저에만 저장하고
+// 다음번에 미리 채운 뒤 '지난번 입력'이라고 밝힌다 — 같은 PC를 여럿이 쓰면 바로 고칠 수 있게.
+const PROFILE_KEY = 'expense_guide_profile_v1'
+function loadProfile() {
+  try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') || {} } catch { return {} }
+}
+function saveProfile(patch) {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...loadProfile(), ...patch })) } catch { /* 저장 불가 브라우저 — 매번 입력 */ }
+}
+function profileHint(el, text) {
+  if (!el) return
+  let hint = el.querySelector('.profile-hint')
+  if (!hint) { hint = document.createElement('div'); hint.className = 'profile-hint'; el.appendChild(hint) }
+  hint.textContent = text
+  hint.classList.toggle('hidden', !text)
+}
+function prefillProfileCard8() {
+  const rank = document.getElementById('field-rank')
+  const saved = loadProfile().isMS
+  if (!rank || rank.classList.contains('hidden') || state.isMS !== null || typeof saved !== 'boolean') return
+  setYN('isMS', saved)
+  profileHint(rank, '↺ 지난번 답을 미리 골라 뒀어요. 바뀌었으면 다시 고르세요.')
+}
+function prefillProfileCard10() {
+  const p = loadProfile()
+  const dept = document.getElementById('input-dept'), name = document.getElementById('input-name')
+  let filled = false
+  if (dept && !dept.value && p.dept) { dept.value = p.dept; filled = true }
+  if (name && !name.value && p.name) { name.value = p.name; filled = true }
+  if (filled) profileHint(dept?.closest('.info-fields-wrap'), '↺ 지난번 입력한 소속·성명이에요. 다르면 고쳐 주세요.')
+}
+
 // 소속/성명 입력 시 실시간 반영
 function onPersonInput() {
   state.dept = document.getElementById('input-dept')?.value || ''
   state.name = document.getElementById('input-name')?.value || ''
+  saveProfile({ dept: state.dept.trim(), name: state.name.trim() })
   renderTripFormPreview()
 }
 
@@ -4525,6 +4588,7 @@ function restartFlow() {
     const el = document.getElementById(id)
     if (el) el.value = ''
   })
+  sizeFeeInput()
   onTimeChange()
   renderTimeHint(null)
   document.getElementById('fee-subhint').textContent = '사전납입 · 회원병원 기준 금액으로 입력해주세요'

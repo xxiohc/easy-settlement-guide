@@ -195,6 +195,21 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await ctx.close()
 }
 
+// ── E. 다시 입력하지 않게(2026-09-29 사용자 관점 점검) ──
+{
+  const [ctx,p] = await newPage()
+  await p.click('[data-choice="done"]'); await p.waitForTimeout(300)
+  await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(500)
+  await p.type('#input-place', '부산 벡스코'); await p.waitForTimeout(200)
+  check('E 장소 글자로 지역 채움', await p.inputValue('#input-region') === '부산', await p.inputValue('#input-region'))
+  await p.fill('#input-region', ''); await p.type('#input-region', '대전')
+  await p.fill('#input-place', ''); await p.type('#input-place', '서울역 회의실'); await p.waitForTimeout(200)
+  check('E 직접 친 지역은 덮지 않음', await p.inputValue('#input-region') === '대전', await p.inputValue('#input-region'))
+  await p.evaluate(() => { saveProfile({ dept: '경영지원팀', name: '홍길동', isMS: false }); state.isMS = null; prefillProfileCard10() })
+  check('E 지난번 소속·성명 미리 채움', await p.inputValue('#input-dept') === '경영지원팀' && await p.inputValue('#input-name') === '홍길동')
+  await ctx.close()
+}
+
 await b.close()
 console.log('\n── 요약 ──')
 console.log(`총 ${out.length}건 · FAIL ${out.filter(l=>l.startsWith('FAIL')).length}건`)
