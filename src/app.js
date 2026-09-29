@@ -1434,6 +1434,12 @@ function normalizeOcrArtifacts(text) {
     .replace(/(?<![\d.])(\d) (\d)(?= ?[월일])/g, '$1$2')
     .replace(/(?<!\d)(\d)\s(\d)(?=\s*:\s*\d)/g, '$1$2')
     .replace(/(\d)\s*:\s*(\d)\s?(\d)(?!\d)/g, '$1:$2$3')
+    // 장소 이름에서 실제로 나온 스캔 오독(2026-09-29 장소 전수 점검): 서울→서물, 신촌→신존, 아카데미→이카데미
+    .replace(/서물(?=[가-힣\s])/g, '서울').replace(/신존(?=세브란스)/g, '신촌').replace(/이카데미/g, '아카데미').replace(/(?<=서울)아신(?=병원)/g, '아산')
+    // 숫자 사이의 알파벳 O는 0이다("99,0O0원", "13:3O") — 스캔 판독에서 흔한 오독(2026-09-29 변형 평가)
+    .replace(/(?<=[\d,:.])[Oo](?![A-Za-z가-힣])|(?<=\d)[Oo](?=\d)/g, '0')
+    // 시각의 쌍점이 쌍반점으로 읽힌다("13;00~15:00") — 시작시각을 놓치고 끝 시각을 시작으로 집었다
+    .replace(/(?<!\d)(\d{1,2})\s*;\s*(\d{2})(?!\d)/g, '$1:$2')
     // 스캔에서 금액 끝 '원'이 '8'로 읽힌다("회원병원 : 77,0008" — 병원협회 연수교육). 쉼표 뒤 네 자리는 금액이 될 수 없다
     .replace(/(\d{1,3}(?:,\d{3})+)[8B](?![\d,])/g, '$1원')
     // 두 자리 연도 "'26.10. 1." — 스캔에서는 따옴표가 `"·"로도 읽힌다
@@ -1450,7 +1456,7 @@ const DATE_TOKEN = String.raw`\d{4}\s*[.\-년]\s*\d{1,2}\s*[.\-월]\s*\d{1,2}\s*
 const DATE_PART  = String.raw`(?:\d{4}\s*[.\-년]\s*)?(?:\d{1,2}\s*[.\-월]\s*)?\d{1,2}\s*[.일]?(?:\s*\(\s*[가-힣]\s*\))?(?:\s*\d{1,2}:\d{2})?`
 function maskNonEventDates(tc) {
   return tc
-    .replace(new RegExp(String.raw`(?<![가-힣])시\s*행(?!\s*(?:하|할|합|되|된|중|령|규|에|을|의|계))[\s\S]{0,40}?${DATE_TOKEN}\)?`, 'g'), ' ')
+    .replace(new RegExp(String.raw`(?<![가-힣])시\s*행(?!\s*(?:하|할|합|되|된|중|령|규|에|을|의|계|안내|계획|방법))[\s\S]{0,40}?${DATE_TOKEN}\)?`, 'g'), ' ')
     .replace(new RegExp(String.raw`${DATE_TOKEN}\s*기\s*준`, 'g'), ' ')
     // 관련 문서 번호에 딸린 날짜 "병약 제2026-131호(2026.03.11.)", 문서 머리의 "날 짜: 2026년 09월 01일"
     .replace(new RegExp(String.raw`호\s*\(\s*${DATE_TOKEN}\s*\)`, 'g'), '호 ')
@@ -1574,6 +1580,7 @@ function parseDocMeta(filename, text) {
 
   // ── 제목 ──
   let title = ''
+  let titleRule = ''
   // normalized text에서 개행 기준으로 제목 줄만 추출 (가장 정확)
   const titleLineM = normalized.match(/(?:제\s*_?\s*목|건\s*명|행\s*사\s*명|연수\s*명|강\s*의\s*명|과\s*정\s*명|세\s*미\s*나\s*명|학\s*술\s*대\s*회\s*명)[^\S\n_]*[：:。』」_=]*[^\S\n]*([가-힣\dA-Za-z「『\[(][^\n]{3,119})/)
   if (titleLineM) {
@@ -1594,6 +1601,7 @@ function parseDocMeta(filename, text) {
       title = cleanTitle(titleM[1])
     }
   }
+  if (title) titleRule = 'label'
   // 파일명에서 추출 (숫자+언더스코어로만 구성된 파일명은 제외)
   if (!title) {
     const fnBase = filename.replace(/(?:\.[A-Za-z0-9]{2,4})+$/, '').replace(/[_\-]/g, ' ').trim()
@@ -1601,6 +1609,7 @@ function parseDocMeta(filename, text) {
     if (fnBase.length > 4 && fnBase.length < 80 && /[가-힣]/.test(fnBase)) title = fnBase
     else if (fnBase.length > 4 && fnBase.length < 80 && !/^\d/.test(fnBase)) title = fnBase
   }
+  if (title && !titleRule) titleRule = 'filename'
   // 본문 첫 의미있는 줄에서 추출
   if (!title) {
     const kwRe = /교육|출장|세미나|연수|워크숍|학술대회|심포지엄|컨퍼런스|포럼|훈련|안내|개최/
@@ -1619,7 +1628,10 @@ function parseDocMeta(filename, text) {
   const tnD = norm(tcD)
 
   const pad = n => String(n).padStart(2, '0')
+  // 어느 규칙이 날짜를 정했는지 남긴다 — 라벨 뒤에서 읽은 값과 문서 어딘가에서 추정한 값은 믿을 만한 정도가 다르다
+  let curRule = '', dateRule = ''
   const setRange = (sy, sm, sd, ey, em, ed) => {
+    dateRule = curRule
     startDate = `${sy}-${pad(sm)}-${pad(sd)}`
     endDate   = `${ey}-${pad(em)}-${pad(ed)}`
     nights = Math.max(0, Math.round((new Date(endDate) - new Date(startDate)) / 86400000))
@@ -1627,12 +1639,14 @@ function parseDocMeta(filename, text) {
     periodDisplay = nights > 0 ? `${sm}월 ${sd}일 ~ ${em}월 ${ed}일` : `${sm}월 ${sd}일`
   }
   const setSingle = (sy, sm, sd) => {
+    dateRule = curRule
     startDate = `${sy}-${pad(sm)}-${pad(sd)}`
     endDate   = startDate
     nights = 0; days = 1
     periodDisplay = `${+sm}월 ${+sd}일`
   }
 
+  curRule = 'P0'
   // 패턴0: 차수 목록 "1차: 날짜, 장소 / 2차: 날짜, 장소" — 차수는 따로 열리는 같은 교육이라
   // 기간으로 묶으면 안 된다(6/9 서울·6/16 대전이 8일 출장이 됐다). 1차로 채우고 확인을 요청한다.
   {
@@ -1650,6 +1664,7 @@ function parseDocMeta(filename, text) {
     if (sessions.size >= 2) multiSession = true
   }
 
+  curRule = 'PL'
   // 패턴L: 라벨(일시·일자·기간·교육일시·과정일정) 바로 뒤 날짜 — 문서 전체에서 날짜 모양을
   // 찾기 전에 먼저 본다. 라벨 앞에 한글이 붙은 '신청기간'·'시행일자'·'거래일자'는 라벨이 아니다.
   if (!startDate) {
@@ -1663,12 +1678,14 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  curRule = 'P1'
   // 패턴1: YYYY-MM-DD ~ YYYY-MM-DD
   if (!startDate) {
     const m = tcD.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*~\s*(\d{4})-(\d{1,2})-(\d{1,2})/)
     if (m) setRange(+m[1],+m[2],+m[3],+m[4],+m[5],+m[6])
   }
 
+  curRule = 'P1.5'
   // 패턴1.5: 공백제거 텍스트(tn)에서 날짜 범위 탐색
   // pdfjs 폰트 이슈로 tc에서 숫자 사이 공백이 끼어 패턴2가 실패할 때 대비
   // 형식: YYYY.M.D비숫자*~비숫자*(YYYY.)M.D
@@ -1680,6 +1697,7 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  curRule = 'P2'
   // 패턴2: YYYY.M.D ~ M.D 또는 YYYY.M.D~YYYY.M.D
   // 일자 뒤에 .(수) 같은 점+요일 괄호가 붙는 공문 형식 지원 (예: 2025. 5. 21.(수) ~ 5. 23.(금))
   if (!startDate) {
@@ -1690,6 +1708,7 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  curRule = 'P3'
   // 패턴3: 한글 날짜 — YYYY년 M월 D일 ~ M월 D일
   if (!startDate) {
     const m = tcD.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*~\s*(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
@@ -1699,12 +1718,14 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  curRule = 'P4'
   // 패턴4: MM.DD(요일) ~ MM.DD(요일) — 연도가 없으면 요일이 맞는 해로 추정
   if (!startDate) {
     const r = parseDateSnippet(tcD.match(/(?<!\d)\d{1,2}\s*\.\s*\d{1,2}(?:\s*\([^)]{1,3}\))?\s*~\s*\d{1,2}\s*\.\s*\d{1,2}/)?.[0] || '', curY)
     if (r) { yearGuessed = !!r.guessed; setRange(...r.s, ...r.e) }
   }
 
+  curRule = 'P6'
   // 패턴6: "교육일시" 테이블 컬럼에서 ISO 날짜 — 납부 안내서·신청 명단 형식
   // 시행일자보다 먼저 체크해서 올바른 교육일 추출
   if (!startDate) {
@@ -1715,6 +1736,7 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  curRule = 'P7'
   // 패턴7: 단일 ISO 날짜 — YYYY-MM-DD (시행일자 제외)
   if (!startDate) {
     // 시행일자·접수일자 등 행정 처리일 제외를 위해 해당 패턴 마스킹 후 탐색
@@ -1724,18 +1746,21 @@ function parseDocMeta(filename, text) {
     if (m && +m[1] >= 2020) setSingle(+m[1],+m[2],+m[3])
   }
 
+  curRule = 'P8'
   // 패턴8: 단일 일자 — YYYY. M.D 또는 YYYY.M.D (뒤에 ~ 없음)
   if (!startDate) {
     const m = tcD.match(/(\d{4})[. ]+(\d{1,2})[. ]+(\d{1,2})(?:\s*\([^)]{1,3}\))?(?!\s*[~～])/)
     if (m && +m[1] >= 2020) setSingle(+m[1],+m[2],+m[3])
   }
 
+  curRule = 'P9'
   // 패턴9: 라벨 없이 한글 날짜 하나만 있는 안내문(메일·포스터 사진) — "2026년 10월 14일(수) 오후 1시"
   if (!startDate) {
     const m = tcD.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
     if (m && +m[1] >= 2020) setSingle(+m[1], +m[2], +m[3])
   }
 
+  curRule = dateRule  // 기간 늘리기는 앞에서 정한 규칙의 신뢰도를 이어받는다
   // 패턴L-2: "2026.11.05.(목), 14시~11.06.(금)" — 시작시각이 날짜와 종료일 사이에 끼어 있어
   // 앞 패턴들이 당일로 읽었다(재협 추계세미나 공문, 2026-09-29 실측: 1박2일이 당일로 잡혀 135,000원이 빠졌다).
   // 스캔 공문은 OCR 결과가 엔진마다 다르다 — "14시"가 크롬은 "14AI", 사파리는 "14A1", 요일 "(목)"은 "()"로도 읽힌다.
@@ -1757,29 +1782,35 @@ function parseDocMeta(filename, text) {
 
 
   // 형식0: 장소를 읽었으면 그 장소로 판정한다 — 본문에는 발신처 주소가 섞여 있다
+  extractVenue.rule = 'label'
   const venue = extractVenue(tc)
+  const venueRule = venue ? extractVenue.rule : ''
   destination = matchRegionInVenue(venue)
+  let destRule = destination ? 'venue' : ''
 
   // 형식1: "장소 : XXX" 또는 "개최지 : XXX"
   const placeColonM = tc.match(/(?:장\s*소|개최\s*지|행사\s*장소|개최\s*장소)\s*[：:]\s*([^.0-9]{2,60})/)
-  if (!destination && placeColonM) destination = matchRegionInVenue(placeColonM[1])
+  if (!destination && placeColonM) { destination = matchRegionInVenue(placeColonM[1]); if (destination) destRule = 'label' }
 
   // 형식2: "장 소 XXX 숫자." (번호 목록 형식) — 번호 나오기 전까지
   if (!destination) {
     const placeListM = tc.match(/장\s*소\s+([가-힣][^0-9]{2,50})(?:\s*\d+\s*[.:]|$)/)
     if (placeListM) destination = matchRegionInVenue(placeListM[1])
+    if (destination && !destRule) destRule = 'label'
   }
 
   // 형식3: "1차: 날짜, 장소" 목록 형식 (강의 협조 요청 등)
   if (!destination) {
     const firstPlaceM = tc.match(/1\s*차\s*[：:,、].*?,\s*([가-힣].{3,40})/)
     if (firstPlaceM) destination = matchRegionInVenue(firstPlaceM[1])
+    if (destination && !destRule) destRule = 'label'
   }
 
   // 형식4: "교육장소" 키워드 이후 텍스트에서 REGION_MAP 직접 검색 (테이블 형식)
   if (!destination) {
     const eduM = tc.match(/교\s*육\s*장\s*소/)
     if (eduM) destination = matchRegionInVenue(tc.slice(eduM.index, eduM.index + 240))
+    if (destination && !destRule) destRule = 'label'
   }
 
   // 장소 라벨 탐색 실패 시 본문 스캔 — 발신처 주소(우편번호 기준) 이전만 탐색
@@ -1790,11 +1821,13 @@ function parseDocMeta(filename, text) {
     // "수신" 이후 첫 가-힣로 시작하는 의미 있는 본문부터 탐색
     const bodyCore = bodyText.replace(/^.*?(?=\d+\.\s)/s, '')  // "1. 귀 기관..." 이후부터
     destination = matchRegion(bodyCore) || matchRegion(bodyText)
+    if (destination) destRule = 'body'
   }
 
   // ── 등록비 ──
   let registration = null
   let registrationNote = null
+  let feeRule = ''
 
   // 금액 문자열 파싱 헬퍼 (만원 단위 지원: "18만" → 180000, "180,000" → 180000)
   const parseAmt = s => {
@@ -1827,6 +1860,7 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  if (registration) feeRule = 'member'
   // 우선순위2: 사전납입 기준
   if (!registration) {
     const i = tnFee.indexOf('사전납입')
@@ -1836,6 +1870,7 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  if (registration && !feeRule) feeRule = 'prepaid'
   // 우선순위2.5: 표 형식 교육비 — 헤더가 교육비·등록비이고 하위 칸이 회원/비회원으로 갈리는 공문.
   // 금액이 프로그램 행마다 따로 있어 키워드와 같은 줄에 없다(대한간호협회 보수교육 안내가 대표).
   if (!registration) {
@@ -1869,6 +1904,7 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  if (registration && !feeRule) feeRule = 'table'
   // 우선순위3: "금 XXX원" 형식 — 납부 안내서, 고지서 (예: "금 25,000 원 / 1 명")
   // ※ \b는 한글 앞뒤에서 동작하지 않으므로 사용하지 않음
   if (!registration) {
@@ -1876,6 +1912,7 @@ function parseDocMeta(filename, text) {
     if (kinM) registration = parseAmt(kinM[1])
   }
 
+  if (registration && !feeRule) feeRule = 'geum'
   // 우선순위4: 교육비·등록비·참가비·참가회비 등 키워드 뒤 금액 (만원 단위 포함)
   // "1인당", "1인" 같은 중간 수식어 허용 (예: 참가회비 1인당 450,000원)
   if (!registration) {
@@ -1888,6 +1925,7 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  if (registration && !feeRule) feeRule = 'keyword'
   // 우선순위5: 정규화 텍스트에서 키워드+금액 슬라이딩 검색 (만원 포함)
   if (!registration) {
     const kwPats = ['사전등록비','사전등록','참가회비','등록비','참가비','교육비','수강료']
@@ -1903,12 +1941,14 @@ function parseDocMeta(filename, text) {
 
   // 간호사 보수교육 공문은 금액을 못 읽어도 기본값을 채운다.
   // 의료법 시행규칙 제20조에 따라 연간 8시간 이상 이수 의무이고, 8시간 프로그램 회원가는 40,000원으로 같다.
+  if (registration && !feeRule) feeRule = 'sliding'
   // 라벨 없이 회원가·비회원가 두 금액만 나란히 찍힌 교육 안내 화면(간호협회 에듀센터 캡처) — 작은 쪽이 회원가
   if (!registration) {
     const pairM = tc.match(/(?<![\d,])(\d{1,3}(?:,\d{3})+)\s*원\s+(\d{1,3}(?:,\d{3})+)\s*원/)
     const [a, b] = pairM ? [parseAmt(pairM[1]), parseAmt(pairM[2])] : []
     if (a && b && a < b) {
       registration = a
+      feeRule = 'pair'
       registrationNote = '공문에 금액이 두 개 있어 낮은 쪽(회원가)으로 넣었어요. 맞나요?'
     }
   }
@@ -1917,6 +1957,7 @@ function parseDocMeta(filename, text) {
   const offlineOnly = /오프라인/.test(tnFee) && !/온라인/.test(tnFee)
   if (!registration && /보수교육/.test(tnFee) && /간호/.test(tnFee) && !offlineOnly) {
     registration = 40000
+    feeRule = 'default'
     registrationNote = '간호사 보수교육 8시간·회원 기준 기본값이에요. 다르면 고쳐주세요.'
   }
 
@@ -1925,7 +1966,7 @@ function parseDocMeta(filename, text) {
   const isOnline = /온라인/.test(title) || /온라인/.test(tc.slice(0, 300)) || /^온\s*라\s*인/.test(venue)
   if (isOnline && /^온\s*라\s*인/.test(venue)) destination = ''
 
-  const { startTime, endTime } = extractTimes(tcD)
+  const { startTime, endTime, timeRule } = extractTimes(tcD)
 
   // 출장·교육 공문이 맞는지 — 아니면 화면에서 "못 찾았다"고 말한다.
   // 교육 말고도 타 기관에 나가 일하는 공문이 있다 — 세무조정·실사 협조요청처럼
@@ -1942,9 +1983,87 @@ function parseDocMeta(filename, text) {
              venue: '', yearGuessed: false, isTripDoc: false, docKind, multiSession: false }
   }
 
-  return { title: tripTitle(title), periodDisplay, startDate, endDate, nights, days, destination, registration,
+  const address = extractAddress(tc)
+  const meta = { title: tripTitle(title), address, periodDisplay, startDate, endDate, nights, days, destination, registration,
            registrationNote, isOnline, startTime, endTime, venue, venueSearch: venueSearchName(venue),
            yearGuessed, isTripDoc, docKind, multiSession }
+  meta.rules = { date: dateRule, time: timeRule || '', fee: feeRule, dest: destRule, venue: venueRule, title: titleRule }
+  assessMeta(meta, normalized)
+  return meta
+}
+
+// ── 판독 확신도와 교차검증(2026-09-29 지석초이 "오탐률을 줄이는 방법") ─────────────────────────────
+// 틀린 값을 그럴듯하게 채우는 게 빈칸보다 위험하다 — 사용자는 틀린 줄 모르고 넘어간다. 그래서 칸마다
+// ① 어느 규칙이 값을 정했는지로 확신도를 매기고 ② 값끼리·원문과 교차검증해 올리거나 내린다.
+// 확신도 low 인 칸은 카드4가 바로 채우지 않고 '공문 추정 — 넣기' 버튼으로 한 번 확인받는다.
+const RULE_CONF = {
+  // 날짜: 라벨(일시·기간…) 뒤·차수 목록·교육일시 표 = high / 연도 있는 범위 = mid / 라벨 없이 문서 어딘가의 날짜 = low
+  date: { P0: 'high', PL: 'high', P6: 'high', P1: 'mid', 'P1.5': 'mid', P2: 'mid', P3: 'mid', P4: 'low', P7: 'low', P8: 'low', P9: 'low' },
+  time: { day: 'high', label: 'high', range: 'mid', keyword: 'low', from: 'low' },
+  fee: { member: 'high', prepaid: 'high', geum: 'high', keyword: 'high', table: 'mid', sliding: 'mid', pair: 'low', default: 'low' },
+  dest: { venue: 'high', label: 'high', body: 'low' },
+}
+const CONF_UP = { low: 'mid', mid: 'high', high: 'high' }
+const DOW_OF = iso => '일월화수목금토'[new Date(`${iso}T00:00:00`).getDay()]
+
+function assessMeta(meta, text) {
+  const t = String(text || '').replace(/\s+/g, ' ')
+  const conf = {
+    date: meta.startDate ? (RULE_CONF.date[meta.rules.date] || 'low') : '',
+    time: meta.startTime ? (RULE_CONF.time[meta.rules.time] || 'low') : '',
+    fee: meta.registration ? (RULE_CONF.fee[meta.rules.fee] || 'low') : '',
+    dest: meta.destination ? (RULE_CONF.dest[meta.rules.dest] || 'low') : '',
+  }
+  const checks = []
+  const down = (k, why) => { if (conf[k]) { conf[k] = 'low'; checks.push({ field: k, why }) } }
+  if (meta.startDate) {
+    const [, m, d] = meta.startDate.split('-').map(Number)
+    // ① 요일 대조 — 공문에 적힌 요일과 달력 요일. 맞으면 날짜를 제대로 읽었다는 강한 증거, 틀리면 오독이다
+    const wd = t.match(new RegExp(String.raw`(?<!\d)0?${m}\s*[.월/]\s*0?${d}\s*[.일]?\s*\(\s*([일월화수목금토])\s*\)`))
+    if (wd) {
+      if (wd[1] === DOW_OF(meta.startDate)) conf.date = CONF_UP[conf.date]
+      else down('date', `공문 요일(${wd[1]})과 달력 요일(${DOW_OF(meta.startDate)})이 달라요`)
+    }
+    // ② 발행일 대조 — 교육일이 공문 발행일보다 한참 앞서거나 1년 넘게 뒤면 다른 날짜(발행일·관련 문서 날짜)를 읽은 것이다
+    // 발행일은 하단 정식 표기 "시행 부서-번호 (2026.09.11)"의 괄호 속 날짜만 인정한다 — 제목의 '교류회 시행 안내'를 라벨로 읽었다
+    // '시행의'(조사)는 빼되 '시행 의료서비스혁신단'(부서명)은 살린다 — 조사는 띄어 쓰지 않는다
+    const issued = t.match(/시\s*행(?!\s*(?:하|할|합|되|된|중|령|규|계|안내)|의|에|을)[^()]{0,50}\(\s*((?:19|20)\d{2})\s*[.\-년]\s*(\d{1,2})\s*[.\-월]\s*(\d{1,2})/)
+    if (issued) {
+      // 두 날짜 모두 UTC 자정으로 맞춘다 — 한쪽만 현지 자정이면 같은 날이 9시간 어긋나 '같은 날'을 못 잡았다
+      const gap = Math.round((Date.parse(`${meta.startDate}T00:00:00Z`) - Date.UTC(+issued[1], +issued[2] - 1, +issued[3])) / 86400000)
+      // 발행한 날 바로 여는 회의도 있어 '같은 날'은 약한 신호다 — 한 단계만 내린다(high→mid, mid→low)
+      if (gap === 0) { if (conf.date === 'mid') down('date', '공문 발행일과 같은 날짜예요'); else if (conf.date === 'high') conf.date = 'mid' }
+      else if (gap < -3) down('date', '공문 발행일보다 앞선 날짜예요')
+      else if (gap > 400) down('date', '공문 발행일보다 1년 넘게 뒤예요')
+    }
+    if (!meta.isOnline && meta.nights > 30) down('date', '기간이 30일을 넘어요')
+    // ④ 접수·등록 기간 대조 — 고른 날짜가 신청·접수·등록 기간 안이면 교육일이 아니라 그 기간의 날짜를 읽은 것이다
+    const DT = String.raw`((?:19|20)\d{2})\s*[.\-년]\s*(\d{1,2})\s*[.\-월]\s*(\d{1,2})`
+    const PART = String.raw`(?:((?:19|20)\d{2})\s*[.\-년]\s*)?(\d{1,2})\s*[.\-월]\s*(\d{1,2})`
+    const regRe = new RegExp(String.raw`(?:신\s*청|접\s*수|등\s*록|사\s*전\s*등\s*록|납\s*부)[^0-9]{0,15}${DT}[^~0-9]{0,15}~\s*${PART}`, 'g')
+    for (const r of t.matchAll(regRe)) {
+      const from = `${r[1]}-${String(r[2]).padStart(2, '0')}-${String(r[3]).padStart(2, '0')}`
+      const to = `${r[4] || r[1]}-${String(r[5]).padStart(2, '0')}-${String(r[6]).padStart(2, '0')}`
+      if (meta.startDate >= from && meta.startDate <= to) { down('date', '신청·접수 기간 안의 날짜예요'); break }
+    }
+    // ⑤ 고른 날짜가 원문에 처음 나오는 자리 바로 앞(60자)에 신청·접수·입금·마감 말이 있으면 그 날짜는 접수 쪽이다
+    //    (표 칸 "접수기간 … 회원병원 99,000원 2026.8.10~"처럼 금액이 끼어 ④가 못 잡는 경우)
+    const [sy, sm, sd] = meta.startDate.split('-').map(Number)
+    const at = t.search(new RegExp(String.raw`(?:${sy}|${String(sy).slice(2)})\s*[.\-년]\s*0?${sm}\s*[.\-월]\s*0?${sd}(?!\d)`))
+    if (at > 0 && /(?:신\s*청|접\s*수|입\s*금|마\s*감|사\s*후\s*등\s*록|사\s*전\s*등\s*록|환\s*불)/.test(t.slice(Math.max(0, at - 120), at))
+      && !/(?:일\s*시|일\s*자|교\s*육\s*일|행\s*사\s*일|개\s*최\s*일)/.test(t.slice(Math.max(0, at - 25), at))) {
+      down('date', '신청·접수 안내 옆의 날짜예요')
+    }
+  }
+  if (meta.startTime && (meta.startTime < '06:00' || meta.startTime > '21:00')) down('time', `시작시각 ${meta.startTime}은 교육 시각으로 드물어요`)
+  if (meta.registration) {
+    // ③ 비회원가 대조 — 고른 금액이 '비회원·미등록' 바로 뒤에 적힌 값이면 회원가를 놓친 것이다
+    const amt = meta.registration.toLocaleString()
+    if (new RegExp(String.raw`(?:비\s*회\s*원|미\s*등\s*록|준\s*회\s*원|미\s*납)[^0-9]{0,12}${amt.replace(/,/g, ',?')}`).test(t)) down('fee', '비회원·준회원·미납 금액으로 보여요')
+  }
+  meta.confidence = conf
+  meta.checks = checks
+  return meta
 }
 
 // 공문 제목 → 출장/교육명(2026-09-29 지석초이 "안내라는 말은 빼면 더 좋"). 제목 끝의 행정 문구
@@ -2012,7 +2131,7 @@ function extractTimes(tc) {
     const start = toHM(dayAdj[2], dayAdj[3], dayAdj[1])
     const tail = tc.slice(dayAdj.index + dayAdj[0].length).match(new RegExp('^\\s*' + AMPM + T))
     const end = tail ? toHM(tail[2], tail[3], tail[1] || dayAdj[1]) : ''
-    if (start) return { startTime: start, endTime: end && end > start ? end : '' }
+    if (start) return { startTime: start, endTime: end && end > start ? end : '', timeRule: 'day' }
   }
   const NEAR = 70, LOOKAHEAD = 20
   for (const lm of tc.matchAll(TIME_LABEL_RE)) {
@@ -2023,30 +2142,32 @@ function extractTimes(tc) {
     if (r && r.index <= limit) {
       const start = toHM(r[2], r[3], r[1])
       const end   = toHM(r[5], r[6], r[4] || r[1])
-      if (start) return { startTime: start, endTime: end && end > start ? end : '' }
+      if (start) return { startTime: start, endTime: end && end > start ? end : '', timeRule: 'label' }
     }
     const one = snip.match(singleRe)
-    if (one && one.index <= limit) {
+    // 범위의 뒤쪽 시각("~ 15:00")은 시작시각이 아니다 — 앞 시각을 못 읽었을 때 끝 시각을 시작으로 집었다
+    const isRangeEnd = one && /[~\-–]\s*$/.test(snip.slice(0, one.index))
+    if (one && one.index <= limit && !isRangeEnd) {
       const start = toHM(one[2], one[3], one[1])
-      if (start) return { startTime: start, endTime: '' }
+      if (start) return { startTime: start, endTime: '', timeRule: 'label' }
     }
   }
   const range = tc.match(rangeRe)
   if (range) {
     const start = toHM(range[2], range[3], range[1])
     const end   = toHM(range[5], range[6], range[4] || range[1])
-    if (start) return { startTime: start, endTime: end && end > start ? end : '' }
+    if (start) return { startTime: start, endTime: end && end > start ? end : '', timeRule: 'range' }
   }
   const kwRe = new RegExp('(?:일\\s*시|시\\s*간|교육시간|시작)[^\\d오전후]{0,12}?' + AMPM + T)
   const kw = tc.match(kwRe)
   if (kw) {
     const start = toHM(kw[2], kw[3], kw[1])
-    if (start) return { startTime: start, endTime: '' }
+    if (start) return { startTime: start, endTime: '', timeRule: 'keyword' }
   }
   const from = tc.match(new RegExp(AMPM + T + '\\s*부터'))
   if (from) {
     const start = toHM(from[2], from[3], from[1])
-    if (start) return { startTime: start, endTime: '' }
+    if (start) return { startTime: start, endTime: '', timeRule: 'from' }
   }
   return { startTime: '', endTime: '' }
 }
@@ -2065,21 +2186,45 @@ function extractVenue(tc) {
     const hy = squeezed.match(/[가-힣]{2}-[가-힣]{2,}/)
     if (hy) return hy[0]
   }
-  const m = tc.match(/(?<![가-힣])(?:장\s*_?\s*소|개\s*최\s*장\s*소|행\s*사\s*장\s*소|교\s*육\s*장\s*소|교\s*육\s*장)(?![가-힣])\s*(?:[：:]|[\]】])?\s*(.{2,90})/)
-  if (!m) return ''
-  // 포스터는 라벨(일정·장소·접수)이 먼저 모두 나오고 값이 뒤에 온다 — 장소 칸에 다른 라벨이 오면
-  // 그 값은 장소가 아니다. 대신 본문에서 행사장 이름(컨벤션센터·호텔…)을 찾는다.
-  if (/^(?:접\s*수|대\s*상|일\s*[시정자]|기\s*간|시\s*간)(?![가-힣])/.test(m[1])) {
-    const hall = tc.match(/[가-힣A-Za-z]{2,}(?:컨벤션센터|컨벤션|호텔|리조트|연수원|박물관|아트홀)(?:\s*\([A-Za-z]{2,10}\))?(?:\s*[\dA-Z]{1,5}\s*홀)?/)
-    return hall ? tidyVenue(hall[0]) : ''
+  // 장소 라벨이 여러 번 나오면(웹 화면 캡처의 표·본문 반복) 쓸 만한 첫 값을 고른다. 금액·날짜·교육시간이 섞인 값은
+  // 장소가 아니다 — 판독 순서가 뒤섞인 표에서 "80,000원 148,000원 교육일정 2026.09.30…"이 장소로 들어갔다(코칭 과정, 2026-09-29).
+  const LABEL = /(?<![가-힣])(?:장\s*_?\s*소|개\s*최\s*장\s*소|행\s*사\s*장\s*소|교\s*육\s*장\s*소|교\s*육\s*장)(?![가-힣])\s*(?:[：:]|[\]】])?\s*(.{2,90})/g
+  let posterLike = false
+  for (const m of tc.matchAll(LABEL)) {
+    // 포스터는 라벨(일정·장소·접수)이 먼저 모두 나오고 값이 뒤에 온다 — 장소 칸에 다른 라벨이 오면 그 값은 장소가 아니다
+    if (/^(?:접\s*수|대\s*상|일\s*[시정자]|기\s*간|시\s*간)(?![가-힣])/.test(m[1])) { posterLike = true; continue }
+    const v = tidyVenue(m[1])
+    if (v && !venueLooksWrong(v)) return v
   }
-  return tidyVenue(m[1])
+  // 라벨 값이 모두 틀렸거나 라벨이 없으면: 실시기관(교육을 여는 병원·기관) → 행사장 이름(호텔·컨벤션센터…, 붙어 있는 지역명까지)
+  const host = tc.match(/(?<![가-힣])(?:실\s*시\s*기\s*관|교\s*육\s*기\s*관)(?![가-힣])\s*[：:]?\s*([가-힣A-Za-z][가-힣A-Za-z0-9 ]{1,30}?)(?=\s{2,}|\s+(?:교육|장소|일정|기간|접수|대상)|$)/)
+  if (host && !venueLooksWrong(host[1])) { extractVenue.rule = 'host'; return tidyVenue(host[1]) }
+  const hall = tc.match(/[가-힣A-Za-z]{2,}(?:컨벤션센터|컨벤션|호텔|리조트|연수원|박물관|아트홀)(?:부산|서울|제주|대구|대전|울산|창원|광주|수원)?(?:\s*\([A-Za-z]{2,10}\))?(?:\s*[\dA-Z]{1,5}\s*홀)?/)
+  if (hall && (posterLike || !LABEL.test(tc))) { extractVenue.rule = 'hall'; return tidyVenue(hall[0]) }
+  return ''
+}
+
+// 장소 칸에 들어가면 안 되는 모양 — 금액·연월일·교육시간·일정 표 머리글
+function venueLooksWrong(v) {
+  return /\d[\d,]{2,}\s*원|(?:19|20)\d{2,4}\s*[.\-년]\s*\d|\d{6}[.]\d|교육\s*일정|총\s*교육\s*시간|\d+\s*시간\s*\(/.test(String(v || ''))
+}
+
+// 본문의 "주소 : 경기도 용인시 …" — 장소 이름이 판독에서 깨졌을 때 좌표 검색에만 쓴다. 우편번호로 시작하는 줄은 발신처 주소라 뺀다.
+function extractAddress(tc) {
+  for (const m of tc.matchAll(/(?<![가-힣])주\s*소(?![가-힣])\s*[：:]?\s*([^\n]{6,60})/g)) {
+    const v = m[1].trim()
+    if (/^\(?\s*\d{5}/.test(v) || /^\(?\s*우\s*\d/.test(v)) continue
+    const addr = (v.match(/(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[가-힣]*\s+[가-힣]+[시군구][^,)]{2,40}?\d+(?:-\d+)?/) || [])[0]
+    if (addr) return addr.trim()
+  }
+  return ''
 }
 
 function tidyVenue(raw) {
   let v = String(raw || '')
     .replace(/\s*\(?\s*(?:www\.|https?:\/\/).*$/i, '')        // (www.glad-hotels.com/…) 홈페이지 주소
     .replace(/\s+[가나다라마바사아자차카타파하]\s*\.\s.*$/, '')  // 다음 항목 "다. 참가회비"
+    .replace(/\s+[가나다라마바사아자차카타파하]\s*\.(?=[가-힣]).*$/, '')   // 띄어쓰기 없는 다음 항목 "마.교 육 비"
     .replace(/\s+\d{1,2}\s*[.)]\s.*$/, '')                      // 다음 항목 "4. 담당회계법인"
     .replace(/(?<=[가-힣A-Za-z])\d{1,2}\s*\.(?:\s|$).*$/, '')      // 글자에 붙은 다음 항목 번호 "캠퍼스3. :"
     .replace(/\s+[A-Za-z]{1,3}\s*\.\s+(?=[가-힣])/, ' ').replace(/\s+[A-Za-z]{1,3}\s*\.\s.*$/, '')  // OCR이 항목기호 "라."를 "gt."로 읽은 경우
@@ -2118,7 +2263,8 @@ function venueSearchName(venue) {
   if (cut > 1) v = v.slice(0, cut)
   const words = v.split(/\s+/).filter(Boolean)
   while (words.length > 1 && (VENUE_DETAIL_WORD.test(words[words.length - 1])
-    || /^[가-힣A-Za-z]{2,}(?:홀|룸|강당|Ballroom|Hall|Room)$/.test(words[words.length - 1]))) words.pop()
+    || /^[가-힣A-Za-z0-9-]{2,}(?:홀|룸|강당|Ballroom|Hall|Room)$/.test(words[words.length - 1])
+    || /^[A-Za-z]{1,3}$/.test(words[words.length - 1]))) words.pop()   // 'T-아트홀', OCR 찌꺼기 'oh'
   v = words.join(' ').replace(/[,·\-–|]+$/, '').trim()
   return v.length >= 2 ? v : String(venue || '').trim()
 }
@@ -2129,6 +2275,8 @@ function renderParseResult(filename, meta, hasText) {
 
   // 못 읽은 칸은 추측으로 채우지 않고 모른다고 말한다 — 다음 화면에서 직접 넣어야 한다
   const fmt = v => v ? `<span>${escapeHtml(String(v))}</span>` : `<span class="empty">확인 안 됨 — 직접 입력</span>`
+  // 확신도 낮은 값 — 다음 화면에서 바로 채우지 않고 '넣기'로 확인받는다
+  const lowTag = k => (meta.confidence || {})[k] === 'low' ? '<span class="low-tag">확인 필요</span>' : ''
   const feeStr = meta.registration ? `${meta.registration.toLocaleString()}원` : ''
 
   let warnHtml = ''
@@ -2196,12 +2344,12 @@ function renderParseResult(filename, meta, hasText) {
   grid.innerHTML = `
     <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
     <div class="result-item full"><label>출장/교육명</label>${fmt(meta.title)}</div>
-    <div class="result-item"><label>기간</label>${fmt(periodStr)}</div>
-    <div class="result-item"><label>지역</label>${fmt(meta.destination)}</div>
-    <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}</div>
+    <div class="result-item"><label>기간</label>${fmt(periodStr)}${lowTag('date')}</div>
+    <div class="result-item"><label>지역</label>${fmt(meta.destination)}${lowTag('dest')}</div>
+    <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}${lowTag('time')}</div>
     <div class="result-item"><label>교육 형태</label><span>${meta.isOnline ? '온라인' : '오프라인'}</span></div>
     ${venueHtml}
-    <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}</div>
+    <div class="result-item full"><label>등록비 (회원·사전납입 기준)</label>${fmt(feeStr)}${lowTag('fee')}</div>
     ${warnHtml}
   `
   resultEl.classList.remove('hidden')
@@ -2313,34 +2461,131 @@ function renderTimeHint(meta) {
 // 공문에서 읽은 장소는 글자뿐이라 좌표가 없다. 좌표가 없으면 역산이 '지역 대표역' 기준이 돼
 // 현장까지 이동시간이 근거 없는 값이 됐다(서울역→서울역). 카카오 장소 검색으로 좌표를 찾아 둔다.
 // 이름 → 괄호 안 주소 → 전체 순으로 찾고, 찾은 곳은 화면에 밝혀 사람이 확인하게 한다.
-async function geocodeDocVenue(venue, rawVenue = venue) {
-  const note = document.getElementById('place-geo-note')
-  if (note) { note.textContent = ''; note.classList.add('hidden') }
-  if (!venue || !KAKAO_API_KEY) return
-  const inParen = (rawVenue.match(/\(([^)]+)\)/) || [])[1] || ''
-  const queries = [venue, venueSearchName(rawVenue), rawVenue.replace(/\s*\(.*$/, ''), inParen, rawVenue]
-    .map(q => String(q || '').trim()).filter((q, i, a) => q.length >= 2 && a.indexOf(q) === i)
-  for (const q of queries) {
-    try {
-      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=1`,
-        { headers: { Authorization: `KakaoAK ${KAKAO_API_KEY}` } })
-      const d = ((await res.json()).documents || [])[0]
-      if (!d) continue
-      if (state.place !== venue) return  // 그사이 사용자가 장소를 바꿨다
-      state.placeLat = Number(d.y) || null
-      state.placeLon = Number(d.x) || null
-      state.transitAccess = {}
-      if (note) {
-        note.textContent = `📍 카카오 지도 위치: ${d.place_name} · ${d.road_address_name || d.address_name || ''} — 다르면 장소를 다시 검색해 고르세요.`
-        note.classList.remove('hidden')
-      }
-      renderPrevDayVerdict()
-      return
-    } catch (e) {
-      console.warn('공문 장소 좌표 검색 실패:', e)
-      return
-    }
+// 찾은 곳 이름이 공문 장소와 실제로 겹치는지 — 지역만 맞으면 엉뚱한 곳이 통과했다("부산-부산교육원" → 부산가톨릭대 음악교육원).
+// 지역명과 흔한 꼬리말(병원·대학교·교육원·호텔·센터…)을 떼고 남은 고유 이름이 한쪽에 들어 있어야 같은 곳으로 본다.
+const PLACE_GENERIC = /(?:대학교병원|대학병원|종합병원|병원|의료원|대학교|대학|학교|교육원|연수원|연구원|센터|호텔|리조트|회관|빌딩|타워|아카데미|캠퍼스|본관|별관)$/
+const PLACE_REGION_WORDS = new Set(['서울', '부산', '대구', '동대구', '대전', '울산', '인천', '광주', '제주', '수원', '창원', '마산', '진주', '전주', '경주', '천안', '오송', '여수', '순천', '목포', '광양', '경기', '경남', '경북', '충남', '충북', '전남', '전북', '강원'])
+function placeCore(word) {
+  let w = String(word || '').replace(/[()（）\[\]「」『』·,.:]/g, '')
+  for (let prev = ''; prev !== w; ) {
+    prev = w
+    w = w.replace(PLACE_GENERIC, '')
+    for (const r of PLACE_REGION_WORDS) if (w.length > r.length && w.endsWith(r)) w = w.slice(0, -r.length)
   }
+  return PLACE_REGION_WORDS.has(w) ? '' : w
+}
+function sameNamedPlace(query, placeName) {
+  const squeeze = x => String(x || '').replace(/\s+/g, '').toLowerCase()
+  const place = squeeze(placeName), q = squeeze(query)
+  const words = String(query || '').split(/[\s\-–]+/).filter(Boolean)
+  const cores = words.map(placeCore).filter(c => c.length >= 2)
+  if (cores.some(c => place.includes(c.toLowerCase()))) return true
+  // 영문 이름(CFO·The UniverSE)은 한글 표기와 글자가 달라 고유 이름 대조가 안 된다 — 영문 낱말 그대로, 아니면 꼬리말까지 겹치면 인정
+  if (words.some(w => /^[A-Za-z]{3,}$/.test(w) && place.includes(w.toLowerCase()))) return true
+  if (words.some(w => /[A-Za-z]/.test(w)) && words.some(w => w.length >= 3 && place.includes(squeeze(w)))) return true
+  // 결과 쪽 고유 이름이 공문 장소 안에 있으면 같은 곳("세브란스병원" ⊂ "신촌세브란스병원")
+  const placeCores = String(placeName || '').split(/\s+/).map(placeCore).filter(c => c.length >= 2)
+  return placeCores.some(c => q.includes(c.toLowerCase()))
+}
+
+async function geocodeDocVenue(venue, rawVenue = venue, meta = null) {
+  // 2026-09-29 장소 전수 점검: 이름에 강의실·홀이 붙으면 0건, 이름이 깨지면 엉뚱한 지역의 같은 이름(코칭 과정 → 부산 해운대 가게,
+  // 삼성전자 연수원 → 충남 서천)이 잡혔다. ① 공문 지역과 주소가 맞는 결과만 쓰고 ② 안 맞으면 '지역 + 이름'으로 다시,
+  // ③ 0건이면 뒤 낱말을 하나씩 떼며 다시 찾고 ④ 그래도 없으면 본문 '주소:'로 찾는다. 끝내 못 찾으면 좌표를 쓰지 않는다.
+  const note = document.getElementById('place-geo-note')
+  if (note) { note.textContent = ''; note.classList.add('hidden'); note.classList.remove('is-warn') }
+  document.getElementById('field-place')?.classList.remove('place-needs-pick')
+  state.placeNeedsPick = false
+  if (meta && !venue && !meta.isOnline && !meta.isJeju && meta.destination !== '제주') { showPlaceNeedsPick('공문에서 교육 장소를 찾지 못했어요.'); return }
+  if (!venue || !KAKAO_API_KEY) return
+  if (meta?.isOnline || /^온\s*라\s*인/.test(venue)) return   // 온라인 교육은 찾을 곳이 없다('서울온라인학교'가 잡혔다)
+  // 지역 칸이 비었으면(본문 추정이라 확인 대기) 본문 '주소:'가 가리키는 지역으로 대조한다 — 삼성전자 메일 '(서천연수원)'이 충남 서천으로 잡혔다
+  const region = (document.getElementById('input-region')?.value || state.region || '').trim()
+    || (meta?.address ? guessRegionFromAddress(meta.address) : '')
+  const inParen = (rawVenue.match(/\(([^)]+)\)/) || [])[1] || ''
+  const base = [venue, venueSearchName(rawVenue), rawVenue.replace(/\s*\(.*$/, ''), inParen]
+  const words = venue.split(/\s+/)
+  for (let n = words.length - 1; n >= 1; n--) {
+    const cut = words.slice(0, n).join(' ')
+    if (cut.replace(/\s/g, '').length >= 4) base.push(cut)   // 'The' 같은 한 낱말만 남으면 아무 곳이나 잡힌다
+  }
+  const queries = [...base, ...(region ? base.map(q => `${region} ${q}`) : [])]
+    .map(q => String(q || '').trim()).filter((q, i, a) => q.replace(/\s/g, '').length >= 3 && a.indexOf(q) === i)
+  const regionOf = d => regionFromKakaoAddress(d.road_address_name || d.address_name || '')
+  // 지역을 알면 주소가 그 지역인 결과만 받는다 — 주소로 지역을 못 가르는 곳(충남 서천, 전남 신안)도 '모름'이 아니라 불일치다
+  const fits = d => !region || regionOf(d) === region
+  const search = async (url) => {
+    const res = await fetch(url, { headers: { Authorization: `KakaoAK ${KAKAO_API_KEY}` } })
+    return (await res.json()).documents || []
+  }
+  let hit = null, misfit = null
+  // 판독이 깨진 이름('The 0006『56 미담당자반 :')으로는 같은 주소의 ATM·충전소 같은 곳이 잡힌다 — 본문 주소가 있으면 그것부터
+  const garbled = /[『』{}]|[A-Za-z]*\d{4}[A-Za-z『]|:\s*$/.test(venue)
+  const byAddress = async () => {
+    if (!meta?.address) return null
+    const d = (await search(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(meta.address)}&size=1`))[0]
+    return d && fits(d) ? { ...d, place_name: meta.address, road_address_name: d.road_address?.address_name || d.address_name, viaAddress: true } : null
+  }
+  try {
+    if (garbled) hit = await byAddress()
+    for (const q of hit ? [] : queries) {
+      const docs = await search(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=5`)
+      if (state.place !== venue) return  // 그사이 사용자가 장소를 바꿨다
+      // 주차장·충전소·정류장 같은 부속 지점은 건물 자체가 아니다(삼성전자 연수원 → '…전기차충전소'가 잡혔다)
+      hit = docs.find(d => fits(d) && sameNamedPlace(q, d.place_name) && !/(?:주차장|충전소|정류장|ATM|출입구|화장실|흡연)\s*$/.test(d.place_name))
+      if (hit) break
+      misfit ||= docs[0] || null
+    }
+    if (!hit && !garbled) hit = await byAddress()
+  } catch (e) {
+    console.warn('공문 장소 좌표 검색 실패:', e)
+    return
+  }
+  if (state.place !== venue) return
+  if (!hit) {
+    // 확신 없는 곳을 넣지 않는다 — 좌표를 비워 두고 직접 검색해 고르라고 분명히 말한다(2026-09-29 지석초이)
+    showPlaceNeedsPick(`'${venue}'을(를) 지도에서 확실히 찾지 못했어요${misfit ? ` (비슷한 결과: ${misfit.place_name} · ${misfit.road_address_name || misfit.address_name || ''})` : ''}.`)
+    return
+  }
+  // 판독이 깨진 장소 이름 대신 본문 주소로 찾았으면 장소 칸도 그 주소로 바꾼다 — 'The 0006『56 미담당자반'이 그대로 남았다
+  if (hit.viaAddress || garbled) {
+    const placeEl = document.getElementById('input-place')
+    const shown = hit.viaAddress ? meta.address : hit.place_name
+    if (placeEl) { placeEl.value = shown; state.place = shown }
+  }
+  state.placeLat = Number(hit.y) || null
+  state.placeLon = Number(hit.x) || null
+  state.transitAccess = {}
+  // 지역 칸이 비어 있으면(본문 추정이라 '넣기' 대기 중이던 경우 포함) 찾은 곳의 주소로 채운다 — 장소 줄에서 나온 근거라 믿을 만하다
+  const found = regionOf(hit)
+  const regionEl = document.getElementById('input-region')
+  if (found && regionEl && !regionEl.value.trim()) {
+    regionEl.value = found
+    onRegionInput()
+    document.getElementById('regionSuggest')?.classList.add('hidden')
+    document.querySelectorAll('#field-region .doc-suggest').forEach(el => el.remove())
+    clearCard4Error('input-region')
+  }
+  document.getElementById('field-place')?.classList.remove('place-needs-pick')
+  if (note) {
+    note.classList.remove('is-warn')
+    note.textContent = `📍 카카오 지도 위치: ${hit.place_name} · ${hit.road_address_name || hit.address_name || ''} — 다르면 장소를 다시 검색해 고르세요.`
+    note.classList.remove('hidden')
+  }
+  renderPrevDayVerdict()
+}
+
+// 장소를 못 정했을 때 — 장소 칸을 강조하고 이유와 할 일을 적는다. 여정표도 같은 말을 한다(renderRoutePanel/manualPick).
+function showPlaceNeedsPick(reason) {
+  const note = document.getElementById('place-geo-note')
+  document.getElementById('field-place')?.classList.add('place-needs-pick')
+  state.placeNeedsPick = true
+  if (note) {
+    note.textContent = `⚠️ ${reason} 위 장소 칸에 기관·건물 이름을 입력하고 검색 목록에서 골라 주세요 — 골라야 여정표에 현장까지 걸리는 시간이 나와요.`
+    note.classList.add('is-warn')
+    note.classList.remove('hidden')
+  }
+  renderPrevDayVerdict()
 }
 
 function resetFeePresence() {
@@ -2379,7 +2624,7 @@ function prepareCard4WithMeta() {
   state.transitAccess = {}
   setStartTime(meta.startTime ? snapTo10(meta.startTime) : '', !!meta.startTime)
   renderTimeHint(meta)
-  geocodeDocVenue(venueName, meta.venue)
+  geocodeDocVenue(venueName, meta.venue, meta)
   if (meta.registration) {
     setDocField('input-fee', meta.registration.toLocaleString())
     state.fee = meta.registration
@@ -2406,9 +2651,54 @@ function prepareCard4WithMeta() {
 
   // 온라인/오프라인 자동 설정 (공문 제목에 "온라인" 있으면 온라인, 없으면 오프라인)
   selectOnlineMode(meta.isOnline === true)
+  holdLowConfidence(meta)
 
   document.getElementById('c4-confirm-view').classList.remove('hidden')
   document.getElementById('c4-input-view').classList.add('hidden')
+}
+
+// 확신도 낮은 칸은 비워 두고 '📄 공문 추정: 값 — 넣기'로 한 번 확인받는다(2026-09-29 오탐 줄이기).
+// 틀린 값이 조용히 들어가는 것보다, 한 번 누르게 하는 편이 정산 사고를 막는다.
+function holdLowConfidence(meta) {
+  document.querySelectorAll('#card-4 .doc-suggest').forEach(el => el.remove())
+  const conf = meta.confidence || {}
+  const why = k => (meta.checks || []).filter(c => c.field === k).map(c => c.why)[0]
+    || (k === 'dest' ? '장소 줄이 아니라 본문에서 찾은 지역이에요' : '라벨 없이 문서에서 찾은 값이에요')
+  const offer = (anchor, label, apply, k) => {
+    if (!anchor) return
+    const box = document.createElement('div')
+    box.className = 'doc-suggest'
+    box.innerHTML = `<span>📄 공문 추정: <b>${escapeHtml(label)}</b></span><button type="button" class="doc-suggest-btn">넣기</button><span class="doc-suggest-why">${escapeHtml(why(k))} — 맞으면 넣어 주세요</span>`
+    box.querySelector('button').addEventListener('click', () => { apply(); box.remove() })
+    anchor.appendChild(box)
+  }
+  if (conf.date === 'low' && meta.startDate) {
+    setDocField('input-start', ''); setDocField('input-end', ''); onDateChange()
+    document.getElementById('duration-tag')?.classList.add('hidden')   // 날짜를 비웠는데 '1일 (당일)'이 남아 있었다
+    document.getElementById('c4-period-msg').textContent = '출장 정보를 확인해 주세요'
+    offer(document.getElementById('input-start')?.closest('.info-field'), periodWithYear(meta), () => {
+      setDocField('input-start', meta.startDate); setDocField('input-end', meta.endDate); onDateChange()
+    }, 'date')
+  }
+  if (conf.time === 'low' && meta.startTime) {
+    setStartTime('', false); renderTimeHint(null)
+    offer(document.getElementById('field-time'), meta.startTime, () => setStartTime(snapTo10(meta.startTime), true), 'time')
+  }
+  if (conf.dest === 'low' && meta.destination) {
+    setDocField('input-region', ''); onRegionInput(); document.getElementById('regionSuggest')?.classList.add('hidden')
+    document.getElementById('c4-place-msg').textContent = ''
+    offer(document.getElementById('field-region'), meta.destination, () => {
+      setDocField('input-region', meta.destination); onRegionInput(); document.getElementById('regionSuggest')?.classList.add('hidden')
+    }, 'dest')
+  }
+  if (conf.fee === 'low' && meta.registration) {
+    setDocField('input-fee', ''); state.fee = 0; resetFeePresence()
+    document.getElementById('fee-subhint').textContent = '사전납입 · 회원병원 기준 금액으로 입력해주세요'
+    offer(document.getElementById('field-fee'), `${meta.registration.toLocaleString()}원`, () => {
+      selectFeePresence(true); setDocField('input-fee', meta.registration.toLocaleString()); state.fee = meta.registration
+      document.getElementById('fee-subhint').textContent = `📄 공문에서 읽은 금액 · ${(meta.registrationNote || '사전납입·회원병원 기준 금액이에요').replace(/\s*맞나요\?\s*$/, '')} 다르면 고쳐 주세요.`
+    }, 'fee')
+  }
 }
 
 function showCard4InputMode() {
@@ -2601,6 +2891,10 @@ function onPlaceInput() {
 }
 
 function selectPlace(name, addr, lat, lon) {
+  // 사람이 검색 목록에서 고른 곳이면 '장소 확인 필요' 경고를 거둔다
+  state.placeNeedsPick = false
+  document.getElementById('field-place')?.classList.remove('place-needs-pick')
+  document.getElementById('place-geo-note')?.classList.remove('is-warn')
   document.getElementById('input-place').value = name
   document.getElementById('placeSuggest').classList.add('hidden')
   state.place = name
@@ -2626,7 +2920,28 @@ function selectPlace(name, addr, lat, lon) {
 }
 
 // 주소 문자열에서 운임표 기준 지역명 추출
+// 카카오 주소는 늘 시·도로 시작한다("부산 해운대구 …"). 예전엔 주소 전체에서 낱말을 찾아 '해운대구'의 '대구'를
+// 동대구로 읽었다(2026-09-29 장소 전수 점검: 팔레드시즈·웨스틴조선 부산이 '지역 불일치'로 버려짐). 시·도 → 시·군 순으로 가른다.
+const PROVINCE_REGION = {
+  서울: '서울', 서울특별시: '서울', 인천: '서울', 인천광역시: '서울', 부산: '부산', 부산광역시: '부산',
+  대구: '동대구', 대구광역시: '동대구', 대전: '대전', 대전광역시: '대전', 울산: '울산', 울산광역시: '울산',
+  세종: '오송', 세종특별자치시: '오송', 제주: '제주', 제주특별자치도: '제주',
+}
+const CITY_REGION = [['수원', '수원'], ['용인', '수원'], ['기흥', '수원'], ['천안', '천안'], ['아산', '천안'], ['청주', '오송'],
+  ['경주', '경주'], ['전주', '전주'], ['광양', '광양'], ['순천', '순천'], ['여수', '여수'], ['목포', '목포'],
+  ['창원', '창원'], ['마산', '창원'], ['진해', '창원'], ['진주', '진주']]
+function regionFromKakaoAddress(addr) {
+  const [prov, city = ''] = String(addr || '').trim().split(/\s+/)
+  if (PROVINCE_REGION[prov]) return PROVINCE_REGION[prov]
+  const hit = CITY_REGION.find(([k]) => city.startsWith(k))
+  if (hit) return hit[1]
+  if (/^경기/.test(prov || '')) return '서울'   // 수원·용인 밖 경기는 서울역 기준
+  return ''
+}
+
 function guessRegionFromAddress(addr) {
+  const byProvince = regionFromKakaoAddress(addr)
+  if (byProvince) return byProvince
   const pairs = [
     // 수도권 — 수원·용인·기흥은 수원역 운임표, 나머지 경기·인천은 서울 기준
     ['수원', '수원'], ['용인', '수원'], ['기흥', '수원'],
@@ -3011,6 +3326,44 @@ function busVerdictHtml(plan, startMin) {
 }
 
 // 현장 도착 후 교육 시작까지 남는 시간(2026-09-26 지석초이) — 빠듯 15분 미만 / 적당 ~60분 / 넉넉
+// ── 창원 시내 이동(2026-09-29 지석초이 "시내버스도 카카오 대중교통·택시 소요시간을 여정표에") ──────────
+// 카카오는 앱에서 쓸 대중교통 길찾기 API를 공개하지 않고(2026-09-26 실측) 서울시 API는 수도권뿐이라, 병원↔교육장
+// 직선거리로 시간을 '추정'하고 그렇게 밝힌다. 실제 경로·시간은 카카오맵 대중교통·자동차 길찾기 링크로 연다.
+// 병원 좌표: 카카오 로컬 검색 "삼성창원병원"(경남 창원시 마산회원구 팔용로 158) 2026-09-29 실측.
+const WORK_ORIGIN = { name: '삼성창원병원', lat: 35.2425222, lon: 128.5925312 }
+const CITY_ARRIVE_EARLY = 15   // 교육 시작 15분 전 도착을 목표로 출발 시각을 역산한다(10분이면 '빠듯'으로 떴다)
+function taxiMinutes(km) {
+  // 도로는 직선보다 약 1.35배, 시내 평균 28km/h, 호출·승하차 5분. 5분 단위로 올린다.
+  return Math.max(10, Math.ceil((5 + km * 1.35 / 28 * 60) / 5) * 5)
+}
+function cityTripHtml(fare) {
+  const head = `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>시내버스 · 당일 이동</b></div>`
+  const pay = `<div class="ra-why">창원 시내라 기차·시외버스를 타지 않아요. 교통비는 시내버스 요금(교통카드 편도 ${fare.cityBus.toLocaleString()}원 × 왕복)으로 정산해요</div>`
+  const place = state.place || '교육장'
+  if (!Number.isFinite(state.placeLat) || !Number.isFinite(state.placeLon)) {
+    return head + pay + `<div class="ra-why">장소를 검색 목록에서 고르면 병원에서 버스·택시로 얼마나 걸리는지 계산해 드려요.</div>`
+  }
+  const dest = { lat: state.placeLat, lon: state.placeLon }
+  const km = haversineKm(WORK_ORIGIN.lat, WORK_ORIGIN.lon, dest.lat, dest.lon)
+  const bus = accessMinutes(km), taxi = taxiMinutes(km)
+  const start = toMinutes(state.startTime)
+  const links = `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', WORK_ORIGIN.name, WORK_ORIGIN, place, dest)}">카카오맵 대중교통 경로 ↗</a>` +
+    `<a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', WORK_ORIGIN.name, WORK_ORIGIN, place, dest)}">택시(자동차) 경로 ↗</a></span>`
+  const leaveBus = start - CITY_ARRIVE_EARLY - bus, leaveTaxi = start - CITY_ARRIVE_EARLY - taxi
+  const rows = [
+    `<li class="is-train"><span class="ra-t">${fmtTime(leaveBus)}</span><span class="ra-dot"></span><span>${WORK_ORIGIN.name} 출발<span class="ra-sub">🚌 시내버스 약 ${fmtDur(bus)} <b>추정</b> · <x-nb>직선 ${km.toFixed(1)}km</x-nb> · 정류장 걷기·기다림 포함</span>${links}</span></li>`,
+    `<li><span class="ra-t">${fmtTime(leaveBus + bus)}</span><span class="ra-dot"></span><span>${escapeHtml(place)} 도착</span></li>`,
+    `<li class="is-slack"><span class="ra-t"></span><span class="ra-dot"></span><span>${slackPill(CITY_ARRIVE_EARLY)}</span></li>`,
+    `<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`,
+  ]
+  const taxiAlt = `<div class="ra-earlier"><div class="ra-earlier-title">🚕 택시로 가면</div>약 ${fmtDur(taxi)} <b>추정</b> — 병원 ${fmtTime(leaveTaxi)} 출발이면 ${fmtTime(start - CITY_ARRIVE_EARLY)} 도착` +
+    `<span class="ra-sub">정산 금액은 이동 수단과 관계없이 시내버스 요금 기준으로 계산돼요</span></div>`
+  const note = `<div class="ra-why">버스·택시 시간은 직선거리로 잡은 추정이에요. 실제 노선·시간은 위 카카오맵 링크에서 확인하세요.</div>`
+  const lead = `<div class="ra-verdict is-go" style="margin-top:0"><span>이렇게 이동하세요</span><b>병원 ${fmtTime(leaveBus)} 출발 · 시내버스</b></div>`
+  return (Number.isFinite(start) ? lead : head) + pay +
+    (Number.isFinite(start) ? `<ol class="ra-timeline">${rows.join('')}</ol>${taxiAlt}` : `<div class="ra-why">첫날 교육 시작시각을 고르면 병원에서 언제 나서야 하는지 알려 드려요. 시내버스 약 ${fmtDur(bus)} · 택시 약 ${fmtDur(taxi)} <b>추정</b></div>${links}`) + note
+}
+
 function slackPill(min) {
   if (!Number.isFinite(min)) return ''
   const cls = min < 15 ? 'is-tight' : min <= 60 ? 'is-ok' : 'is-loose'
@@ -3050,7 +3403,9 @@ function renderPrevDayVerdict() {
 
   const off = state.isOnline || state.isJeju
   aside.classList.toggle('is-off', off)
-  const head = '<div class="ra-head">🚄 첫날 이동 안내</div>'
+  // 장소를 못 정한 상태면 여정표 맨 위에 같은 경고를 건다 — 역까지 기차 시간은 맞아도 현장까지 시간은 추정일 뿐이다
+  const head = '<div class="ra-head">🚄 첫날 이동 안내</div>' + (state.placeNeedsPick
+    ? '<div class="ra-pick-warn">⚠️ 교육 장소를 지도에서 확인하지 못했어요. 장소 칸에서 검색해 목록에서 고르면 현장까지 걸리는 시간이 나와요.</div>' : '')
   const show = (html, hasResult) => {
     el.innerHTML = head + html
     aside.classList.toggle('has-result', !!hasResult && !off)
@@ -3085,10 +3440,7 @@ function renderPrevDayVerdict() {
     return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>전날 이동</b></div>
       <div class="ra-why">첫날 ${escapeHtml(state.startTime)} 시작에 닿는 당일 열차가 없어요</div>`, true)
   }
-  if (j.kind === 'citybus') {
-    return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>시내버스 · 당일 이동</b></div>
-      <div class="ra-why">창원 시내라 기차·시외버스를 타지 않아요. 교통비는 시내버스 요금(교통카드 편도 ${j.fare.cityBus.toLocaleString()}원 × 왕복)으로 정산해요</div>`, true)
-  }
+  if (j.kind === 'citybus') return show(cityTripHtml(j.fare), true)
   if (j.kind === 'near') {
     return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>당일 이동</b></div>
       <div class="ra-why">마산역 인근이라 기차를 타지 않는 구간이에요</div>`, true)

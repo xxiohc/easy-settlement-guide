@@ -347,3 +347,66 @@ test('창원은 운임표에서 시내버스(교통카드 편도) 요금 행이�
   assert.equal(app.cityBusRoundTrip(f), 3300)
   assert.equal(app.getFare('부산').cityBus, undefined)
 })
+
+// ── 판독 확신도·교차검증(2026-09-29 오탐 줄이기) ─────────────────────────────
+test('라벨 뒤 날짜 + 공문 요일이 달력과 맞으면 확신도 high', () => {
+  const m = app.parseDocMeta('x.pdf', '제 목 연수교육 개최 안내\n나. 일시 : 2026.9.8.(화) 10:00~16:40\n다. 장소 : 서울역 회의실')
+  assert.equal(m.startDate, '2026-09-08')
+  assert.equal(m.confidence.date, 'high')
+  assert.equal(m.confidence.time, 'high')
+})
+test('공문 요일이 달력과 다르면 날짜 확신도 low(오독 신호)', () => {
+  const m = app.parseDocMeta('x.pdf', '제 목 연수교육 개최 안내\n나. 일시 : 2026.9.9.(화) 10:00~16:40')
+  assert.equal(m.confidence.date, 'low')
+  assert.match(m.checks[0].why, /요일/)
+})
+test('신청·접수 기간 안의 날짜를 골랐으면 low', () => {
+  const m = app.parseDocMeta('x.pdf', '제 목 교육 안내\n교육비 및 접수기간 회원병원 99,000원 2026.8.10.(월) ~ 9.7.(월)\n문의 02-000-0000')
+  assert.equal(m.confidence.date, 'low')
+})
+test('공문 발행일과 같은 날짜는 확신도를 한 단계 내린다(발행 당일 회의도 있어 약한 신호) · 제목의 "시행 안내"는 발행일이 아니다', () => {
+  const m = app.parseDocMeta('x.pdf', '제 목 교육 안내\n기간 : 2023.06.14\n시행 의료서비스혁신단-1134 (2023.06.14)')
+  assert.equal(m.startDate, '2023-06-14')
+  assert.equal(m.confidence.date, 'mid')
+  const n = app.parseDocMeta('y.pdf', '제 목 교류회 시행 안내\n가. 일시: 2026년 10월 13일(화), 9:30~11:30')
+  assert.equal(n.confidence.date, 'high')
+})
+test('준회원·미납 금액을 회원가로 골랐으면 등록비 확신도 low', () => {
+  const m = app.parseDocMeta('x.pdf', '제 목 교육 안내\n일시 : 2026.9.18.(금)\n교육비 준회원 145,000원 / 정회원 80,000원 미납회원 54,000원')
+  if (m.registration === 145000 || m.registration === 54000) assert.equal(m.confidence.fee, 'low')
+  const n = app.parseDocMeta('y.pdf', '제 목 교육 안내\n교 육 비 : 미납회원 54,000원')
+  assert.equal(n.registration, 54000)
+  assert.equal(n.confidence.fee, 'low')
+})
+test("스캔 오독 '99,0O0원'·'13:3O'·'13;00~15:00'을 바로잡는다", () => {
+  const m = app.parseDocMeta('x.pdf', '제 목 교육 안내\n일시 : 2026.9.8.(화) 13;00~15:00\n교육비 : 99,0O0원')
+  assert.equal(m.registration, 99000)
+  assert.equal(m.startTime, '13:00')
+  assert.equal(app.parseDocMeta('y.pdf', '제 목 교육\n일시 : 2026.9.8.(화) 13:3O~15:00').startTime, '13:30')
+})
+test('범위 뒤쪽 시각(~ 15:00)을 시작시각으로 집지 않는다', () => {
+  const { startTime } = app.extractTimes('일시 : 2026.9.8.(화) 오전 ~ 15:00 종료')
+  assert.notEqual(startTime, '15:00')
+})
+
+// ── 장소 → 좌표 대조(2026-09-29 장소 전수 점검) ─────────────────────────────
+test('카카오 주소는 시·도부터 본다 — 해운대구의 "대구"를 동대구로 읽지 않는다', () => {
+  assert.equal(app.regionFromKakaoAddress('부산 해운대구 동백로 67'), '부산')
+  assert.equal(app.regionFromKakaoAddress('경기 용인시 기흥구 서천동로 59'), '수원')
+  assert.equal(app.regionFromKakaoAddress('경기 성남시 분당구'), '서울')
+  assert.equal(app.regionFromKakaoAddress('경남 창원시 마산회원구 내서읍'), '창원')
+  assert.equal(app.regionFromKakaoAddress('충남 서천군 서면'), '')
+  assert.equal(app.regionFromKakaoAddress('대구 중구 동덕로'), '동대구')
+})
+test('찾은 곳 이름이 공문 장소와 겹쳐야 같은 곳으로 본다', () => {
+  const same = [['부산 동의의료원', '동의병원'], ['신촌세브란스병원', '세브란스병원'], ['CFO 아카데미', '씨에프오아카데미'],
+    ['The UniverSE', '삼성전자 The UniverSE'], ['서면 롯데호텔', '롯데호텔 부산'], ['롯데호텔부산', '롯데호텔 부산'],
+    ['여의도 태영빌딩', '태영빌딩'], ['로카우스 호텔 서울 용산', '나인트리 프리미어 로카우스 호텔 서울 용산'], ['서울아산병원', '서울아산병원']]
+  for (const [q, p] of same) assert.equal(app.sameNamedPlace(q, p), true, `${q} ↔ ${p}`)
+  const diff = [['부산-부산교육원', '부산가톨릭대학교 부산가톨릭음악교육원'], ['80,000 원 148,000 원 교육일정', '원어거스트8월1일']]
+  for (const [q, p] of diff) assert.equal(app.sameNamedPlace(q, p), false, `${q} ↔ ${p}`)
+})
+test('금액·날짜가 섞인 장소 값은 버리고 실시기관으로 넘어간다(코칭 과정 웹 캡처)', () => {
+  const m = app.parseDocMeta('x.pdf', '[2024201] 간호사를 위한 코칭 역량 향상 과정\n교육형태 오프라인\n실시기관 서울아산병원   교육장소 80,000 원 148,000 원 교육일정 2026.09.30~2026.09.30(1일)')
+  assert.equal(m.venue, '서울아산병원')
+})

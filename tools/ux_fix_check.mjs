@@ -195,6 +195,22 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await ctx.close()
 }
 
+// ── F. 창원 시내 이동 여정표(2026-09-29) — 병원→교육장 시내버스·택시 추정 소요와 카카오맵 경로 ──
+{
+  const [ctx,p] = await newPage()
+  await p.click('[data-choice="planned"]'); await p.waitForTimeout(300)
+  await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(500)
+  await p.fill('#input-region', '창원'); await p.evaluate(() => onRegionInput())
+  await p.fill('#input-place', '마산대학교 청강기념관')
+  await p.evaluate(() => { state.place = '마산대학교 청강기념관'; state.placeLat = 35.2603473; state.placeLon = 128.5059206 })
+  await p.selectOption('#input-starthour', '14'); await p.waitForTimeout(300)
+  await p.evaluate(() => renderPrevDayVerdict()); await p.waitForTimeout(200)
+  const v = (await p.textContent('#prevday-verdict')).replace(/\s+/g, ' ')
+  check('F 창원 시내: 병원 출발 시각·시내버스 추정', /병원 \d\d:\d\d 출발 · 시내버스/.test(v) && /시내버스 약 \d+분 추정/.test(v), v.slice(0, 90))
+  check('F 창원 시내: 택시 대안·카카오맵 경로 링크', v.includes('택시로 가면') && await p.locator('#prevday-verdict a[href*="map.kakao.com/link/by/traffic"]').count() === 1)
+  await ctx.close()
+}
+
 // ── E. 다시 입력하지 않게(2026-09-29 사용자 관점 점검) ──
 {
   const [ctx,p] = await newPage()

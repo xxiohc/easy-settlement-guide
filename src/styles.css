@@ -3161,3 +3161,35 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .ra-links { margin-top: 8px; }
 .ra-timeline .kt-list { margin-top: 6px; }
 .ra-earlier { margin-top: 20px; }
+
+/* 확신도 낮은 공문 추정값 — 바로 채우지 않고 한 번 확인받는다(2026-09-29) */
+.doc-suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; padding: 10px 12px;
+  border-radius: 10px; background: #fff8e6; border: 1px solid #f5d67a; font-size: 13.5px; color: #5b4300; }
+.doc-suggest b { color: #3d2c00; }
+.doc-suggest-btn { padding: 5px 14px; border-radius: 999px; border: 0; background: #3b6fd8; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+.doc-suggest-why { flex-basis: 100%; font-size: 12px; color: #8a6d1f; }
+.low-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #fff3cd; color: #8a5a00; font-size: 11px; font-weight: 700; vertical-align: middle; }
+.result-item span.low-tag { display: inline-block; width: auto; align-self: flex-start; justify-self: start; margin: 4px 0 0; padding: 1px 8px; font-size: 11px; font-weight: 700; line-height: 1.6; color: #8a5a00; background: #fff3cd; border-radius: 999px; }
+
+/* 현재 단계 동그라미 — 색은 그대로 두고 은은하게 천천히 숨 쉬듯 깜빡인다(2026-09-29 지석초이).
+   글로우 링이 부풀었다 옅어지고, 점의 그림자가 함께 오르내린다. 2.4초 한 주기. 움직임 줄이기 설정이면 끈다. */
+/* 링을 크기(transform)로 키우면 버튼 밖으로 그려져 768px 폭에서 '가로 넘침'으로 잡혔다(wrap_scan 33건) —
+   레이아웃에 영향이 없는 그림자 고리로 숨 쉬게 한다. */
+@keyframes trailGlow {
+  0%, 100% { box-shadow: 0 4px 12px rgba(49, 130, 246, 0.40), 0 0 0 0 rgba(49, 130, 246, 0.28); }
+  50%      { box-shadow: 0 4px 16px rgba(49, 130, 246, 0.24), 0 0 0 7px rgba(49, 130, 246, 0.10); }
+}
+@keyframes trailBreathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.trail-item.current .trail-dot { animation: trailGlow 2.4s ease-in-out infinite; }
+.trail-item.current .trail-dot::after { animation: trailBreathe 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .trail-item.current .trail-dot, .trail-item.current .trail-dot::after { animation: none; }
+}
+
+/* 공문 장소를 지도에서 확인 못 했을 때 — 직접 검색해 고르라고 분명히(2026-09-29 지석초이) */
+.info-field.place-needs-pick { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, .14); }
+#place-geo-note.is-warn { color: #92400e; background: #fff7e6; border-radius: 8px; padding: 8px 10px; font-weight: 600; line-height: 1.5; }
+.ra-pick-warn { margin: 0 0 12px; padding: 9px 11px; border-radius: 10px; background: #fff7e6; color: #92400e; font-size: 12.5px; font-weight: 600; line-height: 1.5; }
