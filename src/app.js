@@ -598,6 +598,28 @@ async function processUploadedFile(file) {
         console.warn('이미지 OCR 실패:', e)
         text = ''
       }
+    } else if (ZIP_TEXT_EXTS.includes(ext)) {
+      setParseProgress(20, ext === 'hwpx' ? '한글 문서 읽는 중' : '워드 문서 읽는 중')
+      try {
+        text = await extractZipDocText(file, ext)
+        console.log(`${ext} 본문 길이:`, text.replace(/\s/g, '').length)
+      } catch (e) {
+        console.warn(`${ext} 읽기 실패:`, e)
+        text = ''
+      }
+      if (text.replace(/\s/g, '').length < 20) {
+        document.getElementById('parseLoading').classList.add('hidden')
+        showUploadError(`${ext === 'hwpx' ? '한글' : '워드'} 문서에서 글자를 찾지 못했어요. 한글·워드에서 PDF로 저장해 올려주시면 정확하게 읽어요.`)
+        return
+      }
+    } else if (ext === 'hwp') {
+      document.getElementById('parseLoading').classList.add('hidden')
+      showUploadError('옛 한글 파일(.hwp)은 이 화면에서 읽을 수 없어요. 한글에서 [다른 이름으로 저장 → PDF] 또는 [HWPX]로 저장해 올려주세요.')
+      return
+    } else {
+      document.getElementById('parseLoading').classList.add('hidden')
+      showUploadError('PDF·JPG·PNG·HWPX·DOCX만 읽을 수 있어요. 공문을 PDF로 저장해 올려주세요.')
+      return
     }
   } catch (e) {
     console.error('파일 처리 오류:', e)
@@ -634,6 +656,69 @@ function showUploadError(msg) {
   resultEl.classList.remove('hidden')
   const cta = document.getElementById('ctaNext3')
   if (cta) { cta.disabled = false; cta.classList.remove('disabled') }
+}
+
+// ── 한글(.hwpx)·워드(.docx) 공문 ─────────────────────────────────────────────
+// 병원 공문은 한글 파일로 오는 일이 많다. .hwpx·.docx는 XML을 zip으로 묶은 것이라
+// 브라우저 기본 DecompressionStream만으로 본문을 꺼낼 수 있다(CDN·라이브러리 없음).
+// 옛 이진 형식 .hwp는 못 푼다 — 그건 읽을 수 없다고 분명히 알린다.
+const ZIP_TEXT_EXTS = ['hwpx', 'docx']
+
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream !== 'function') throw new Error('NO_DECOMPRESSION')
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+// zip 지역 헤더를 훑어 이름이 조건에 맞는 항목만 푼다(중앙 디렉터리는 쓰지 않는다 —
+// 공문 zip은 항목이 적어 순차 훑기로 충분하다).
+async function readZipEntries(buffer, wanted) {
+  const u8 = new Uint8Array(buffer)
+  const dv = new DataView(buffer)
+  const out = []
+  for (let i = 0; i + 30 <= u8.length; i++) {
+    if (dv.getUint32(i, true) !== 0x04034b50) continue
+    const method = dv.getUint16(i + 8, true)
+    const compressed = dv.getUint32(i + 18, true)
+    const nameLen = dv.getUint16(i + 26, true)
+    const extraLen = dv.getUint16(i + 28, true)
+    const name = new TextDecoder().decode(u8.subarray(i + 30, i + 30 + nameLen))
+    const dataAt = i + 30 + nameLen + extraLen
+    if (!compressed || dataAt + compressed > u8.length) continue
+    if (wanted(name)) {
+      const raw = u8.subarray(dataAt, dataAt + compressed)
+      try {
+        const bytes = method === 0 ? raw : await inflateRaw(raw)
+        out.push({ name, text: new TextDecoder('utf-8').decode(bytes) })
+      } catch (e) {
+        console.warn(`zip 항목 ${name} 해제 실패:`, e.message)
+      }
+    }
+    i = dataAt + compressed - 1
+  }
+  return out
+}
+
+// 문단 끝은 줄바꿈으로, 나머지 태그는 지운다. 제목·라벨 판독이 줄 단위로 동작한다.
+function xmlToText(xml) {
+  return String(xml || '')
+    .replace(/<\/(?:w:p|hp:p|p)>/g, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+async function extractZipDocText(file, ext) {
+  const buffer = await file.arrayBuffer()
+  const wanted = ext === 'docx'
+    ? name => /^word\/(document|header\d*|footer\d*)\.xml$/.test(name)
+    : name => /^Contents\/section\d+\.xml$/i.test(name)   // header.xml은 글꼴·스타일이라 본문이 아니다
+  const entries = await readZipEntries(buffer, wanted)
+  entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))
+  return entries.map(e => xmlToText(e.text)).filter(Boolean).join('\n')
 }
 
 // pdfjs-dist CDN 로드 보장 (미로드 시 동적 재시도)
@@ -704,7 +789,106 @@ async function extractPdfText(file) {
   return parts.join('\n')
 }
 
-// 이미지 기반 PDF → 각 페이지 렌더 후 OCR
+// 스캔 공문은 글자가 흐려 그대로 OCR에 넣으면 "14시"가 "14A1"로, "월"이 "윌"로 읽힌다.
+// 오츠(Otsu) 임계값으로 흑백 2치화하면 같은 공문에서 "14시~11.06.(금)"까지 정확히 읽는다
+// (2026-09-29 재협 추계세미나 공문 실측: 배율 2.0 원본 → 14A1 / 배율 3.0 2치화 → 14시).
+// 임계값은 페이지마다 다시 구한다 — 스캔 밝기가 공문마다 다르다.
+function otsuThreshold(gray) {
+  const hist = new Array(256).fill(0)
+  for (let i = 0; i < gray.length; i++) hist[gray[i]]++
+  const total = gray.length
+  let sum = 0
+  for (let t = 0; t < 256; t++) sum += t * hist[t]
+  let sumB = 0, wB = 0, best = -1, thr = 128
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]
+    if (!wB) continue
+    const wF = total - wB
+    if (!wF) break
+    sumB += t * hist[t]
+    const mB = sumB / wB, mF = (sum - sumB) / wF
+    const between = wB * wF * (mB - mF) * (mB - mF)
+    if (between > best) { best = between; thr = t }
+  }
+  return thr
+}
+
+// 캔버스를 회색조 → 흑백으로 바꾼다. 글자(검은 픽셀)가 45%를 넘으면 사진·어두운
+// 스캔이라 2치화가 오히려 글자를 뭉개므로 회색조까지만 남긴다.
+function binarizeCanvas(ctx, width, height) {
+  const img = ctx.getImageData(0, 0, width, height)
+  const d = img.data
+  const gray = new Uint8Array(d.length / 4)
+  for (let k = 0, g = 0; k < d.length; k += 4, g++) {
+    gray[g] = (0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2]) | 0
+  }
+  const thr = otsuThreshold(gray)
+  let ink = 0
+  for (let g = 0; g < gray.length; g++) if (gray[g] <= thr) ink++
+  const tooDark = ink / gray.length > 0.45
+  for (let k = 0, g = 0; k < d.length; k += 4, g++) {
+    const v = tooDark ? gray[g] : (gray[g] > thr ? 255 : 0)
+    d[k] = d[k + 1] = d[k + 2] = v
+    d[k + 3] = 255
+  }
+  ctx.putImageData(img, 0, 0)
+  return { threshold: thr, binarized: !tooDark }
+}
+
+// 작은 글자를 OCR이 놓치지 않게 가로 2200px 정도로 맞춘다(최소 2배, 최대 3.5배).
+function ocrRenderScale(baseWidth) {
+  if (!baseWidth) return 2
+  return Math.max(2, Math.min(3.5, 2200 / baseWidth))
+}
+
+const OCR_MIN_CHARS = 30   // 이보다 적게 읽히면 판독 실패로 본다
+
+// 공문 서식 라벨이 몇 개 살아남았는지 + 자동으로 채워진 칸이 몇 개인지로 판독 품질을 재고,
+// 원본·2치화 두 판독 중 점수가 높은 쪽을 쓴다. 칸 단위로 섞으면 한쪽의 오독(목록 기준일을
+// 교육일로 읽는 등)이 그대로 들어와, 공문 하나는 판독 하나로 통째로 고른다.
+const OCR_FORM_LABELS = [
+  /제\s*_?\s*목|건\s*명|행\s*사\s*명|과\s*정\s*명/,
+  /일\s*_?\s*시|일\s*_?\s*자|기\s*간|일\s*정/,
+  /장\s*_?\s*소/,
+  /참가회비|등\s*록\s*비|교\s*육\s*비|수\s*강\s*료|회\s*비/,
+]
+function scoreOcrCandidate(filename, text, confidence = 0) {
+  const chars = String(text || '').replace(/\s/g, '').length
+  if (chars < OCR_MIN_CHARS) return { ok: false, labels: -1, fields: -1, confidence: 0 }
+  const labels = OCR_FORM_LABELS.filter(re => re.test(text)).length
+  let fields = 0
+  try {
+    const meta = parseDocMeta(filename, text)
+    fields = ['title', 'startDate', 'endDate', 'startTime', 'venue', 'destination']
+      .filter(k => meta && meta[k]).length + (meta && meta.registration ? 1 : 0)
+  } catch (_) { /* 판독이 깨졌으면 칸 점수 없이 라벨로만 비교한다 */ }
+  return { ok: true, labels, fields, confidence: confidence || 0, chars }
+}
+
+// 엔진 신뢰도 차가 이 값을 넘으면 신뢰도만으로 정한다. 그 안쪽(비슷하게 읽었을 때)은
+// 공문 서식 라벨 → 채워진 칸 수로 가린다. 신뢰도가 크게 낮은 판독은 글자를 뭉갠 것이고,
+// 비슷할 때는 라벨·칸을 더 많이 살린 쪽이 실제로 더 정확했다(테스트공문 4건 실측).
+const OCR_CONF_MARGIN = 3
+
+function pickOcrCandidate(filename, candidates) {
+  const scored = candidates.map(c => ({ ...c, s: scoreOcrCandidate(filename, c.text, c.confidence) }))
+  for (const c of scored) {
+    console.log(`OCR 후보 ${c.mode}: ${c.s.chars || 0}자 · 신뢰도 ${c.confidence ?? '-'}` +
+      ` · 라벨 ${c.s.labels} · 칸 ${c.s.fields}`)
+  }
+  const usable = scored.filter(c => c.s.ok)
+  if (!usable.length) return scored[0] || { mode: 'none', text: '' }
+  return usable.reduce((best, c) => {
+    const d = c.s.confidence - best.s.confidence
+    if (Math.abs(d) > OCR_CONF_MARGIN) return d > 0 ? c : best
+    if (c.s.labels !== best.s.labels) return c.s.labels > best.s.labels ? c : best
+    if (c.s.fields !== best.s.fields) return c.s.fields > best.s.fields ? c : best
+    return best
+  })
+}
+
+// 이미지 기반 PDF → 각 페이지 렌더 후 OCR. 1페이지에서 전처리 방식을 정하고
+// 남은 페이지는 그 방식으로만 읽는다(페이지마다 두 번 읽으면 대기 시간이 두 배가 된다).
 async function ocrPdfPages(file) {
   const ok = await ensurePdfJs()
   if (!ok) return ''
@@ -719,20 +903,36 @@ async function ocrPdfPages(file) {
 
   const parts = []
   const maxPages = Math.min(pdf.numPages, 3)
+  let mode = null
   for (let i = 1; i <= maxPages; i++) {
     setParseProgress(10 + Math.round(((i - 1) / maxPages) * 75), `OCR ${i}/${maxPages} 페이지`)
     try {
       const page = await pdf.getPage(i)
-      const viewport = page.getViewport({ scale: 2.0 })
+      const scale = ocrRenderScale(page.getViewport({ scale: 1 }).width)
+      const viewport = page.getViewport({ scale })
       const canvas = document.createElement('canvas')
       canvas.width = viewport.width
       canvas.height = viewport.height
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'))
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      await page.render({ canvasContext: ctx, viewport }).promise
       const pageBase = 10 + Math.round(((i - 1) / maxPages) * 75)
       const pageEnd  = 10 + Math.round((i / maxPages) * 75)
-      const result = await ocrBlob(blob, pageBase, pageEnd)
-      parts.push(result)
+      const toBlob = () => new Promise(res => canvas.toBlob(res, 'image/png'))
+      if (mode === null) {
+        const plain = await ocrBlob(await toBlob(), pageBase, Math.round((pageBase + pageEnd) / 2))
+        binarizeCanvas(ctx, canvas.width, canvas.height)
+        const binary = await ocrBlob(await toBlob(), Math.round((pageBase + pageEnd) / 2), pageEnd)
+        const pick = pickOcrCandidate(file.name,
+          [{ mode: 'plain', ...plain }, { mode: 'binary', ...binary }])
+        mode = pick.mode === 'binary' ? 'binary' : 'plain'
+        parts.push(pick.text)
+      } else {
+        if (mode === 'binary') binarizeCanvas(ctx, canvas.width, canvas.height)
+        const r = await ocrBlob(await toBlob(), pageBase, pageEnd)
+        parts.push(r.text)
+      }
     } catch (pageErr) {
       console.warn(`페이지 ${i} OCR 실패:`, pageErr)
     }
@@ -740,10 +940,48 @@ async function ocrPdfPages(file) {
   return parts.join('\n')
 }
 
-// 이미지 파일 OCR
+// 이미지 파일 OCR — 원본 그대로 읽은 것과 확대·흑백 2치화해 읽은 것 중 잘 읽힌 쪽을 쓴다.
+// 확대가 늘 이롭지는 않다(이미 큰 스크린샷은 확대하면 글자가 번져 제목 라벨을 놓쳤다).
 async function ocrImage(file) {
-  return ocrBlob(file, 5, 90)
+  const plain = await ocrBlob(file, 5, 50)
+  let canvas = null
+  let ctx = null
+  try {
+    const bitmap = await loadImageBitmap(file)
+    const scale = Math.max(1, Math.min(3, 1800 / (bitmap.width || 1800)))
+    canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    binarizeCanvas(ctx, canvas.width, canvas.height)
+  } catch (e) {
+    console.warn('이미지 전처리 실패 → 원본 판독만 쓴다:', e)
+    return plain.text
+  }
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/png'))
+  const binary = await ocrBlob(blob, 50, 90)
+  return pickOcrCandidate(file.name, [{ mode: 'plain', ...plain }, { mode: 'binary', ...binary }]).text
 }
+
+// createImageBitmap 이 없는 브라우저(구형 사파리)까지 대응한다.
+async function loadImageBitmap(file) {
+  if (typeof createImageBitmap === 'function') return createImageBitmap(file)
+  const url = URL.createObjectURL(file)
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('이미지 로드 실패'))
+      img.src = url
+    })
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+  }
+}
+
 
 // Tesseract CDN 로드 보장
 let _tessPromise = null
@@ -779,13 +1017,13 @@ async function ensureTesseract() {
   return _tessPromise
 }
 
-// Tesseract OCR (Tesseract logger로 실제 진행률 반영, 90초 타임아웃)
+// Tesseract OCR (진행률 반영, 90초 타임아웃) — { text, confidence }를 돌려준다
 async function ocrBlob(blob, pctStart = 5, pctEnd = 90) {
   setParseProgress(pctStart, 'OCR 엔진 로딩 중')
   const ok = await ensureTesseract()
   if (!ok) {
     console.warn('Tesseract 로드 실패 — OCR 건너뜀')
-    return ''
+    return { text: '', confidence: 0 }
   }
   try {
     const ocrPromise = Tesseract.recognize(blob, 'kor+eng', {
@@ -804,15 +1042,15 @@ async function ocrBlob(blob, pctStart = 5, pctEnd = 90) {
     })
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('OCR_TIMEOUT')), 90000))
-    const { data: { text } } = await Promise.race([ocrPromise, timeout])
-    return text
+    const { data } = await Promise.race([ocrPromise, timeout])
+    return { text: data.text || '', confidence: data.confidence || 0 }
   } catch (e) {
     if (e.message === 'OCR_TIMEOUT') {
       console.warn('OCR 시간 초과 (90초)')
     } else {
       console.warn('OCR 오류:', e)
     }
-    return ''
+    return { text: '', confidence: 0 }
   }
 }
 
@@ -854,6 +1092,25 @@ function cleanTitle(raw) {
     .replace(/\s+(?:(?:학교법인|재단법인|사단법인|의료법인)\s+)?[가-힣A-Za-z]+\s+(?:이사장|병원장|원장|회장|총장)$/, '')
     .replace(/^(.*\S)\s+((?:19|20)\d{2})$/, '$2 $1')
     .trim()
+}
+
+// 스캔 공문 OCR은 모양이 닮은 글자를 바꿔 읽는다. 날짜·시각·금액 자리에서 실제로 나온
+// 오독만 좁게 되돌린다(테스트공문 4건 실측: 14시→14A1 / 14AI1, 04월→04윌, 기 간→기 2, ':'→';:').
+// 글자 모양 추측을 넓히면 본문 낱말을 망치므로 숫자 옆에서만 바꾼다.
+function normalizeOcrArtifacts(text) {
+  return String(text || '')
+    .replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0))
+    .replace(/[：]/g, ':')
+    .replace(/[～〜]/g, '~')
+    .replace(/(\d{1,2})\s*(?:A[1IlL]{1,2}|AI|Al|Ai|人)(?![A-Za-z0-9])/g, '$1시')
+    .replace(/(\d)\s*[윌웜웰](?=\s*\d|\s*말|\s*중|\s*까지|\s*초|\s*[(])/g, '$1월')
+    .replace(/(?<![가-힣])(기)\s*2\s*(?=[:;])/g, '$1간 ')
+    .replace(/\s*;\s*:/g, ' :')
+    // 공문 머리의 "제 목"에서 '목'이 '='·'＝'로 읽히는 일이 잦다(크롬 OCR: "제 = 2026 …정기세미나")
+    .replace(/(?<![가-힣])제\s*[=＝]+\s*(?=[가-힣\d])/g, '제 목 ')
+    // 크롬 OCR은 같은 자리를 "제   2 2026 …"로 읽는다. '제2조'·'제 2 회'를 망치지 않게
+    // 뒤에 연도(네 자리)가 바로 오는 경우만 제목 라벨로 돌린다.
+    .replace(/(?<![가-힣])제\s+2\s+(?=(?:19|20)\d{2}\s)/g, '제 목 ')
 }
 
 // 공문에는 교육일 말고도 날짜가 많다. 시행일자·목록 기준일·신청/접수/납부 기간이 교육일로
@@ -957,8 +1214,8 @@ function matchRegion(text) {
 function parseDocMeta(filename, text) {
   const norm = s => s.replace(/\s+/g, '')
   const col  = s => s.replace(/\s+/g, ' ').trim()
-  // 전각/이형 문자 정규화: ～〜→~ (PDF 추출 시 range 표시자가 달라질 수 있음)
-  const normalized = text.replace(/[～〜]/g, '~')
+  // 전각/이형 문자 정규화 + 스캔 공문 OCR 오독 보정(14A1→14시 등)
+  const normalized = normalizeOcrArtifacts(text)
   const tc   = col(normalized)
   const tn   = norm(normalized)
   const curY = new Date().getFullYear()
@@ -1310,6 +1567,18 @@ function parseDocMeta(filename, text) {
            yearGuessed, isTripDoc, docKind, multiSession }
 }
 
+// 날짜 토막을 지운다. "기간 : 2026.11.05.(목), 14시~11.06.(금)"처럼 날짜와 시각이 한 줄에
+// 섞여 있으면 날짜 숫자가 시각 자리를 먹어 시각을 못 읽었다(재협 추계세미나 공문).
+function stripDateTokens(snip) {
+  return String(snip || '')
+    .replace(/\d{4}\s*[.\-년]\s*\d{1,2}\s*[.\-월]\s*\d{1,2}\s*[.일]?/g, ' ')
+    .replace(/(?<![\d:])\d{1,2}\s*[.\-월]\s*\d{1,2}\s*[.일]?(?![:\d])/g, ' ')
+    .replace(/\(\s*[가-힣]{1,3}\s*\)/g, ' ')
+}
+
+// 시각이 붙는 라벨. 날짜 라벨(일자·기간)도 포함한다 — 시작시각이 기간 줄에만 적힌 공문이 있다.
+const TIME_LABEL_RE = /(?:교\s*육\s*|행\s*사\s*|연\s*수\s*)?(?:일\s*_?\s*시|일\s*_?\s*자|기\s*간|교육시간|시\s*간|시\s*작)\s*[:]?/g
+
 // 공문 본문에서 교육 시작·종료 시각을 뽑는다. "14:00~17:00", "오후 2시", "14시 30분" 모두 대응.
 function extractTimes(tc) {
   const toHM = (h, m, ampm) => {
@@ -1320,8 +1589,30 @@ function extractTimes(tc) {
     return `${String(hh).padStart(2, '0')}:${String(parseInt(m || 0, 10)).padStart(2, '0')}`
   }
   const AMPM = '(오전|오후)?\\s*'
-  const T = '(\\d{1,2})\\s*[:시]\\s*(\\d{1,2})?\\s*분?'
+  // "8시간 65,000원"처럼 교육 '시간'(지속시간)을 시작시각으로 읽지 않도록 시 뒤의 '간'을 막는다
+  const T = '(\\d{1,2})\\s*(?::|시(?!\\s*간))\\s*(\\d{1,2})?\\s*분?'
   const rangeRe = new RegExp(AMPM + T + '\\s*(?:~|-|–|부터)\\s*' + AMPM + T)
+  const singleRe = new RegExp(AMPM + T)
+  // ① 라벨(일시·일자·기간·시작) 뒤 토막에서 날짜를 지운 뒤 시각을 찾는다.
+  // 토막은 70자까지만 인정하되 뒤에 20자를 더 붙여 읽는다 — 토막이 "5시"에서 끊기면
+  // 뒤에 오는 '간'을 못 보고 교육시간(8시간)을 시작시각으로 읽었다(방사선안전교육 공문).
+  const NEAR = 70, LOOKAHEAD = 20
+  for (const lm of tc.matchAll(TIME_LABEL_RE)) {
+    const from = lm.index + lm[0].length
+    const snip = stripDateTokens(tc.slice(from, from + NEAR + LOOKAHEAD))
+    const limit = Math.max(0, snip.length - LOOKAHEAD)
+    const r = snip.match(rangeRe)
+    if (r && r.index <= limit) {
+      const start = toHM(r[2], r[3], r[1])
+      const end   = toHM(r[5], r[6], r[4] || r[1])
+      if (start) return { startTime: start, endTime: end && end > start ? end : '' }
+    }
+    const one = snip.match(singleRe)
+    if (one && one.index <= limit) {
+      const start = toHM(one[2], one[3], one[1])
+      if (start) return { startTime: start, endTime: '' }
+    }
+  }
   const range = tc.match(rangeRe)
   if (range) {
     const start = toHM(range[2], range[3], range[1])
@@ -1366,9 +1657,10 @@ function tidyVenue(raw) {
     .replace(/\s+[가나다라마바사아자차카타파하]\s*\.\s.*$/, '')  // 다음 항목 "다. 참가회비"
     .replace(/\s+\d{1,2}\s*[.)]\s.*$/, '')                      // 다음 항목 "4. 담당회계법인"
     .replace(/(?<=[가-힣A-Za-z])\d{1,2}\s*\.(?:\s|$).*$/, '')      // 글자에 붙은 다음 항목 번호 "캠퍼스3. :"
-    .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|문의|※).*$/, '')
+    .replace(/\s+[A-Za-z]{1,3}\s*\.\s+(?=[가-힣])/, ' ').replace(/\s+[A-Za-z]{1,3}\s*\.\s.*$/, '')  // OCR이 항목기호 "라."를 "gt."로 읽은 경우
+    .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|사전등록|등록방법|등록비|입금|초록|프로그램|숙박|문의|※).*$/, '')
     .replace(/\s+[-–]\s.*$/, '')                                // 다음 줄 목록 "- 사전등록"
-    .replace(/[,·|｜\s]+$/, '')
+    .replace(/[,·|｜\-–\s]+$/, '')
     .trim()
   // 장소 뒤에 딸린 길 안내 "(여의나루역 1번 출구 도보 10분)"는 검색을 방해한다
   v = v.replace(/\s*\([^)]*(?:출구|도보|분 거리|주차)[^)]*\)\s*$/, '')
