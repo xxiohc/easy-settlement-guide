@@ -1506,7 +1506,8 @@ const REGION_MAP = [
   // 서울역(97,200원)으로 잡으면 19,600원이 부풀려진다. 발신처 주소가 '서울 종로구'인
   // 공문(성균관대 법인사무국)이 많으므로 서울 규칙보다 반드시 먼저 봐야 한다.
   // '서천연수원'(삼성전자 연수원, 용인)의 '수원'을 잡지 않도록 앞에 한글이 붙은 '수원'은 뺀다
-  ['자연과학캠퍼스|성대\\s*수원|성균관대.*수원|(?<![가-힣])수원', '수원'],
+  // 용인·기흥(삼성전자 The UniverSE 등)도 수원역 기준이다 — 서울역(97,200원)보다 가깝고 싸다(2026-09-29 지석초이 지시)
+  ['자연과학캠퍼스|성대\\s*수원|성균관대.*수원|(?<![가-힣])수원|용인|기흥', '수원'],
   // 서울 자치구
   ['강남구|강서구|마포구|종로구|용산구|성동구|송파구|강동구|노원구|도봉구|은평구|서대문구|동대문구|성북구|강북구|관악구|동작구|금천구|영등포구|구로구|양천구|서초구|광진구|중랑구', '서울'],
   // 서울 주요 병원 (병원명으로 장소 특정되는 경우)
@@ -1515,7 +1516,7 @@ const REGION_MAP = [
   ['서울특별시|여의도|여의나루|서울역|수서역|코엑스|COEX|삼성동|잠실|홍대|명동|광화문|서울시청|시청역|강남역', '서울'],
   // 나머지 경기·인천 (서울 출장 처리) — 수원은 위에서 따로 잡는다. 성균관대학교는
   // 인문사회과학캠퍼스(종로)가 기본이고 삼성창원병원·창원은 뺀다
-  ['경기도|인천광역시|성남시?|용인시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대학교(?!\\s*(?:삼성창원|창원))', '서울'],
+  ['경기도|인천광역시|성남시?|고양시?|안양시?|부천시?|평택시?|화성시?|파주시?|김포시?|의정부|성균관대학교(?!\\s*(?:삼성창원|창원))', '서울'],
   // '서울아산병원'(OCR로 '서물아산병원')의 '아산'을 충남 아산으로 잡지 않는다
   ['천안시?|(?<![가-힣])아산시?|천안아산역', '천안'],
   ['오송|청주시?', '오송'],
@@ -2258,11 +2259,11 @@ function renderTimeHint(meta) {
   const el = document.getElementById('time-ktx-hint')
   if (!el) return
   const missing = !!meta && !meta.startTime
-  // 저녁 행사(17:30 총회·18:20 세미나)는 공문 시각이 선택지(~16:00) 밖이라 칸이 빈다 — 읽었다고만 하면 틀린 안내다
+  // 선택지(~18:30) 밖의 늦은 시각은 칸이 빈다 — 읽었다고만 하면 틀린 안내다
   const late = !!meta?.startTime && snapTo10(meta.startTime) > LATEST_START
   el.textContent = missing
     ? '⚠️ 공문에서 시작시각을 찾지 못했어요. 첫날 교육(등록) 시작시각을 직접 골라 주세요.'
-    : late ? `⚠️ 공문 시작시각은 ${meta.startTime}인데 선택지는 16시까지예요. 16:00을 골라 주세요 — 16시 이후 시작은 모두 당일 이동이라 정산은 같아요.`
+    : late ? `⚠️ 공문 시작시각은 ${meta.startTime}인데 선택지는 ${LATEST_START}까지예요. ${LATEST_START}을 골라 주세요 — 그 뒤 시작은 모두 당일 이동이라 정산은 같아요.`
     : meta ? `📄 공문에서 읽은 시각이에요. ${TIME_HINT_DEFAULT}` : TIME_HINT_DEFAULT
   el.classList.toggle('is-warn', missing || late)
 }
@@ -2583,8 +2584,8 @@ function selectPlace(name, addr, lat, lon) {
 // 주소 문자열에서 운임표 기준 지역명 추출
 function guessRegionFromAddress(addr) {
   const pairs = [
-    // 수도권 — 수원만 제 운임표(수원역)가 있어 따로 잡고, 나머지 경기·인천은 서울 기준
-    ['수원', '수원'],
+    // 수도권 — 수원·용인·기흥은 수원역 운임표, 나머지 경기·인천은 서울 기준
+    ['수원', '수원'], ['용인', '수원'], ['기흥', '수원'],
     ['서울', '서울'], ['경기', '서울'], ['인천', '서울'],
     // 제주
     ['제주', '제주'],
@@ -3489,14 +3490,16 @@ function prevDayHintHtml() {
 }
 
 // 시·분 두 칸으로만 받는다 — 분은 10분 단위 선택지뿐이라 역산 기준이 늘 10분 단위다.
-// 시작시각은 05:00~16:00까지만 고른다(2026-09-26 지석초이 지시). 16시를 고르면 00분만 남긴다.
-const LATEST_START = '16:00'
+// 시작시각은 05:00~18:30까지 고른다(2026-09-26 16:00 → 2026-09-29 지석초이 지시로 18:30 — 저녁 총회·세미나).
+// 마지막 시(18시)는 30분까지만 남긴다.
+const LATEST_START = '18:30'
 function onTimeChange() {
   const hourEl = document.getElementById('input-starthour')
   const minEl  = document.getElementById('input-startmin')
   const lastHour = hourEl?.value === LATEST_START.slice(0, 2)
-  minEl?.querySelectorAll('option').forEach(o => { o.disabled = lastHour && o.value !== '' && o.value !== '00' })
-  if (hourEl?.value && (!minEl.value || lastHour)) minEl.value = '00'
+  const lastMin = LATEST_START.slice(3)
+  minEl?.querySelectorAll('option').forEach(o => { o.disabled = lastHour && o.value !== '' && o.value > lastMin })
+  if (hourEl?.value && (!minEl.value || (lastHour && minEl.value > lastMin))) minEl.value = '00'
   state.startTime = hourEl?.value && minEl?.value ? `${hourEl.value}:${minEl.value}` : ''
   const hidden = document.getElementById('input-starttime')
   if (hidden) hidden.value = state.startTime
@@ -3507,7 +3510,7 @@ function onTimeChange() {
   renderPrevDayVerdict()
 }
 
-// 공문에서 읽은 시각을 두 칸에 나눠 넣는다. 선택지 밖(05:00~16:00)이면 비워 두고 사람이 고르게 한다.
+// 공문에서 읽은 시각을 두 칸에 나눠 넣는다. 선택지 밖(05:00~18:30)이면 비워 두고 사람이 고르게 한다.
 function setStartTime(hhmm, autofilled) {
   const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '')
   const hourEl = document.getElementById('input-starthour')
