@@ -96,9 +96,17 @@ test('③ 당일 도착 열차가 없으면 묻지 않고 전날 이동으로 �
   assert.equal(app.el('field-daytrip').classList.contains('hidden'), true)
 })
 
-test('④ 역산이 안 되는 구간(시외버스·제주)은 08:30 기준으로 직접 묻는다', () => {
-  const app = run({ skip: 'bus', busFare: { label: '부산', bus: 20000 } },
-                  { region: '부산', place: '부산시청' })
+// 시외버스 구간은 집에서 오가는 거리라 전날 이동을 인정하지 않는다(2026-09-26 지석초이)
+test('④ 시외버스 구간은 전날 이동을 묻지 않고 해당 없음으로 둔다', () => {
+  for (const plan of [{ skip: 'bus', busFare: { label: '부산', bus: 8600 } }, { skip: 'busonly', busOnly: { label: '여수' } }]) {
+    const app = run(plan, { region: '부산', place: '부산시청' })
+    assert.equal(app.state.prevDayMove, false)
+    assert.equal(app.el('field-daytrip').classList.contains('hidden'), true)
+  }
+})
+
+test('④-2 좌표를 모르는 장소는 08:30 기준으로 직접 묻는다', () => {
+  const app = run({ skip: 'needmanual' }, { region: '', place: '어느 연수원' })
   assert.equal(app.state.prevDayMove, null)
   assert.equal(app.el('field-daytrip').classList.contains('hidden'), false)
   assert.match(app.el('daytrip-auto').innerHTML, /08:30/)
@@ -127,14 +135,14 @@ test('제주는 항공편이라 역산하지 않고 직접 묻는다', () => {
 test('자동 판정 뒤 역산이 안 되는 장소로 바뀌면 자동 답을 비우고 다시 묻는다', () => {
   const app = run(planAt(7 * 60 + 33))
   assert.equal(app.state.prevDayMove, true)
-  app.stubPlan({ skip: 'bus', busFare: { label: '부산', bus: 20000 } })
+  app.stubPlan({ skip: 'needmanual' })
   app.prepare()
   assert.equal(app.state.prevDayMove, null)
   assert.equal(app.el('field-daytrip').classList.contains('hidden'), false)
 })
 
 test('사람이 답한 값은 다시 들어와도 지우지 않는다', () => {
-  const app = run({ skip: 'bus', busFare: { label: '부산', bus: 20000 } }, { region: '부산', place: '부산시청' })
+  const app = run({ skip: 'needmanual' }, { region: '', place: '어느 연수원' })
   app.setYN('prevDayMove', true)
   app.prepare()
   assert.equal(app.state.prevDayMove, true)
@@ -148,7 +156,7 @@ test('전날 이동이 인정되면 8시간 이하 당일 출장 질문은 뜨�
 })
 
 test('수동 답이 전날 이동으로 바뀌면 8시간 질문과 답을 걷어낸다', () => {
-  const app = run({ skip: 'bus', busFare: { label: '부산', bus: 20000 } }, { region: '부산', place: '부산시청' })
+  const app = run({ skip: 'needmanual' }, { region: '', place: '어느 연수원' })
   app.el('field-shortdaytrip').classList.remove('hidden')
   app.setYN('isShortDayTrip', false)
   app.setYN('prevDayMove', true)

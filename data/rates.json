@@ -104,7 +104,7 @@
         "해운대"
       ],
       "label": "부산",
-      "bus": 19600
+      "bus": 8600
     },
     {
       "keywords": [
@@ -127,7 +127,7 @@
         "울산"
       ],
       "label": "울산",
-      "bus": 29000
+      "bus": 18400
     },
     {
       "keywords": [
@@ -151,7 +151,28 @@
         "전주"
       ],
       "label": "전주",
-      "bus": 46000
+      "bus": 34600
+    },
+    {
+      "keywords": [
+        "광양"
+      ],
+      "label": "광양",
+      "bus": 24000
+    },
+    {
+      "keywords": [
+        "순천"
+      ],
+      "label": "순천",
+      "bus": 23800
+    },
+    {
+      "keywords": [
+        "여수"
+      ],
+      "label": "여수",
+      "bus": 33600
     },
     {
       "keywords": [
@@ -164,6 +185,7 @@
   "dailyRate": 35000,
   "dailyRate25p": 8750,
   "lodgingRate": 100000,
+  "mealCap": 10000,
   "updatedAt": "2026-09-24",
   "fareBasis": "KTX 운임표 (202609기준).xls"
 }
