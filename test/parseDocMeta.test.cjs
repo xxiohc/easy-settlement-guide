@@ -240,12 +240,9 @@ test('글자마다 쪼개진 PDF 숫자 "20 2 6 년 10 월 07 일"과 영문 제
   assert.match(m.title, /^Medtronic OR Nurse Expert/)
 })
 
-test("'서천연수원'은 수원이 아니고 '서울아산병원'은 천안(아산)이 아니다", () => {
-  const a = app.parseDocMeta('x.png', `과정명 통합 AX TF 프로세스 재설계 과정 (3차)
-일정 2026.09.29(화) ~ 10.02(금), 4일간 - 08:30 ~ 17:30
-장소 The UniverSE(서천연수원)
-주소 경기도 용인시 기흥구 서천동로 59`)
-  assert.equal(a.destination, '서울')
+test("'서천연수원'의 '수원'은 지명이 아니고 '서울아산병원'은 천안(아산)이 아니다", () => {
+  assert.equal(app.matchRegion('The UniverSE(서천연수원)'), '')
+  assert.equal(app.matchRegion('경기도 고양시 킨텍스'), '서울')
   assert.equal(app.matchRegion('서물아산병원 아카데미'), '')
   assert.equal(app.matchRegion('충남 아산시 배방읍'), '천안')
 })
@@ -285,4 +282,14 @@ VENUE
   assert.equal(m.docKind, 'notice')
   assert.equal(m.startDate, '2026-10-08')
   assert.equal(m.destination, '부산')
+})
+
+test('용인·기흥은 서울역이 아니라 수원역 기준이다(2026-09-29 지석초이 지시)', () => {
+  const a = app.parseDocMeta('x.png', `과정명 통합 AX TF 프로세스 재설계 과정 (3차)
+일정 2026.09.29(화) ~ 10.02(금), 4일간 - 08:30 ~ 17:30
+장소 The UniverSE(서천연수원)
+주소 경기도 용인시 기흥구 서천동로 59`)
+  assert.equal(a.destination, '수원')
+  assert.equal(app.matchRegion('용인 기흥구 삼성전자'), '수원')
+  assert.equal(app.guessRegionFromAddress('경기 용인시 기흥구 서천동로 59'), '수원')
 })
