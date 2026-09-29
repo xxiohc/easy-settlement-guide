@@ -2053,10 +2053,28 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 
 .fee-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  /* 숫자 바로 뒤에 '원' — 칸 전체를 눌러도 입력되게 label 대신 박스 클릭을 입력칸으로 넘긴다(onclick) */
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 180px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  cursor: text;
 }
+.fee-row:focus-within { border-color: #3b6fd8; box-shadow: 0 0 0 3px rgba(59,111,216,.12); }
+.fee-row .fee-input {
+  flex: 0 0 auto;
+  width: calc(2ch + 4px);
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+.fee-row .fee-unit { font-size: 20px; font-weight: 700; color: var(--ink); }
 
 /* ════════════════════════════════════════════════
    구비서류 패널 (Docs Panel)
@@ -3125,3 +3143,21 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .kt-row.is-earlier td { background: #f7f8fa; }
 .kt-table em { font-style: normal; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--primary); }
 .kt-note { margin-top: 4px; font-size: 11px; color: var(--muted); }
+
+/* 지난번 입력을 미리 채웠다는 안내(2026-09-29) */
+.profile-hint { margin-top: 8px; font-size: 12.5px; color: #3b6fd8; }
+.profile-hint.hidden { display: none; }
+
+/* 첫날 이동 안내(여정표) 숨 고르기 — 2026-09-29 지석초이 "큰 주제별로 위아래 여백, 너무 다닥다닥"
+   묶음: ① 판정 상자 → ② 타임라인(단계마다 한 덩어리) → ③ 조금 더 일찍 가려면.
+   단계 사이는 넓히고, 한 단계 안의 보조 줄(열차 번호·예매 링크·설명)은 제목과 붙여 한 묶음으로 보이게 한다. */
+.ra-head { margin-bottom: 14px; }
+.ra-why { margin-top: 10px; line-height: 1.55; }
+.ra-timeline { margin-top: 22px; }
+.ra-timeline li > span:last-child { padding-bottom: 22px; }
+.ra-timeline li.is-slack > span:last-child { padding-bottom: 16px; }
+.ra-timeline li:last-child > span:last-child { padding-bottom: 0; }
+.ra-timeline .ra-sub { margin-top: 2px; }
+.ra-links { margin-top: 8px; }
+.ra-timeline .kt-list { margin-top: 6px; }
+.ra-earlier { margin-top: 20px; }

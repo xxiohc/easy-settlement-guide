@@ -351,7 +351,7 @@
 
                   <!-- 금액 입력 -->
                   <p class="fee-input-label">금액을 입력해주세요</p>
-                  <div class="fee-row">
+                  <div class="fee-row" onclick="document.getElementById('input-fee').focus()">
                     <input class="info-input fee-input" type="text" inputmode="numeric" id="input-fee"
                       placeholder="0" oninput="formatFeeInput(this); clearCard4Error('input-fee')" />
                     <span class="fee-unit">원</span>
