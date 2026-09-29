@@ -1,7 +1,7 @@
 // 공문 장소 → 좌표 → 여정표 소요시간까지 전수 점검(2026-09-29 지석초이: "여정에 해당 장소까지 소요시간이 안 나오면
 // 장소가 제대로 입력 안 된 것"). 공문마다 실제 화면에 올려 카드4까지 가서 본다.
 //   node tools/venue_sweep.mjs [파일명 일부]   (로컬 서버 8799, src/config.js 카카오 키 필요)
-import { webkit } from 'playwright-core'
+import { webkit, chromium } from 'playwright-core'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,7 +10,7 @@ const DIR = path.join(HERE, '../../테스트공문_업로드함')
 const BASE = process.env.BASE || 'http://localhost:8799/index.html'
 const ONLY = process.argv[2]
 const EXP = JSON.parse(fs.readFileSync(path.join(HERE, 'parse_expected.json'), 'utf8'))
-const b = await webkit.launch()
+const b = await (process.env.ENGINE === 'chrome' ? chromium : webkit).launch()
 const rows = []
 for (const file of Object.keys(EXP)) {
   if (file.startsWith('_') || (ONLY && !file.includes(ONLY))) continue
