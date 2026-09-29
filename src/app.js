@@ -1931,9 +1931,36 @@ function parseDocMeta(filename, text) {
              venue: '', yearGuessed: false, isTripDoc: false, docKind, multiSession: false }
   }
 
-  return { title, periodDisplay, startDate, endDate, nights, days, destination, registration,
+  return { title: tripTitle(title), periodDisplay, startDate, endDate, nights, days, destination, registration,
            registrationNote, isOnline, startTime, endTime, venue, venueSearch: venueSearchName(venue),
            yearGuessed, isTripDoc, docKind, multiSession }
+}
+
+// 공문 제목 → 출장/교육명(2026-09-29 지석초이 "안내라는 말은 빼면 더 좋"). 제목 끝의 행정 문구
+// (개최 안내·참여 요청·초청의 건·수강 신청 안내…)를 떼고 「」 안의 행사명만 남긴다. 너무 짧아지면 원래 제목을 쓴다.
+const TITLE_TAIL_RE = [
+  /\s*\([^()]*용\s*\)$/,                                           // (병의원, 보건소용)
+  /\s*(?:件|공문|메일)$/,
+  /\s*(?:의\s*)?건$/,
+  /\s*(?:안내|알림|공지|공고)$/,
+  /\s*(?:초청|협조\s*요청|협조\s*부탁|참여\s*요청|참석\s*요청|참여\s*안내|요청)$/,
+  /\s*(?:수강\s*)?(?:신청|등록|접수)$/,
+  /\s*(?:개최|시행|진행|실시)$/,
+]
+function tripTitle(raw) {
+  let t = String(raw || '').replace(/_/g, ' ')
+    .replace(/(\d)\s+(년도|년|회|차)(?=\s|$)/g, '$1$2')
+    .replace(/\s*[·ㆍ․]\s*/g, '·')
+    .replace(/^붙\s*임\s*\d*\s*[.)]\s*/, '')
+    .replace(/^\(\s*((?:19|20)\d{2}년?)\s*\)\s*/, '$1 ')              // (2026년) 방사선작업종사자 …
+  const bracket = t.match(/[「『]\s*([^」』]{4,}?)\s*[」』]/)
+  if (bracket) t = bracket[1]
+  for (let prev = ''; prev !== t; ) {
+    prev = t
+    for (const re of TITLE_TAIL_RE) t = t.replace(re, '').trim()
+  }
+  t = t.replace(/\s{2,}/g, ' ').trim()
+  return t.replace(/\s/g, '').length >= 4 ? t : String(raw || '').trim()
 }
 
 // 날짜 토막을 지운다. "기간 : 2026.11.05.(목), 14시~11.06.(금)"처럼 날짜와 시각이 한 줄에

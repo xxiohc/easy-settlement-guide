@@ -12,8 +12,9 @@
 환승 운임은 구간 운임 단순 합계이며 환승할인은 반영하지 않는다.
 """
 import json, heapq, re, sys
+from datetime import date
 from pathlib import Path
-from ktx_source import latest, open_book
+from ktx_source import latest, open_book, write_if_changed
 
 APP    = Path(__file__).resolve().parent.parent
 SRC    = latest('운임표')
@@ -125,14 +126,14 @@ def build():
         'rule': '직통 우선 → 직통 없으면 환승 최소 → 같으면 최저운임. 환승할인 미반영.',
         'classes': {'normal': '일반실 운임',
                     'first': '특실 운임+요금 계 (표에 특실이 없는 구간은 null)'},
-        'updatedAt': '2026-09-24',
+        'updatedAt': None,
         'pairCount': len(normal),
         'stationCount': len(rs),
         'fares': rs,
     }
-    (APP / 'data' / 'ktx_fares_masan.json').write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    print(f'ktx_fares_masan.json — 구간 {len(normal)}개 / 역 {len(rs)}개')
+    changed = write_if_changed(APP / 'data' / 'ktx_fares_masan.json', doc,
+                               lambda d: json.dumps(d, ensure_ascii=False, indent=2) + '\n')
+    print(f'ktx_fares_masan.json — 구간 {len(normal)}개 / 역 {len(rs)}개' + ('' if changed else ' (변경 없음)'))
     return doc
 
 
@@ -212,25 +213,32 @@ def js_literal(rows):
 
 
 def patch_js(path, rows, open_mark, close_mark):
+    # 경로는 app/ 기준 — 어느 폴더에서 실행해도 같은 파일을 고친다(tools/ 안에서 돌리면 src/app.js 를 못 찾던 문제)
+    path = APP / path
     src = Path(path).read_text(encoding='utf-8')
     body = js_literal(rows)
     new = re.sub(re.escape(open_mark) + r'.*?' + re.escape(close_mark),
                  open_mark + '\n' + body + '\n' + close_mark, src, flags=re.S)
     if open_mark not in src or close_mark not in src:
         raise SystemExit(f'!! 마커를 못 찾았다: {path}')
+    name = path.relative_to(APP)
     if new == src:
-        print(f'{path} — 변경 없음 (이미 최신)')
+        print(f'{name} — 변경 없음 (이미 최신)')
         return
     Path(path).write_text(new, encoding='utf-8')
-    print(f'{path} — fareTable {len(rows)}행 갱신')
+    print(f'{name} — fareTable {len(rows)}행 갱신')
 
 
 def write_rates(rows):
     p = APP / 'data' / 'rates.json'
     d = json.loads(p.read_text(encoding='utf-8'))
+    if d.get('fareTable') == rows and d.get('fareBasis') == SRC.name:
+        print('data/rates.json — 변경 없음 (이미 최신)')
+        return
     d['fareTable'] = rows
     d['fareBasis'] = SRC.name
-    d['updatedAt'] = '2026-09-24'
+    # 갱신일은 실제로 운임이 바뀐 날이다(예전엔 2026-09-24로 박혀 있어 새 운임표를 넣어도 날짜가 그대로였다)
+    d['updatedAt'] = date.today().isoformat()
     p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(f'data/rates.json — fareTable {len(rows)}행 갱신')
 

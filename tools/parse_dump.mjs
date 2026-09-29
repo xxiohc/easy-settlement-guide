@@ -21,11 +21,15 @@ for (const file of fs.readdirSync(DIR).sort()) {
   await p.waitForFunction(() => !document.getElementById('ctaNext3').disabled, { timeout: 240000 }).catch(() => {})
   const m = await p.evaluate(() => state.parsedMeta || null)
   const err = await p.evaluate(() => document.querySelector('.result-warn')?.innerText || '')
-  out[file] = m ? { docKind: m.docKind, title: m.title, start: m.startDate, end: m.endDate, time: m.startTime,
+  out[file.normalize('NFC')] = m ? { docKind: m.docKind, title: m.title, start: m.startDate, end: m.endDate, time: m.startTime,
     dest: m.destination, venue: m.venue, fee: m.registration ?? null, online: m.isOnline, multiSession: !!m.multiSession,
     sec: Math.round((Date.now() - t0) / 1000) } : { error: err }
-  console.error(file, JSON.stringify(out[file]))
+  console.error(file, JSON.stringify(out[file.normalize('NFC')]))
 }
 console.log(JSON.stringify(out, null, 2))
-if (process.env.TEXTS) fs.writeFileSync(process.env.TEXTS, JSON.stringify(await p.evaluate(() => window.__texts), null, 1))
+// 맥 파일명은 한글이 자모로 풀린 NFD라 정답표(NFC) 키와 안 맞는다 — 저장할 때 NFC로 맞춘다(원문이 빈 값으로 보이던 원인)
+if (process.env.TEXTS) {
+  const texts = await p.evaluate(() => window.__texts)
+  fs.writeFileSync(process.env.TEXTS, JSON.stringify(Object.fromEntries(Object.entries(texts).map(([k, v]) => [k.normalize('NFC'), v])), null, 1))
+}
 await b.close()
