@@ -306,3 +306,37 @@ test('출장/교육명은 공문 행정 문구(개최 안내·참여 요청·의
   ]
   for (const [raw, want] of cases) assert.equal(app.tripTitle(raw), want)
 })
+
+// ── 2026-09-29 추가 공문 3건 ─────────────────────────────────────────────
+test("스캔에서 '원'이 '8'로 읽혀도(77,0008) 비회원가(110,000원)가 아니라 회원가를 쓴다", () => {
+  const m = app.parseDocMeta('x.pdf', `제 목 의료기관 회계기준 및 세무회계 연수교육 개최 안내
+나. 일시 : 2025. 11.21.(금)
+다. 장소 : 신촌세브란스병원 은명대강당 (본관 6층)
+© 교육비 및 접수기간
+~         회원병원 : 77,0008        2025.11.4.(화)
+RD       A    비회원병원 ; 110,000원`)
+  assert.equal(m.registration, 77000)
+  assert.equal(m.venueSearch, '신촌세브란스병원')
+})
+
+test('1차가 없는 차수 표(2차 대전·3차 서울)도 차수 공문으로 알리고, 장소에 표 머리·날짜를 넣지 않는다', () => {
+  const m = app.parseDocMeta('x.pdf', `제목 2023년 제2,3차 의료기관 회계기준 교육 안내
+ 나. 교육일시 및 장소
+교육일시 교육장소
+2차
+2023.7.4.(화)
+12:50-16:40
+대전무역회관 대회의실(3층)
+(주소: 대전광역시 서구 청사로 136, 대전무역회관 3층 대회의실)
+3차
+2023.7.6.(목)
+12:50-16:40
+누리꿈스퀘어 비즈니스타워 대회의실(4층)
+ 사. 교육비 및 교재: 무료`)
+  assert.equal(m.startDate, '2023-07-04')
+  assert.equal(m.endDate, '2023-07-04')
+  assert.equal(m.multiSession, true)
+  assert.equal(m.destination, '대전')
+  assert.equal(m.venueSearch, '대전무역회관')
+  assert.equal(m.registration, null)
+})

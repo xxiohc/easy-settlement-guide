@@ -1433,6 +1433,8 @@ function normalizeOcrArtifacts(text) {
     .replace(/(?<![\d.])(\d) (\d)(?= ?[월일])/g, '$1$2')
     .replace(/(?<!\d)(\d)\s(\d)(?=\s*:\s*\d)/g, '$1$2')
     .replace(/(\d)\s*:\s*(\d)\s?(\d)(?!\d)/g, '$1:$2$3')
+    // 스캔에서 금액 끝 '원'이 '8'로 읽힌다("회원병원 : 77,0008" — 병원협회 연수교육). 쉼표 뒤 네 자리는 금액이 될 수 없다
+    .replace(/(\d{1,3}(?:,\d{3})+)[8B](?![\d,])/g, '$1원')
     // 두 자리 연도 "'26.10. 1." — 스캔에서는 따옴표가 `"·"로도 읽힌다
     .replace(/[’'‘"`＇“”´]+\s*(\d{2})\s*\.\s*(?=\d{1,2}\s*\.)/g, '20$1.')
     // 사진 판독에서 '월'이 '%'로, '년'이 '4'로 읽힌다("2026 10% 14일", "20264 09% 20일")
@@ -1640,6 +1642,13 @@ function parseDocMeta(filename, text) {
     }
   }
 
+  // 차수 표 "2차 2023.7.4.(화) … 3차 2023.7.6.(목)"(보건산업진흥원 회계기준 교육) — 1차가 없어도 서로 다른
+  // 차수가 둘 이상 날짜와 함께 나오면 따로 열리는 교육이다. 첫 차수로 채우고 확인을 요청한다.
+  {
+    const sessions = new Set([...tcD.matchAll(/(\d{1,2})\s*차\s*[：:,、]?\s*\d{4}\s*[.\-년]/g)].map(m => m[1]))
+    if (sessions.size >= 2) multiSession = true
+  }
+
   // 패턴L: 라벨(일시·일자·기간·교육일시·과정일정) 바로 뒤 날짜 — 문서 전체에서 날짜 모양을
   // 찾기 전에 먼저 본다. 라벨 앞에 한글이 붙은 '신청기간'·'시행일자'·'거래일자'는 라벨이 아니다.
   if (!startDate) {
@@ -1805,7 +1814,8 @@ function parseDocMeta(filename, text) {
   // 우선순위1: 회원병원 / 정회원 기준 (학술대회 공문의 "정회원" = 병원 직원 할인가)
   const memberM = tnFee.match(/(?:회원병원|정회원)[:\-：\s]*([\d,]+)\s*만?\s*원?/)
   if (memberM) {
-    const snipMember = tnFee.slice(tnFee.search(/(?:회원병원|정회원)/))
+    // 회원가 토막은 '비회원' 앞에서 끊는다 — 회원가를 못 읽으면 바로 뒤 비회원가(110,000원)를 집었다
+    const snipMember = tnFee.slice(tnFee.search(/(?:회원병원|정회원)/)).split(/비회원|미등록/)[0]
     const amtM = snipMember.match(amtPat)
     if (amtM) {
       registration = amtM[1]
@@ -2072,9 +2082,12 @@ function tidyVenue(raw) {
     .replace(/\s+\d{1,2}\s*[.)]\s.*$/, '')                      // 다음 항목 "4. 담당회계법인"
     .replace(/(?<=[가-힣A-Za-z])\d{1,2}\s*\.(?:\s|$).*$/, '')      // 글자에 붙은 다음 항목 번호 "캠퍼스3. :"
     .replace(/\s+[A-Za-z]{1,3}\s*\.\s+(?=[가-힣])/, ' ').replace(/\s+[A-Za-z]{1,3}\s*\.\s.*$/, '')  // OCR이 항목기호 "라."를 "gt."로 읽은 경우
+    // 표 머리 "교육일시 교육장소 2차 2023.7.4.(화) 12:50-16:40 대전무역회관…" — 앞이 머리글·차수·날짜뿐일 때만 걷는다.
+    // (.*로 걷었더니 장소 뒤에 시간표가 붙은 공문에서 장소 이름까지 지웠다 — 수술감염학회·방사선사협회)
+    .replace(/^(?:\s|교\s*육\s*일\s*시|교\s*육\s*장\s*소|\d{1,2}\s*차|\d{4}\s*[.\-]\s*\d{1,2}\s*[.\-]\s*\d{1,2}\s*\.?|\(\s*[가-힣]\s*\))+\d{1,2}\s*:\s*\d{2}\s*[-~–]\s*\d{1,2}\s*:\s*\d{2}\s*/, '')
     .replace(/^[\/\s:：\-]+/, '')                               // 포스터 "/ 장소 / 중앙대학교병원"
-    .replace(/\s*[▪■◼•ㆍ○◦].*$/, '')                           // 다음 항목 글머리표 "▪ 참석 대상자", "ㆍ사내 강사"
-    .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|사전등록|등록방법|등록비|입금|초록|프로그램|숙박|문의|※|소요|발표자).*$/, '')
+    .replace(/\s*[▪■◼•ㆍ○◦©◎⊙].*$/, '')                       // 다음 항목 글머리표 "▪ 참석 대상자", "ㆍ사내 강사", 스캔 '○'→'©'
+    .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|사전등록|등록방법|등록비|입금|초록|프로그램|숙박|문의|※|소요|발표자|접\s*수|교\s*육\s*비).*$/, '')
     .replace(/\s*(?:현장\s*참여|ZOOM|Zoom|zoom).*$/, '')           // 하이브리드 교육의 온라인 병기
     .replace(/\s+[-–]\s.*$/, '')                                // 다음 줄 목록 "- 사전등록"
     .replace(/[,·|｜\-–\s]+$/, '')
@@ -2104,7 +2117,7 @@ function venueSearchName(venue) {
   if (cut > 1) v = v.slice(0, cut)
   const words = v.split(/\s+/).filter(Boolean)
   while (words.length > 1 && (VENUE_DETAIL_WORD.test(words[words.length - 1])
-    || /^[가-힣A-Za-z]{2,}(?:홀|룸|Ballroom|Hall|Room)$/.test(words[words.length - 1]))) words.pop()
+    || /^[가-힣A-Za-z]{2,}(?:홀|룸|강당|Ballroom|Hall|Room)$/.test(words[words.length - 1]))) words.pop()
   v = words.join(' ').replace(/[,·\-–|]+$/, '').trim()
   return v.length >= 2 ? v : String(venue || '').trim()
 }
