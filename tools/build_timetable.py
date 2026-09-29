@@ -11,7 +11,9 @@ from pathlib import Path
 import openpyxl
 
 APP = Path(__file__).resolve().parent.parent
-SRC = APP / "data" / "source" / "KTX 시간표(202610 기준).xlsx"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ktx_source import latest
+SRC = latest("시간표")  # ../KTX 운임표·시간표/ 에서 기준월이 가장 늦은 시간표
 OUT = APP / "data" / "ktx_timetable.json"
 
 DAY_MAP = {

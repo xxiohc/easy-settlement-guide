@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """마산역 기준 KTX 운임표 생성기.
 
-입력 : data/source/KTX 운임표 (202609기준).xls  (KORAIL 배포본)
+입력 : ../KTX 운임표·시간표/KTX 운임표 (YYYYMM기준).xls|.xlsx  (KORAIL 배포본, 기준월이 가장 늦은 파일)
 출력 : data/ktx_fares_masan.json                 (표에 있는 전 구간)
 
 경로 선정 규칙 (이 순서로 고정)
@@ -13,16 +13,16 @@
 """
 import json, heapq, re, sys
 from pathlib import Path
-import xlrd
+from ktx_source import latest, open_book
 
 APP    = Path(__file__).resolve().parent.parent
-SRC    = next(p for p in (APP / 'data' / 'source').iterdir() if p.suffix == '.xls')
+SRC    = latest('운임표')
 ORIGIN = '마산'
 
 
 def parse():
     """(역A,역B) -> 일반실 운임 / 특실 계. 같은 구간이 여러 시트에 있으면 최고운임."""
-    wb = xlrd.open_workbook(str(SRC))
+    wb = open_book(SRC)
     normal, first = {}, {}
     for sh in wb.sheets():
         hdr = col = None
