@@ -511,16 +511,28 @@ const VG_SCREEN = {
     const ready = !left.length
     const adv = vg.task === 'advance'
     if (ready && adv && !vg.pendingFinal) { vg.pendingFinal = true; vg.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; vgSave() }
-    const item = (key, title, sub, optional) => `<label class="final-check-item${optional ? ' pending' : ''}">
+    const item = (key, title, sub, optional, _req) => `<label class="final-check-item${optional ? ' pending' : ''}">
       <input type="checkbox" class="doc-checkbox" data-check="${key}" ${c[key] ? 'checked' : ''}/>
       <span class="doc-checkmark"><svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5l2.5 2.5 4.5-5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <div class="final-check-text"><strong>${escapeHtml(title)}${optional ? ' <small>(필요할 때만)</small>' : ''}</strong>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</div></label>`
-    const short = { application: vg.task === 'final' ? '앞서 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : '등록비 금액이 전표와 같은지 · 결재·합의 확인',
-      notice: vg.task === 'final' ? '앞서 냈어도 다시 첨부' : '등록비·입금 계좌 확인', bankCopy: '공문에 입금 계좌가 없을 때만',
-      settlement: '신청서 금액과 달라졌어요 · S-portal 양식함', feeEvidence: '기관·금액이 맞는지', airEvidence: '법인카드 결제 왕복 전표',
+    // 2026-09-30 지석초이: 전표 / 증빙 / 마지막 확인 — 큰 칸으로 먼저 나누고 그 안에 세부 서류. '다시 첨부'는 2회 정산의 ② 전표에서만.
+    const again = vg.task === 'final' && (vg.resumed || vgModel().bankPay?.status === 'advance')
+    const name = { notice: '교육·출장 공문', feeEvidence: '등록비 영수증' }
+    const sub = {
+      application: again ? '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : vg.task === 'advance' ? '등록비 금액이 전표와 같은지 · 결재·합의 확인' : '결재·인사지원팀 합의 확인',
+      notice: again ? '① 때 냈어도 다시 첨부' : vg.task === 'advance' ? '등록비·입금 계좌 확인' : '신청서 금액 기준이 공문과 같은지',
+      bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서 금액과 달라졌어요 · S-portal 양식함',
+      feeEvidence: '세금계산서·현금영수증·카드 매출전표 중 하나 · 기관·금액 확인', airEvidence: '법인카드 결제 왕복 전표',
       shuttleEvidence: '법인카드 결제 전표', mealEvidence: '법인카드 결제 전표' }
-    const checks = [...r.docs.map(d => item(`doc-${d.key}`, d.title, short[d.key] || d.check, d.optional)),
-      ...vgUserChecks(r).map(([k, l]) => item(k, l, '', false))].join('')
+    const nLines = r.lines.length
+    const groups = [
+      ['📄', '전표', [item('doc-voucher', '대체전표', `앞 단계에서 본 대로 · 계정 ${nLines}줄 · 합계 ${Voucher.won(r.sumD)}`, false, true)], ['doc-voucher']],
+      ['📎', '증빙', r.docs.map(d => item(`doc-${d.key}`, name[d.key] || d.title, sub[d.key] || d.check, d.optional, !d.optional)), r.docs.filter(d => !d.optional).map(d => `doc-${d.key}`)],
+      ['✔️', '마지막 확인', vgUserChecks(r).map(([k, l]) => item(k, l, '', false, true)), vgUserChecks(r).map(([k]) => k)],
+    ]
+    const checks = groups.map(([icon, title, items, keys]) => `<div class="vd-group">
+        <div class="vd-group-head"><span>${icon} ${title}</span><em>${keys.filter(k => c[k]).length}/${keys.length}</em></div>
+        <div class="final-checklist">${items.join('')}</div></div>`).join('')
     // 체크리스트에 없는 남은 일(확인 필요·못 받은 영수증)만 따로 적는다
     const extra = vgLeft(r, true)
     const status = ready
@@ -529,7 +541,7 @@ const VG_SCREEN = {
     return `<div class="vg-print">${q('서류 챙기고<br>제출해요')}
       ${status}
       ${extra.length ? `<ul class="vd-left">${extra.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
-      <div class="final-checklist vd-checks">${checks}</div>
+      <div class="vd-checks">${checks}</div>
       ${adv && vg.trip.isJeju ? '<p class="vg-hint">✈️ 항공권·셔틀을 아직 예매 전이면 신청서에 공란 + ‘사후 실비 정산’이라고 적어 두세요.</p>' : ''}
       ${adv ? `<div class="vd-next"><span class="vd-next-num">2</span><div><b>영수증이 발급되면 최종 정산</b><small>첫 화면의 ‘영수증 받았어요 · 최종 정산 시작’에서 이어서 써요 · 그때 챙길 서류: ${vgFinalPreview().docs.map(d => escapeHtml(d.title)).join(', ')}</small></div></div>` : ''}
       ${r.usesCashOrBank ? `<p class="vg-warn">⏰ 현금·보통예금 지급 전표는 <b>지급일 1~2일 전</b>까지 경영지원팀에 내요</p>` : ''}
@@ -552,7 +564,7 @@ function vgLeft(r, extraOnly) {
   if (vg.task === 'final' && vg.evAll === 'after') left.push('못 받은 영수증 받기')
   if (extraOnly) return [...new Set(left)]
   const c = vg.checks || {}
-  const docsLeft = (r.docs || []).filter(d => !d.optional && !c[`doc-${d.key}`]).map(d => `${d.title} 챙기기`)
+  const docsLeft = [...(c['doc-voucher'] ? [] : ['대체전표 작성']), ...(r.docs || []).filter(d => !d.optional && !c[`doc-${d.key}`]).map(d => `${d.title} 챙기기`)]
   const userLeft = vgUserChecks(r).filter(([k]) => !c[k]).map(([, , left]) => left)
   return [...new Set([...left, ...docsLeft, ...userLeft])]
 }

@@ -3473,3 +3473,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .hl-tag.t-now { background: var(--ink); color: #fff; }
 .vd-checks { margin-top: 14px; }
 .vd-status + .final-checklist, .vd-status + .vd-left { margin-top: 14px; }
+/* 제출 준비: 전표 / 증빙 / 마지막 확인 묶음 */
+.vd-group { margin-top: 18px; }
+.vd-group-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 4px 8px; }
+.vd-group-head span { font-size: 16px; font-weight: 800; color: var(--ink); }
+.vd-group-head em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }

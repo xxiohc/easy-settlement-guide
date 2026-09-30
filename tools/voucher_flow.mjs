@@ -160,7 +160,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 원 전표번호가 가지급금 줄 적요로`, (await text(p)).includes('20261101-0001-001'))
   await next(p)
   const tdocs = await text(p)
-  check(`[${width}] 최종 서류: 신청서 다시 첨부 + 등록비 증빙`, tdocs.includes('다시 첨부') && tdocs.includes('등록비 증빙'))
+  check(`[${width}] 최종 서류: 신청서 다시 첨부 + 등록비 증빙`, tdocs.includes('다시 첨부') && tdocs.includes('등록비 영수증'))
   await checkAll(p)
   check(`[${width}] 최종 제출 준비 끝`, (await text(p)).includes('전표 제출 준비 끝'))
   check(`[${width}] 최종 정산 클릭 수 ≤ 12(서류 체크·전표번호 고치기 포함)`, clicks <= 12, `${clicks}번`)
@@ -180,6 +180,11 @@ for (const width of [1280, 390]) {
   const ln = await lines(p)
   check('최종: 여비교통비-국내출장비 / 법인카드 300,000 + 현금, 보통예금 없음',
     ln[0][0] === '여비교통비-국내출장비' && ln.some(([n, , s, a]) => n === '미지급비용-법인개인카드' && s === 'C' && a === 300000) && !ln.some(([n]) => n === '보통예금'), JSON.stringify(ln))
+  await next(p)
+  const tone = await text(p)
+  check('한 번에 정산 제출 준비: 전표/증빙/마지막 확인 묶음, 증빙에 신청서·공문·등록비 영수증, 다시 첨부 문구 없음',
+    (await screen(p)) === 'done' && /전표.*대체전표.*증빙.*출장신청서/.test(tone) && tone.includes('등록비 영수증') && !tone.includes('다시 첨부'), tone.slice(0, 160))
+  await p.evaluate(() => vgJump('voucher'))
   await p.evaluate(() => { vg.checks = { 'user-dup': true }; vgJump('amounts') })
   await p.fill('[data-money="finalAmounts.lodging"]', '50000'); await p.dispatchEvent('[data-money="finalAmounts.lodging"]', 'change'); await p.waitForTimeout(250)
   const after = await p.evaluate(() => [vgResult().lines[0].amount, Object.values(vg.checks).some(Boolean), document.getElementById('vg-screen').innerText])
