@@ -2419,16 +2419,7 @@ function renderParseResult(filename, meta, hasText) {
         </div>
       </div>`
   }
-  if (meta.yearGuessed && meta.startDate) {
-    warnHtml += `
-      <div class="result-warn full">
-        <span>⚠️</span>
-        <div>
-          <strong>공문에 연도가 없어요</strong>
-          <p>요일이 맞는 ${meta.startDate.slice(0, 4)}년으로 채웠어요. 다르면 다음 화면에서 고쳐주세요.</p>
-        </div>
-      </div>`
-  }
+  // 연도 추정 경고는 싣지 않는다 — 연도를 화면에 내보이지 않으므로 알릴 것도 없다(2026-09-30). 지난 날짜면 날짜 칸 경고가 따로 뜬다.
   const venueHtml = meta.venue
     ? `<div class="result-item full"><label>장소</label><span>${escapeHtml(meta.venue)}</span></div>`
     : `<div class="result-item full"><label>장소</label><span class="empty">확인 안 됨 — 직접 입력</span></div>`
@@ -2827,9 +2818,11 @@ function openDatePicker(el) {
 
 function periodWithYear(meta) {
   if (!meta.periodDisplay) return ''
+  // 공문에 연도가 없으면 추정한 연도를 내보이지 않고 월·일만 쓴다(2026-09-30 지석초이 "연도가 파악 안 되면 생략").
+  // 날짜 칸은 달력 값이라 내부적으로는 연도가 필요해 요일이 맞는 해를 그대로 넣어 둔다.
+  if (meta.yearGuessed) return meta.periodDisplay
   const year = (meta.startDate || '').slice(0, 4)
-  const head = year ? `${year}년 ${meta.periodDisplay}` : meta.periodDisplay
-  return meta.yearGuessed ? `${head} (연도는 추정)` : head
+  return year ? `${year}년 ${meta.periodDisplay}` : meta.periodDisplay
 }
 
 const LONG_TRIP_NIGHTS = 7
