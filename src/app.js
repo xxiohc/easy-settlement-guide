@@ -2651,7 +2651,15 @@ function prepareCard4WithMeta() {
   // 확인 뷰 메시지
   if (meta.periodDisplay && meta.days) {
     const durStr = meta.nights === 0 ? `${meta.days}일 (당일치기)` : `${meta.nights}박 ${meta.days}일`
-    document.getElementById('c4-period-msg').textContent = `${periodWithYear(meta)} — ${durStr} 출장이시군요!`
+    // 기간 / "N박 M일 출장이시군요!"를 두 줄로 — 어중간한 곳에서 줄이 꺾이지 않게 각 줄을 한 덩어리로 둔다
+    const msg = document.getElementById('c4-period-msg')
+    msg.textContent = ''
+    for (const t of [periodWithYear(meta), `${durStr} 출장이시군요!`]) {
+      const line = document.createElement('span')
+      line.className = 'period-line'
+      line.textContent = t
+      msg.appendChild(line)
+    }
   }
   if (meta.destination) {
     document.getElementById('c4-place-msg').textContent = `지역: ${meta.destination}`
@@ -3378,6 +3386,53 @@ function cityTripHtml(fare) {
     (Number.isFinite(start) ? `<ol class="ra-timeline">${rows.join('')}</ol>${taxiAlt}` : `<div class="ra-why">첫날 교육 시작시각을 고르면 병원에서 언제 나서야 하는지 알려 드려요. 시내버스 약 ${fmtDur(bus)} · 택시 약 ${fmtDur(taxi)} <b>추정</b></div>${links}`) + note
 }
 
+// 당일 열차로는 못 닿는 구간(전날 이동 강제) — '당일 가장 빠른 길'과 '전날 이렇게 가세요'를 같이 보인다(2026-09-30 지석초이:
+// "수원은 아침 도착 열차가 없는데 이럴 때 동탄역으로 환승 알려줘"). 예전엔 "당일 열차가 없어요" 한 줄뿐이었다.
+function noTrainHtml() {
+  const head = `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>전날 이동</b></div>
+    <div class="ra-why">첫날 ${escapeHtml(state.startTime)} 시작에 닿는 당일 열차가 없어요</div>`
+  const r = computeRoutePlan()
+  const dest = r && r.dest
+  if (!dest || typeof earliestSameDay !== 'function') return head
+  const args = { lat: dest.lat, lon: dest.lon, dow: r.dow, destRow: dest.row || null, access: state.accessOverride, transit: state.transitAccess }
+  const legLine = it => it.legs.map((l, i) => `${i === 0 ? '마산' : escapeHtml(l.from)} ${fmtTime(l.dep)} → ${escapeHtml(l.to)} ${fmtTime(l.arr)}`).join(' · 환승 · ')
+  let html = head
+  const fast = earliestSameDay(args)
+  const start = toMinutes(state.startTime)
+  if (fast) {
+    const late = fast.site - start
+    html += `<div class="ra-earlier"><div class="ra-earlier-title">당일 가장 빠른 길 — ${escapeHtml(fast.station)}역${fast.transfers ? ` (${escapeHtml(fast.via.join('·'))} 환승)` : ''}</div>
+      ${legLine(fast)}<span class="ra-sub">현장 약 ${fmtTime(fast.site)} 도착(역→현장 ${fmtDur(fast.access)} 추정) — 교육 시작보다 ${fmtDur(Math.max(late, 0))} 늦어 당일로는 안 돼요</span></div>`
+  }
+  const prev = planPreviousDay(args)
+  if (prev && prev.options.length) {
+    const rows = prev.options.slice(0, 2).map(o => `<li>${legLine(o)}${o.transfers ? ` <span class="ra-sub">${escapeHtml(o.via.join('·'))} 환승</span>` : ' <span class="ra-sub">직통</span>'}</li>`).join('')
+    html += `<div class="ra-earlier"><div class="ra-earlier-title">전날(${shortDate(state.startDate, -1)}) 이렇게 가세요 — ${escapeHtml(prev.station)}역 도착</div>
+      <ol class="ra-prev-list">${rows}</ol><span class="ra-sub">역→현장 ${fmtDur(prev.access)} 추정 · 전날 밤 10시 전에 닿는 늦은 편부터 보여 드려요</span></div>`
+  }
+  return html
+}
+
+// 대안 여정(2026-09-30 지석초이: "수원이 애매할 때 동탄역을 대안 여정으로(환승편), 직통은 잘 없더라"). 역산이 고른 편 말고
+// 환승편·다른 도착역 중 제때 닿는 편을 두 개까지 보인다. 정산 운임은 위의 권한 편 기준 그대로다.
+function altRoutesHtml(best) {
+  const r = computeRoutePlan()
+  const alts = ((r && r.plan && r.plan.alternatives) || [])
+    .filter(a => a.dep !== best.dep || a.station !== best.station)
+    .filter(a => a.transfers > 0 || a.station !== best.station)
+    .slice(0, 2)
+  if (!alts.length) return ''
+  const start = toMinutes(state.startTime)
+  const rows = alts.map(a => {
+    const legs = a.legs.map((l, i) => `${i === 0 ? '마산' : escapeHtml(l.from)} ${fmtTime(l.dep)} → ${escapeHtml(l.to)} ${fmtTime(l.arr)}`).join(' · 환승 · ')
+    const site = a.arr + a.access
+    return `<li><b>${escapeHtml(a.station)}역</b>${a.transfers ? ` (${escapeHtml(a.via.join('·'))} 환승)` : ' (직통)'}<span class="ra-sub">${legs}</span>` +
+      `<span class="ra-sub">현장 약 ${fmtTime(site)} 도착 ${Number.isFinite(start) ? slackPill(start - site) : ''}</span></li>`
+  }).join('')
+  return `<div class="ra-earlier"><div class="ra-earlier-title">대안 여정</div><ol class="ra-prev-list">${rows}</ol>` +
+    `<span class="ra-sub">정산 운임은 위에서 권한 편 기준이에요. 좌석·시간은 코레일·SRT에서 확인하세요.</span></div>`
+}
+
 function slackPill(min) {
   if (!Number.isFinite(min)) return ''
   const cls = min < 15 ? 'is-tight' : min <= 60 ? 'is-ok' : 'is-loose'
@@ -3448,12 +3503,9 @@ function renderPrevDayVerdict() {
     rows.push(`<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`)
     const verdict = `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>마산역 ${fmtTime(b.dep)} 출발</b></div>
       ${j.move ? '<div class="ra-why">정규 출근시각(08:30) 전에 출발하는 편이에요</div>' : ''}`
-    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>${earlierTrainHtml(b)}`, true)
+    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>${earlierTrainHtml(b)}${altRoutesHtml(b)}`, true)
   }
-  if (j.kind === 'no-train') {
-    return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>전날 이동</b></div>
-      <div class="ra-why">첫날 ${escapeHtml(state.startTime)} 시작에 닿는 당일 열차가 없어요</div>`, true)
-  }
+  if (j.kind === 'no-train') return show(noTrainHtml(), true)
   if (j.kind === 'citybus') return show(cityTripHtml(j.fare), true)
   if (j.kind === 'near') {
     return show(`<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>당일 이동</b></div>
