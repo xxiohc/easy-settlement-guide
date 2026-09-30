@@ -381,7 +381,7 @@ function voucherView(r, stage, memo, preview) {
   // 2026-09-30 지석초이: 이 화면에서 복사해 시스템에 붙일 환경이 아니다 — 보기 전용, 계정명·금액을 한 줄에 맞춰 정렬
   const amt = l => (l.amount == null && preview ? '영수증 금액' : Voucher.won(l.amount))
   // 장부처럼 한 줄 = 코드 | 계정과목 | 금액, 설명은 계정과목 아래에 같은 줄 시작으로(2026-09-30 지석초이 "코드·계정과목 정렬, 조잡하지 않게")
-  const row = l => `<div class="vt-row" tabindex="0" data-kinds="${(l.kinds || []).join(',')}">
+  const row = l => `<div class="vt-row" tabindex="0" data-side="${l.side}" data-kinds="${(l.kinds || []).join(',')}">
       <span class="vt-code">${escapeHtml(l.code || '확인 필요')}</span>
       <span class="vt-name">${escapeHtml(l.name).replace(/-/g, '-<wbr>')}</span>
       <span class="vt-amt${l.amount == null ? ' is-need' : ''}">${amt(l)}</span>
@@ -394,7 +394,8 @@ function voucherView(r, stage, memo, preview) {
     </div>`
   const blocks = preview ? [] : r.issues.filter(i => i.level === 'block')
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
-  const title = stage === 1 ? '① 지금 쓸 전표' : stage === 2 && preview ? '② 영수증이 발급되면<br>이 전표를 써요' : stage === 2 ? '② 최종 정산 전표' : '전표에 이렇게<br>적으세요'
+  // 2026-09-30 지석초이: 딱딱한 '전표에 이렇게 적으세요' 대신 친근한 말투로
+  const title = stage === 1 ? '① 등록비는 먼저<br>이렇게 처리해요' : stage === 2 && preview ? '② 영수증이 발급되면<br>이 전표를 써요' : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
   const total = r.balanced ? '<div class="vt-total is-ok">✓ 차변 합계와 대변 합계가 같아요</div>'
     : preview && r.sumD == null ? '<div class="vt-total is-wait">영수증 금액이 정해지면 두 합계가 같아져요</div>'
     : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
@@ -561,9 +562,14 @@ function vgLeft(r) {
 
 
 // 전표 칸을 가리키면 신청서의 해당 행을 칠한다
-function focusFormRows(kinds) {
-  document.querySelectorAll('#card-12 .vx-form [data-kind]').forEach(tr => tr.classList.toggle('is-focus', kinds.includes(tr.dataset.kind)))
-  document.querySelectorAll('#card-12 .vx-form .tf-total-row').forEach(t => t.classList.toggle('is-focus', kinds.length > 1))
+// 합계 행은 차변(전체 비용) 줄을 가리킬 때만 칠한다 — 대변 현금 줄에 합계까지 칠해졌다(2026-09-30 지석초이).
+// 가리키는 동안은 늘 켜 둔 형광펜(합계·등록비)을 잠시 내려 해당 행만 눈에 띄게 한다.
+function focusFormRows(kinds, side) {
+  const form = document.querySelector('#card-12 .vx-form')
+  if (!form) return
+  form.classList.toggle('has-focus', kinds.length > 0)
+  form.querySelectorAll('[data-kind]').forEach(tr => tr.classList.toggle('is-focus', kinds.includes(tr.dataset.kind)))
+  form.querySelectorAll('.tf-total-row').forEach(t => t.classList.toggle('is-focus', side === 'D' && kinds.length > 0))
 }
 
 // 입력칸·체크·전표 칸 연결(이벤트 위임)
@@ -572,10 +578,11 @@ function bindVoucherEvents() {
   if (!card || card.dataset.bound) return
   card.dataset.bound = '1'
   const kindsOf = e => (e.target.closest('.vt-row')?.dataset.kinds || '').split(',').filter(Boolean)
-  card.addEventListener('mouseover', e => { if (e.target.closest('.vt-row')) focusFormRows(kindsOf(e)) })
+  const sideOf = e => e.target.closest('.vt-row')?.dataset.side
+  card.addEventListener('mouseover', e => { if (e.target.closest('.vt-row')) focusFormRows(kindsOf(e), sideOf(e)) })
   card.addEventListener('mouseout', e => { if (e.target.closest('.vt-row') && !e.relatedTarget?.closest?.('.vt-row')) focusFormRows([]) })
-  card.addEventListener('focusin', e => { if (e.target.closest('.vt-row')) focusFormRows(kindsOf(e)) })
-  card.addEventListener('click', e => { if (e.target.closest('.vt-row')) focusFormRows(kindsOf(e)) })
+  card.addEventListener('focusin', e => { if (e.target.closest('.vt-row')) focusFormRows(kindsOf(e), sideOf(e)) })
+  card.addEventListener('click', e => { if (e.target.closest('.vt-row')) focusFormRows(kindsOf(e), sideOf(e)) })
   card.addEventListener('change', e => {
     const el = e.target
     if (el.dataset.money) {

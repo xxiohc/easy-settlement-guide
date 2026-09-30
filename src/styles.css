@@ -3440,7 +3440,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vt-d .vt-head-row b { color: var(--primary); }
 .vt-c .vt-head-row b { color: #d9722a; }
 .vt-rows { flex: 1; }
-.vt-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: baseline; padding: 14px 18px; border-bottom: 1px solid #eef0f3; cursor: pointer; transition: background-color .15s; }
+.vt-row { display: grid; grid-template-columns: 94px minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: baseline; padding: 14px 18px; border-bottom: 1px solid #eef0f3; cursor: pointer; transition: background-color .15s; }
 .vt-row:last-child { border-bottom: 0; }
 .vt-row:hover, .vt-row:focus { outline: none; background: #fffbe0; }
 .vt-code { font-size: 14px; font-weight: 700; color: var(--subtle); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; white-space: nowrap; }
@@ -3465,3 +3465,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   .vt-name { font-size: 15.5px; }
   .vt-amt { font-size: 16.5px; }
 }
+/* 전표 줄을 가리키는 동안: 늘 켜 둔 형광펜은 잠시 내리고 해당 행만 칠한다 */
+.vx-form.has-focus tr.hl-main:not(.is-focus) > th, .vx-form.has-focus tr.hl-main:not(.is-focus) > td,
+.vx-form.has-focus .tf-total-row.hl-main:not(.is-focus) { background: transparent !important; }
+.vx-form.has-focus tr.hl-pay:not(.is-focus) { opacity: .45; }
