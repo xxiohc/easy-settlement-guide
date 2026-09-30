@@ -36,10 +36,22 @@
 
   const sum = arr => arr.reduce((a, x) => a + (num(x) || 0), 0)
 
+  // 먼저 받는 돈(2026-09-30 지석초이): 등록비만 / 여비(일당·숙박·교통)만 / 둘 다. 예전 저장분은 등록비만.
+  const advKindsOf = v => (v.advKinds && v.advKinds.length ? v.advKinds : ['fee'])
+  const travelSum = v => {
+    const xs = (v.costs || []).filter(c => FIXED_CASH.includes(c.kind) && num(c.amount) != null && c.amount > 0)
+    return xs.length ? sum(xs.map(c => c.amount)) : null
+  }
+  const ADV_NAME = k => (k.includes('fee') && k.includes('travel') ? '등록비·여비' : k.includes('travel') ? '여비' : '등록비')
+
   // 처리 방법 판정(기획 A~E). 큰 금액이라는 이유만으로 선지급을 고르지 않는다 — 사용자가 고른 할 일과
   // 증빙 시점·기존 처리 상태로만 정한다.
   function decidePlan(v) {
     if (v.task === 'advance') {
+      const ak = advKindsOf(v)
+      if (!ak.includes('fee')) return { code: 'B', title: '여비를 먼저 받고, 다녀와서 정산을 마무리해요',
+        why: '일당·숙박비·교통비를 출장 전에 먼저 받아 두는 경우예요. 먼저 받은 돈을 ‘가지급금’으로 적어 두고, 다녀와서 실제 금액으로 정리해요.',
+        now: '여비 선지급 전표 작성', later: '다녀와서 최종 정산 전표 작성' }
       if (v.feeEvidence === 'after') return { code: 'B', title: '등록비를 먼저 보내고, 영수증이 발급되면 정산을 마무리해요',
         why: '돈은 지금 보내야 하지만 정산에 필요한 증빙은 나중에 나오기 때문이에요. 먼저 보낸 돈을 ‘가지급금’으로 적어 두고, 증빙을 받은 뒤 실제 비용으로 정리해요.',
         now: '등록비 선지급 전표 작성', later: '영수증(증빙)이 발급되면 최종 정산 전표 작성' }
@@ -58,8 +70,8 @@
     if (missingEv.length) return { code: 'D', title: '아직 받지 못한 증빙이 있어요',
       why: `${missingEv.join('·')} 증빙을 받아야 최종 정산을 마칠 수 있어요. 지금까지 적은 내용은 이 기기에 저장해 두고 이어서 할 수 있어요.`,
       now: '부족한 증빙 받기', later: '증빙을 받으면 이어서 작성' }
-    if (adv && v.bankPay.status === 'advance') return { code: 'C', title: '먼저 보낸 등록비까지 포함해 최종 정산해요',
-      why: '먼저 보낸 금액은 다시 보내지 않고, 이번 전표에서 가지급금을 정리해요.', now: '최종 정산 전표 작성', later: '' }
+    if ((adv && v.bankPay.status === 'advance') || num(v.travelAdv) != null) return { code: 'C', title: '먼저 받은 돈까지 포함해 최종 정산해요',
+      why: '먼저 받은 금액은 다시 받지 않고, 이번 전표에서 가지급금을 정리해요.', now: '최종 정산 전표 작성', later: '' }
     return { code: 'A', title: '지금 최종 정산을 준비할 수 있어요',
       why: '전체 비용과 이미 결제한 내역을 확인한 뒤, 이번에 지급할 금액을 정리할게요.', now: '최종 정산 전표 작성', later: '' }
   }
@@ -70,19 +82,25 @@
     return { key, name: a.name, code: a.code, side, amount: num(amount), plain, memo: memo || '', kinds }
   }
 
-  // 선지급 전표(p.6): 차 가지급금-기타 / 대 보통예금
+  // 선지급 전표(p.6): 차 가지급금-기타 / 대 보통예금(등록비, 병원→주최기관) · 현금(여비, 병원→직원)
+  // 여비 선지급은 원 자료 사례(등록비)와 같은 방식(가지급금)으로 잡는다 — 받는 계정만 현금(1101, 직원 정액 지급)
   function buildAdvance(v, rules) {
-    const fee = num(v.advanceAmount != null ? v.advanceAmount : (v.costs || []).find(c => c.kind === 'fee')?.amount)
-    const lines = [
-      line(rules, 'advance', 'D', fee, '먼저 보내는 등록비를 잠시 적어 두는 금액', '', ['fee']),
-      line(rules, 'bank', 'C', fee, '병원 계좌에서 주최기관으로 보내는 금액', '', ['fee']),
-    ]
+    const ak = advKindsOf(v)
+    const fee = ak.includes('fee') ? num(v.advanceAmount != null ? v.advanceAmount : (v.costs || []).find(c => c.kind === 'fee')?.amount) : 0
+    const trav = ak.includes('travel') ? num(v.advanceTravel != null ? v.advanceTravel : travelSum(v)) : 0
+    const travKinds = (v.costs || []).filter(c => FIXED_CASH.includes(c.kind) && num(c.amount) > 0).map(c => c.kind)
+    const debitKinds = [...(ak.includes('fee') ? ['fee'] : []), ...(ak.includes('travel') ? travKinds : [])]
+    const total = fee == null || trav == null ? null : fee + trav
+    const lines = [line(rules, 'advance', 'D', total, `먼저 받는 ${ADV_NAME(ak)}를 잠시 적어 두는 금액`, '', debitKinds)]
+    if (ak.includes('fee')) lines.push(line(rules, 'bank', 'C', fee, '병원 계좌에서 주최기관으로 보내는 등록비', '', ['fee']))
+    if (ak.includes('travel')) lines.push(line(rules, 'cash', 'C', trav, `직원에게 먼저 주는 여비(${travKinds.map(k => KIND_LABEL[k]).join('·')})`, '받는 직원 사번', travKinds))
     const issues = []
-    if (fee == null) issues.push({ level: 'block', key: 'fee', msg: '먼저 보낼 등록비 금액을 넣어 주세요' })
+    if (ak.includes('fee') && fee == null) issues.push({ level: 'block', key: 'fee', msg: '먼저 보낼 등록비 금액을 넣어 주세요' })
+    if (ak.includes('travel') && trav == null) issues.push({ level: 'block', key: 'travel', msg: '먼저 받을 여비 금액을 넣어 주세요' })
     const plan = decidePlan(v)
     if (plan.code === 'E') issues.push({ level: 'block', key: 'prepayWithEvidence', msg: rules.unconfirmed.prepayWithEvidence })
     if (plan.code === 'D') issues.push({ level: 'block', key: 'feeEvidence', msg: '등록비 증빙을 언제 받는지 주최기관에 확인해 주세요' })
-    return finish({ kind: 'advance', lines, issues, plan }, v, rules)
+    return finish({ kind: 'advance', lines, issues, plan, advKinds: ak, advFee: fee, advTravel: trav }, v, rules)
   }
 
   // 최종 정산 전표(p.7): 차 비용 계정(전체 인정 비용 − 이미 비용 처리된 금액) / 대 가지급금 정리·카드·보통예금·현금
@@ -129,9 +147,28 @@
       if (it) credits.push(line(rules, 'card', 'C', it.amount, `법인카드로 결제한 ${KIND_LABEL[k]}`, '카드번호·승인일(매출전표 보고)', [k]))
     }
     const cashItems = items.filter(i => FIXED_CASH.includes(i.kind))
+    const travAdv = num(v.travelAdv)
+    if (v.travelAdvUnknown) issues.push({ level: 'block', key: 'advanceStatus', msg: rules.unconfirmed.advanceStatus })
     if (cashItems.length) {
       const cashAmt = cashItems.some(i => num(i.amount) == null) ? null : sum(cashItems.map(i => i.amount))
-      credits.push(line(rules, 'cash', 'C', cashAmt, `직원에게 지급(${cashItems.map(i => KIND_LABEL[i.kind]).join('·')})`, '받는 직원 사번', cashItems.map(i => i.kind)))
+      const ck = cashItems.map(i => i.kind)
+      if (travAdv != null) {
+        // 먼저 받은 여비는 가지급금으로 정리하고, 모자란 만큼만 현금으로 더 받는다
+        credits.push(line(rules, 'advance', 'C', travAdv, '먼저 받은 여비 정리', v.advanceRef ? `원 전표 ${v.advanceRef}` : '', ck))
+        if (cashAmt != null && cashAmt > travAdv) credits.push(line(rules, 'cash', 'C', cashAmt - travAdv, '더 받을 여비(차액)', '받는 직원 사번', ck))
+        if (cashAmt != null && cashAmt < travAdv) issues.push({ level: 'block', key: 'overAdvance', msg: rules.unconfirmed.overAdvance })
+        if (cashAmt == null) credits.push(line(rules, 'cash', 'C', null, '더 받을 여비(차액)', '받는 직원 사번', ck))
+      } else {
+        credits.push(line(rules, 'cash', 'C', cashAmt, `직원에게 지급(${cashItems.map(i => KIND_LABEL[i.kind]).join('·')})`, '받는 직원 사번', ck))
+      }
+    }
+    // 가지급금 정리는 한 줄로(원 전표 하나) — 등록비·여비를 함께 받았으면 합친다
+    const advs = credits.filter(c => c.key === 'advance')
+    if (advs.length > 1) {
+      const merged = { ...advs[0], amount: advs.some(a => a.amount == null) ? null : sum(advs.map(a => a.amount)),
+        plain: '먼저 받은 등록비·여비 정리', kinds: [...new Set(advs.flatMap(a => a.kinds))], memo: advs.find(a => a.memo)?.memo || '' }
+      credits.splice(credits.indexOf(advs[0]), 1, merged)
+      for (const a of advs.slice(1)) credits.splice(credits.indexOf(a), 1)
     }
 
     const debitItems = items.filter(i => !i.excluded)
@@ -176,9 +213,9 @@
     const docs = []
     const add = (key, extra = {}) => docs.push({ key, title: D[key].title, check: extra.check || D[key].check, src: D[key].src, optional: !!extra.optional })
     if (r.kind === 'advance') {
-      add('application', { check: '신청서의 등록비 금액이 이번 전표·공문과 같은지, 결재와 인사지원팀 합의가 됐는지 확인해 주세요' })
+      add('application', { check: '신청서의 선지급 금액이 이번 전표·공문과 같은지, 결재와 인사지원팀 합의가 됐는지 확인해 주세요' })
       if (t.hasDoc) add('notice')
-      add('bankCopy', { optional: true })
+      if (advKindsOf(v).includes('fee')) add('bankCopy', { optional: true })
       return docs
     }
     add('application', { check: '앞서 냈더라도 이번 전표에 다시 첨부해요. 교육명·일정·금액, 결재와 인사지원팀 합의를 확인해 주세요' })
@@ -197,9 +234,10 @@
     const t = v.trip || {}
     const title = t.title || '교육·출장'
     const day = t.startDate ? `${+t.startDate.slice(5, 7)}월 ${+t.startDate.slice(8, 10)}일` : ''
-    if (v.task === 'advance') return `${title} 등록비 선지급${day ? ` / 교육일 ${day}` : ''}`
-    const adv = v.paid && v.paid.bank && v.bankPay && v.bankPay.status === 'advance'
-    return `${title} 최종 정산${adv ? ' / 선지급 등록비 포함' : ''}`
+    if (v.task === 'advance') return `${title} ${ADV_NAME(advKindsOf(v))} 선지급${day ? ` / 교육일 ${day}` : ''}`
+    const advFee = v.paid && v.paid.bank && v.bankPay && v.bankPay.status === 'advance'
+    const advTrav = num(v.travelAdv) != null
+    return `${title} 최종 정산${advFee || advTrav ? ` / 선지급 ${ADV_NAME([...(advFee ? ['fee'] : []), ...(advTrav ? ['travel'] : [])])} 포함` : ''}`
   }
 
   // 같은 교육·출장인지 가리는 열쇠 — 다른 건의 저장 내역이 섞이지 않게
@@ -207,7 +245,7 @@
     return [t.title || '', t.startDate || '', t.endDate || '', t.place || t.region || ''].join('|')
   }
 
-  const api = { expenseAccountKey, costItems, decidePlan, buildAdvance, buildFinal, memoDraft, tripKey, won, KIND_LABEL, FIXED_CASH, CARD_KINDS }
+  const api = { travelSum, advKindsOf, expenseAccountKey, costItems, decidePlan, buildAdvance, buildFinal, memoDraft, tripKey, won, KIND_LABEL, FIXED_CASH, CARD_KINDS }
   if (typeof module !== 'undefined' && module.exports) module.exports = api
   else root.Voucher = api
 })(typeof window !== 'undefined' ? window : globalThis)

@@ -108,10 +108,10 @@ function renderVoucherResume() {
   const t = s.trip || {}
   const day = t.startDate ? `${shortDate(t.startDate)}${t.endDate && t.endDate !== t.startDate ? ` ~ ${shortDate(t.endDate)}` : ''}` : ''
   const head = s.pendingFinal
-    ? `<b>${escapeHtml(t.title || '교육·출장')}</b><span>최종 정산이 남아 있어요 · 선지급 ${Voucher.won(s.advanceAmount)}${day ? ` · ${escapeHtml(day)}` : ''}</span>`
+    ? `<b>${escapeHtml(t.title || '교육·출장')}</b><span>최종 정산이 남아 있어요 · 먼저 받은 ${vgWord(s).what} ${Voucher.won(vgAdvTotal(s))}${day ? ` · ${escapeHtml(day)}` : ''}</span>`
     : `<b>${escapeHtml(t.title || '교육·출장')}</b><span>전표 안내를 이어서 할 수 있어요${day ? ` · ${escapeHtml(day)}` : ''}</span>`
   const go = s.pendingFinal
-    ? `<button type="button" class="vg-btn vg-btn-primary" onclick="resumeVoucherGuide(true)">영수증 받았어요 · 최종 정산 시작</button>`
+    ? `<button type="button" class="vg-btn vg-btn-primary" onclick="resumeVoucherGuide(true)">${vgWord(s).btn}</button>`
     : `<button type="button" class="vg-btn vg-btn-primary" onclick="resumeVoucherGuide(false)">이어하기</button>`
   box.innerHTML = `<div class="vg-resume">${head}
     <div class="vg-resume-btns">${go}<button type="button" class="vg-btn" onclick="if (confirm('저장된 전표 안내를 지울까요?')) vgDelete()">삭제</button></div>
@@ -124,11 +124,45 @@ const vgFee = () => (vg.costs || []).find(c => c.kind === 'fee' && c.amount)
 const vgFeePaidByCardBefore = () => vg.trip.feeStatus === 'paid' && vg.trip.receiptType === 'card-receipt'
 const vgReceiptKinds = () => (vg.costs || []).filter(c => c.amount == null).map(c => c.kind)
 
+// 먼저 받을 수 있는 돈: 등록비(카드로 이미 낸 게 아닐 때) · 여비(일당·숙박·교통, 온라인 아님)
+function vgAdvOptions() {
+  const out = []
+  if (vgFee() && !vgFeePaidByCardBefore()) out.push('fee')
+  if (!vg.trip.isOnline && Voucher.travelSum(vg)) out.push('travel')
+  return out
+}
+function vgAdvKinds(src = vg) {
+  if (src.advKinds && src.advKinds.length) return src.advKinds
+  const opts = src === vg ? vgAdvOptions() : ['fee']
+  return opts.length === 1 ? opts : ['fee']
+}
+// 2회 정산 ② 시점 말: 등록비만이면 '영수증 발급', 여비가 끼면 '다녀와서'
+function vgWord(src = vg) {
+  const k = vgAdvKinds(src)
+  const what = k.includes('fee') && k.includes('travel') ? '등록비·여비' : k.includes('travel') ? '여비' : '등록비'
+  return k.includes('travel')
+    ? { what, later: '다녀와서', when: '다녀와서 서류가 갖춰지면', btn: '다녀왔어요 · 최종 정산 시작' }
+    : { what, later: '영수증 발급 후', when: '영수증이 발급되면', btn: '영수증 받았어요 · 최종 정산 시작' }
+}
+function vgAdvTotal(src = vg) {
+  const k = vgAdvKinds(src)
+  const fee = k.includes('fee') ? (src.advanceAmount ?? (src.costs || []).find(c => c.kind === 'fee')?.amount ?? null) : 0
+  const tr = k.includes('travel') ? (src.advanceTravel ?? Voucher.travelSum(src)) : 0
+  return fee == null || tr == null ? null : fee + tr
+}
+
 // 한 번에 하나씩 받은 답을 voucher.js 입력(paid·bankPay·cardItems·evidence)으로 옮긴다
-function vgModel() {
+function vgModel(opts = {}) {
   const fee = vgFee()
+  const ak = vgAdvKinds()
   const m = { ...vg, paid: {}, bankPay: null, cardItems: {}, evidence: {}, refund: vg.feePay === 'refund' }
-  const pay = vg.feePay || (vgFeePaidByCardBefore() ? 'card' : null)
+  // 이어하기(②)에서 '먼저 받은 돈 처리됐나요?' 답(feePay)은 선지급한 항목에만 적용한다
+  const advState = opts.preview ? 'advance' : vg.resumed ? vg.feePay : null
+  let pay = vg.feePay || (vgFeePaidByCardBefore() ? 'card' : null)
+  if (opts.preview || vg.resumed) pay = ak.includes('fee') ? advState : (vgFeePaidByCardBefore() ? 'card' : 'none')
+  if (ak.includes('travel') && advState === 'advance') m.travelAdv = vg.advanceTravel ?? Voucher.travelSum(vg)
+  if (ak.includes('travel') && advState === 'unknown') m.travelAdvUnknown = true
+  m.advKinds = ak
   if (fee) {
     const amt = vg.advanceAmount ?? fee.amount
     if (pay === 'advance') { m.paid.bank = true; m.bankPay = { amount: amt, status: 'advance', ref: vg.advanceRef || '' } }
@@ -147,18 +181,17 @@ function vgResult() {
   const m = vgModel()
   vg.memo = Voucher.memoDraft(m)
   m.memo = vg.memo
-  if (vg.task === 'advance') { m.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; return Voucher.buildAdvance(m, VG_RULES) }
+  if (vg.task === 'advance') { m.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; m.advanceTravel = vg.advanceTravel ?? null; return Voucher.buildAdvance(m, VG_RULES) }
   return Voucher.buildFinal(m, VG_RULES)
 }
 
 // 선지급 건의 ② 최종 정산 전표 미리보기 — 영수증 금액은 아직 모르므로 '영수증 금액'으로 남긴다
 function vgFinalPreview() {
-  const keep = { task: vg.task, feePay: vg.feePay }
-  vg.task = 'final'; vg.feePay = 'advance'
-  const m = vgModel()
-  Object.assign(vg, keep)
+  const keepTask = vg.task
+  vg.task = 'final'
+  const m = vgModel({ preview: true })
+  vg.task = keepTask
   m.task = 'final'; m.evidence = {}
-  m.bankPay = { amount: vg.advanceAmount ?? vgFee()?.amount ?? null, status: 'advance', ref: '' }
   m.memo = Voucher.memoDraft(m)
   const r = Voucher.buildFinal(m, VG_RULES)
   r.memo = m.memo
@@ -173,7 +206,9 @@ function vgScreens() {
   else list.push(['task', 0])
   if (vg.task === 'advance') {
     // 2회 정산(원 자료 p.4 Case②): ① 지금 선지급 전표, ② 영수증(적격증빙) 발급 후 최종 정산 전표를 미리 보여 준다
-    list.push(['advEv', 0], ['voucher', 1], ['purpose', 1])
+    if (vgAdvOptions().length > 1) list.push(['advWhat', 0])
+    if (vgAdvKinds().includes('fee')) list.push(['advEv', 0])
+    list.push(['voucher', 1], ['purpose', 1])
     if (vg.purpose === 'edu') list.push(['job', 1])
     list.push(['voucher2', 1], ['done', 2])
   } else if (vg.task === 'final') {
@@ -192,7 +227,7 @@ function vgScreens() {
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
 }
-const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'advEv', 'feePay', 'purpose', 'job', 'evidence']
+const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'advWhat', 'advEv', 'feePay', 'purpose', 'job', 'evidence']
 
 function vgGo(delta) {
   const list = vgScreens()
@@ -243,7 +278,7 @@ function renderVoucher() {
   document.getElementById('card-12')?.classList.toggle('has-aside', vg.screen === 'voucher' || vg.screen === 'voucher2')
   const next = document.getElementById('vg-next')
   const isChoice = VG_CHOICE_SCREENS.includes(vg.screen)
-  next.textContent = { receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? '다음 · 영수증 발급 후 최종 정산 보기' : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
+  next.textContent = { receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
   next.classList.toggle('hidden', isChoice || vg.screen === 'done')
   next.disabled = vg.screen === 'receipts' && vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
 }
@@ -316,7 +351,8 @@ function markForm(stage, r) {
     const memoRow = cur === '사유' || cur === '출장기간'
     if (kind) tr.dataset.kind = kind
     if (stage === 1) {
-      if (kind === 'fee') { tr.classList.add('hl-main'); tag(last, '① 지금 보내는 금액', 't-now') }
+      const advK = (r.lines.find(l => l.side === 'D')?.kinds) || []
+      if (kind && advK.includes(kind)) { tr.classList.add('hl-main'); if (th || tr.previousElementSibling?.dataset.kind !== kind) tag(last, kind === 'fee' ? '① 지금 보내는 금액' : '① 지금 받는 금액', 't-now') }
       else if (memoRow) { tr.classList.add('hl-soft'); if (cur === '사유') tag(last, '적요에 써요', 't-memo') }
       else tr.classList.add('hl-dim')
     } else {
@@ -338,7 +374,9 @@ function compareAside(r, kind) {
   const checks = []
   const planFee = vgFee()?.amount ?? null
   if (kind === 'advance') {
-    checks.push(['신청서 등록비', planFee, '전표 금액', r.sumD])
+    const ak = vgAdvKinds()
+    const plan = (ak.includes('fee') ? planFee ?? 0 : 0) + (ak.includes('travel') ? Voucher.travelSum(vg) ?? 0 : 0)
+    checks.push([ak.includes('travel') ? `신청서 ${vgWord().what}` : '신청서 등록비', plan, '전표 금액', r.sumD])
   } else {
     const planTotal = vg.formTotal ?? vg.planTotal ?? null
     checks.push(['신청서 출장비 합계', planTotal, '전표 전체 비용', r.finalTotal])
@@ -357,7 +395,7 @@ function compareAside(r, kind) {
     : '<div class="vc-status is-ok">✓ 신청서와 전표 금액이 같아요</div>'
   const stage = kind === 'advance' ? 1 : 2
   const legend = stage === 1
-    ? '<div class="vx-legend"><mark>형광펜</mark> 칸이 지금 전표에 쓰는 금액이에요 · 나머지는 영수증이 발급되면 ②에서 정산해요</div>'
+    ? `<div class="vx-legend"><mark>형광펜</mark> 칸이 지금 먼저 받는 금액이에요 · 나머지는 ${vgWord().when} ②에서 정산해요</div>`
     : '<div class="vx-legend"><mark>형광펜</mark> 합계가 차변 합계예요 · 항목마다 어떻게 나가는 돈인지 붙여 뒀어요 · 왼쪽 전표 칸을 누르면 해당 행이 칠해져요</div>'
   const form = vg.formHtml
     ? `${legend}<div class="vx-form">${markForm(stage, r)}</div>`
@@ -370,11 +408,23 @@ function compareAside(r, kind) {
 }
 
 // 2회 정산 단계 표시 — ① 지금 선지급 → ② 영수증 발급 후 최종 정산(2026-09-30 지석초이: 기준은 '교육 종료'가 아니라 '영수증 발급')
+// 왜 두 번 정산하나요? — 접지 않고 보여 준다(2026-09-30 지석초이 "왜 두 번 해야 하는지 알기 쉽게")
+function twoStepWhy() {
+  return `<div class="ts-why"><div class="ts-why-title">왜 두 번 정산하나요?</div>
+    <ul class="ts-reasons">
+      <li><span>💰</span><p>등록비가 커서 <b>병원 돈으로 먼저 보내야</b> 할 때</p></li>
+      <li><span>🧳</span><p>일당·숙박비·교통비를 <b>출장 전에 먼저 받아야</b> 할 때</p></li>
+      <li><span>🧾</span><p>영수증 같은 <b>증빙이 아직 없을</b> 때</p></li>
+    </ul>
+    <div class="ts-flow"><div><b>① 지금 먼저 받기</b><small>가지급금으로 잠시 적어 둬요</small></div><i>→</i>
+      <div><b>② 다녀와서 서류가 갖춰지면</b><small>실제 비용으로 최종 정산해요</small></div></div></div>`
+}
 function stageBar(stage) {
   if (!stage) return `<div class="vs-bar vs-one"><span class="vs-step is-on"><i>1</i>한 번에 정산</span><small>영수증을 모두 받은 뒤 전표 한 장으로 끝나요</small></div>`
-  return `<div class="vs-bar"><span class="vs-step${stage === 1 ? ' is-on' : ' is-done'}"><i>${stage === 1 ? '1' : '✓'}</i>지금 · 등록비 선지급</span><b class="vs-arrow">→</b>
-    <span class="vs-step${stage === 2 ? ' is-on' : ''}"><i>2</i>영수증 발급 후 · 최종 정산</span></div>
-    <p class="vs-note">${stage === 1 ? '2회 정산이에요. 지금은 등록비만 먼저 보내고, 등록비 영수증(세금계산서·현금영수증 등)이 발급되면 ②로 최종 정산해요.' : '영수증을 받으면 이 전표로 마무리해요. 먼저 보낸 등록비(가지급금)를 여기서 정리해요.'}</p>`
+  const W = vgWord()
+  return `<div class="vs-bar"><span class="vs-step${stage === 1 ? ' is-on' : ' is-done'}"><i>${stage === 1 ? '1' : '✓'}</i><em>지금 · ${W.what} 먼저 받기</em></span><b class="vs-arrow">→</b>
+    <span class="vs-step${stage === 2 ? ' is-on' : ''}"><i>2</i><em>${W.later} · 최종 정산</em></span></div>
+    ${stage === 1 ? twoStepWhy() : `<p class="vs-note">${W.when} 이 전표로 마무리해요. 먼저 받은 ${W.what}(가지급금)를 여기서 정리해요.</p>`}`
 }
 
 function voucherView(r, stage, memo, preview) {
@@ -396,7 +446,8 @@ function voucherView(r, stage, memo, preview) {
   const blocks = preview ? [] : r.issues.filter(i => i.level === 'block')
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
   // 2026-09-30 지석초이: 딱딱한 '전표에 이렇게 적으세요' 대신 친근한 말투로
-  const title = stage === 1 ? '① 등록비는 먼저<br>이렇게 처리해요' : stage === 2 && preview ? '② 영수증이 발급되면<br>이 전표를 써요' : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
+  const W = vgWord()
+  const title = stage === 1 ? `① ${W.what}는 먼저<br>이렇게 처리해요` : stage === 2 && preview ? `② ${W.when}<br>이 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
   const total = r.balanced ? '<div class="vt-total is-ok">✓ 차변 합계와 대변 합계가 같아요</div>'
     : preview && r.sumD == null ? '<div class="vt-total is-wait">영수증 금액이 정해지면 두 합계가 같아져요</div>'
     : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
@@ -409,7 +460,7 @@ function voucherView(r, stage, memo, preview) {
       ${total}
       ${compareAside(r, stage === 1 ? 'advance' : 'final')}
       <div class="vt-memo-row"><span>적요</span><b>${escapeHtml(memo || '')}</b></div>
-      ${preview ? '<p class="vg-hint">등록비 영수증을 받으면 첫 화면의 <b>‘영수증 받았어요 · 최종 정산 시작’</b>에서 실제 금액으로 이어서 써요.</p>' : ''}
+      ${preview ? `<p class="vg-hint">${W.when} 첫 화면의 <b>‘${W.btn}’</b>에서 실제 금액으로 이어서 써요.</p>` : ''}
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
       ${stage === 1 && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
       ${preview ? '' : `<button type="button" class="vg-link" onclick="vgJump('amounts')">금액이 달라요 · 고치기</button>`}
@@ -420,17 +471,29 @@ const VG_SCREEN = {
   task() {
     const fee = vgFee()
     const online = vg.trip.isOnline
-    const canAdvance = fee && !vgFeePaidByCardBefore()
+    const opts = vgAdvOptions()
+    const sub = opts.includes('fee') && opts.includes('travel') ? '등록비를 병원 돈으로 먼저 보내거나, 여비를 미리 받아요'
+      : opts.includes('fee') ? `교육 전에 병원 계좌로 등록비 ${fee.amount.toLocaleString()}원 송금` : '일당·숙박비·교통비를 출장 전에 미리 받아요'
     return tripChip() + q('지금 무엇을<br>하려고 하나요?') + `<div class="choice-list">
-      ${canAdvance ? pick('task', 'advance', '📤', '등록비를 먼저 보내요', `교육 전에 병원 계좌로 ${fee.amount.toLocaleString()}원 송금`) : ''}
-      ${pick('task', 'final', '🧾', online ? '교육비를 정산해요' : '다녀온 비용을 정산해요', online ? '교육이 끝난 뒤' : '다녀와서 · 지금 미리 볼 수도 있어요')}
+      ${opts.length ? pick('task', 'advance', '📤', '먼저 받아야 할 돈이 있어요', `${sub} · 두 번 정산`) : ''}
+      ${pick('task', 'final', '🧾', online ? '교육비를 정산해요' : '다녀온 비용을 한 번에 정산해요', online ? '교육이 끝난 뒤' : '다녀와서 · 지금 미리 볼 수도 있어요')}
+      </div>${opts.length ? why('두 번 정산은 언제 하나요?', '등록비가 커서 병원 돈으로 먼저 보내야 하거나, 일당·숙박비·교통비를 출장 전에 먼저 받아야 하거나, 영수증이 아직 없을 때예요. 먼저 받은 돈은 가지급금으로 적어 두고, 다녀와서 서류가 갖춰지면 실제 비용으로 최종 정산해요.') : ''}`
+  },
+
+  advWhat() {
+    const fee = vgFee()?.amount, tr = Voucher.travelSum(vg)
+    return twoStepWhy() + q('무엇을<br>먼저 받나요?') + `<div class="choice-list">
+      ${choice(JSON.stringify(vg.advKinds) === '["fee"]', `onclick="vgPick('advKinds', ['fee'])"`, '🏦', '등록비만', `병원이 주최기관에 ${fee.toLocaleString()}원 먼저 송금`)}
+      ${choice(JSON.stringify(vg.advKinds) === '["travel"]', `onclick="vgPick('advKinds', ['travel'])"`, '🧳', '여비만 (일당·숙박비·교통비)', `제가 ${tr.toLocaleString()}원 먼저 받아요`)}
+      ${choice(JSON.stringify(vg.advKinds) === '["fee","travel"]', `onclick="vgPick('advKinds', ['fee','travel'])"`, '📦', '등록비 + 여비 둘 다', `모두 ${(fee + tr).toLocaleString()}원`)}
       </div>`
   },
 
   resumeQ() {
-    return tripChip() + q('먼저 보낸 등록비는<br>처리됐나요?', `선지급 예정 ${Voucher.won(vg.advanceAmount)}`) + `<div class="choice-list">
-      ${pick('feePay', 'advance', '✅', '네, 보냈어요', '가지급금으로 먼저 보냄')}
-      ${pick('feePay', 'none', '⏳', '아직 안 보냈어요', '이번 정산 때 보내요')}
+    const W = vgWord()
+    return tripChip() + q(`먼저 받기로 한 ${W.what}는<br>처리됐나요?`, `선지급 예정 ${Voucher.won(vgAdvTotal())}`) + `<div class="choice-list">
+      ${pick('feePay', 'advance', '✅', '네, 처리됐어요', '가지급금으로 먼저 보내거나 받았어요')}
+      ${pick('feePay', 'none', '⏳', '아직 안 됐어요', '이번 정산 때 한꺼번에 처리해요')}
       ${pick('feePay', 'unknown', '❓', '잘 모르겠어요', '전표 처리자에게 확인이 필요해요')}
       ${pick('feePay', 'refund', '↩️', '취소·환불됐어요')}
       </div>`
@@ -494,9 +557,11 @@ const VG_SCREEN = {
     }).join('')
     const adv = vgModel().bankPay
     return q('바뀐 금액을<br>고쳐 주세요', '신청서와 달라지면 출장여비 정산서를 함께 내요') + `<div class="vg-box">${rows}</div>
+      ${vg.task === 'final' && vgModel().travelAdv != null ? `<div class="vg-box"><div class="vg-amt"><b>먼저 받은 여비</b>${moneyInput('advanceTravel', vgModel().travelAdv)}</div></div>` : ''}
       ${vg.task === 'final' && adv && adv.status !== 'unknown' ? `<div class="vg-box"><div class="vg-amt"><b>먼저 보낸 등록비</b>${moneyInput('advanceAmount', adv.amount)}</div>
         <div class="vg-amt"><b>그때 전표번호 <small>(있으면)</small></b><input type="text" class="info-input vg-ref" data-text="advanceRef" value="${escapeHtml(vg.advanceRef || '')}" placeholder="예: 20261001-0001-001"></div></div>` : ''}
-      ${vg.task === 'advance' ? `<div class="vg-box"><div class="vg-amt"><b>먼저 보낼 등록비</b>${moneyInput('advanceAmount', vg.advanceAmount ?? vgFee()?.amount)}</div></div>` : ''}`
+      ${vg.task === 'advance' && vgAdvKinds().includes('fee') ? `<div class="vg-box"><div class="vg-amt"><b>먼저 보낼 등록비</b>${moneyInput('advanceAmount', vg.advanceAmount ?? vgFee()?.amount)}</div></div>` : ''}
+      ${vg.task === 'advance' && vgAdvKinds().includes('travel') ? `<div class="vg-box"><div class="vg-amt"><b>먼저 받을 여비</b>${moneyInput('advanceTravel', vg.advanceTravel ?? Voucher.travelSum(vg))}</div></div>` : ''}`
   },
 
   // 전표 — 차변·대변을 크게
@@ -510,7 +575,7 @@ const VG_SCREEN = {
     const left = vgLeft(r)
     const ready = !left.length
     const adv = vg.task === 'advance'
-    if (ready && adv && !vg.pendingFinal) { vg.pendingFinal = true; vg.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; vgSave() }
+    if (ready && adv && !vg.pendingFinal) { vg.pendingFinal = true; vg.advKinds = vgAdvKinds(); if (vg.advKinds.includes('fee')) vg.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; if (vg.advKinds.includes('travel')) vg.advanceTravel = vg.advanceTravel ?? Voucher.travelSum(vg); vgSave() }
     const item = (key, title, sub, optional, _req) => `<label class="final-check-item${optional ? ' pending' : ''}">
       <input type="checkbox" class="doc-checkbox" data-check="${key}" ${c[key] ? 'checked' : ''}/>
       <span class="doc-checkmark"><svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5l2.5 2.5 4.5-5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -535,14 +600,14 @@ const VG_SCREEN = {
     // 체크리스트에 없는 남은 일(확인 필요·못 받은 영수증)만 따로 적는다
     const extra = vgLeft(r, true)
     const status = ready
-      ? `<div class="vd-status is-ok"><span>✅</span><div><b>${adv ? '① 선지급 전표 제출 준비 끝' : '전표 제출 준비 끝'}</b><small>${adv ? '영수증이 발급되면 ②로 최종 정산해요' : '내부 절차에 따라 제출하세요'}</small></div></div>`
+      ? `<div class="vd-status is-ok"><span>✅</span><div><b>${adv ? '① 선지급 전표 제출 준비 끝' : '전표 제출 준비 끝'}</b><small>${adv ? `${vgWord().when} ②로 최종 정산해요` : '내부 절차에 따라 제출하세요'}</small></div></div>`
       : `<div class="vd-status is-left"><span>📋</span><div><b>남은 일 ${left.length}가지</b><small>아래 체크리스트를 채우면 제출 준비가 끝나요</small></div></div>`
     return `<div class="vg-print">${q('서류 챙기고<br>제출해요')}
       ${status}
       ${extra.length ? `<ul class="vd-left">${extra.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
       <div class="vd-checks">${checks}</div>
       ${adv && vg.trip.isJeju ? '<p class="vg-hint">✈️ 항공권·셔틀을 아직 예매 전이면 신청서에 공란 + ‘사후 실비 정산’이라고 적어 두세요.</p>' : ''}
-      ${adv ? `<div class="vd-next"><span class="vd-next-num">2</span><div><b>영수증이 발급되면 최종 정산</b><small>첫 화면의 ‘영수증 받았어요 · 최종 정산 시작’에서 이어서 써요 · 그때 챙길 서류: ${vgFinalPreview().docs.map(d => escapeHtml(name[d.key] || d.title)).join(', ')}</small></div></div>` : ''}
+      ${adv ? `<div class="vd-next"><span class="vd-next-num">2</span><div><b>${vgWord().when} 최종 정산</b><small>첫 화면의 ‘${vgWord().btn}’에서 이어서 써요 · 그때 챙길 서류: ${vgFinalPreview().docs.map(d => escapeHtml(name[d.key] || d.title)).join(', ')}</small></div></div>` : ''}
       ${r.usesCashOrBank ? `<p class="vg-warn">⏰ 현금·보통예금 지급 전표는 <b>지급일 1~2일 전</b>까지 경영지원팀에 내요</p>` : ''}
       <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요 · 이 기기에 저장돼 있어요.</p></div>
       <div class="vg-actions">

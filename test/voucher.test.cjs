@@ -158,3 +158,28 @@ test('적요 초안', () => {
   assert.equal(V.memoDraft(base({ task: 'advance' })), '의료기관 회계기준 연수 등록비 선지급 / 교육일 10월 12일')
   assert.equal(V.memoDraft(base({ task: 'final', paid: { bank: true }, bankPay: { status: 'advance' } })), '의료기관 회계기준 연수 최종 정산 / 선지급 등록비 포함')
 })
+
+// ── 2026-09-30 지석초이: 일당·숙박·교통비(여비)도 먼저 받는 경우 ──
+test('여비만 선지급 — 차 가지급금-기타 / 대 현금(여비 합계)', () => {
+  const r = V.buildAdvance(base({ task: 'advance', advKinds: ['travel'] }), R)
+  assert.equal(r.plan.code, 'B')
+  assert.deepEqual(r.lines.map(l => [l.name, l.side, l.amount]), [['가지급금-기타', 'D', 289600], ['현금', 'C', 289600]])
+  assert.ok(r.ready)
+  assert.ok(!r.docs.some(d => d.key === 'bankCopy'), '여비만이면 통장 사본(받는 기관) 불필요')
+  assert.equal(V.memoDraft(base({ task: 'advance', advKinds: ['travel'] })), '의료기관 회계기준 연수 여비 선지급 / 교육일 10월 12일')
+})
+test('등록비·여비 함께 선지급 — 차 가지급금 589,600 / 대 보통예금 300,000 + 현금 289,600', () => {
+  const r = V.buildAdvance(base({ task: 'advance', advKinds: ['fee', 'travel'], feeEvidence: 'after' }), R)
+  assert.deepEqual(r.lines.map(l => [l.name, l.side, l.amount]), [['가지급금-기타', 'D', 589600], ['보통예금', 'C', 300000], ['현금', 'C', 289600]])
+  assert.ok(r.ready)
+})
+test('여비 선지급 뒤 최종 — 가지급금 정리, 같으면 현금 없음 / 더 들면 차액만 현금 / 덜 들면 확인 필요', () => {
+  const same = V.buildFinal(base({ task: 'final', paid: { bank: true }, bankPay: { amount: 300000, status: 'advance' }, travelAdv: 289600, evidence: { fee: 'received' } }), R)
+  assert.deepEqual(same.lines.filter(l => l.side === 'C').map(l => [l.name, l.amount]), [['가지급금-기타', 589600]])
+  assert.equal(same.employeePay, 0)
+  assert.ok(same.ready)
+  const more = V.buildFinal(base({ task: 'final', paid: { none: true }, travelAdv: 200000, finalAmounts: {}, evidence: {} }), R)
+  assert.deepEqual(more.lines.filter(l => l.side === 'C').map(l => [l.name, l.amount]), [['보통예금', 300000], ['가지급금-기타', 200000], ['현금', 89600]])
+  const less = V.buildFinal(base({ task: 'final', paid: { none: true }, travelAdv: 400000 }), R)
+  assert.ok(less.issues.some(i => i.key === 'overAdvance') && !less.ready)
+})

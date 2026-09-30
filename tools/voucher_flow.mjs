@@ -82,8 +82,10 @@ for (const width of [1280, 390]) {
   check(`[${width}] 첫 화면은 바로 '무엇을 하려고 하나요?'(확인 화면 없음)`, (await screen(p)) === 'task' && (await text(p)).includes('예상 567,200원'))
   check(`[${width}] 선택 화면은 다음 버튼 없이 고르면 넘어간다`, await p.isHidden('#vg-next'))
   await shot(p, `${width}-task`)
-  await tap(p, '등록비를 먼저 보내요')
-  check(`[${width}] 고르자마자 다음 화면`, (await screen(p)) === 'advEv')
+  await tap(p, '먼저 받아야 할 돈이 있어요')
+  check(`[${width}] 등록비·여비 둘 다 가능하면 '무엇을 먼저 받나요?' + 왜 두 번 정산 카드`, (await screen(p)) === 'advWhat' && (await text(p)).includes('왜 두 번 정산하나요?'))
+  await tap(p, '등록비만')
+  check(`[${width}] 등록비만 고르면 영수증 시점 질문`, (await screen(p)) === 'advEv')
   await shot(p, `${width}-advEv`)
   await tap(p, '교육이 끝난 뒤에 받아요')
   check(`[${width}] 전표 화면`, (await screen(p)) === 'voucher')
@@ -102,7 +104,7 @@ for (const width of [1280, 390]) {
     const y = await p.evaluate(() => [...document.querySelectorAll('.vt-sum')].map(e => Math.round(e.getBoundingClientRect().top)))
     check(`[${width}] 차변·대변 합계 줄이 같은 높이`, y[0] === y[1], JSON.stringify(y))
   }
-  check(`[${width}] 2회 정산 단계 표시(① 지금 선지급 → ② 영수증 발급 후)`, /지금 · 등록비 선지급.*영수증 발급 후 · 최종 정산/.test(await text(p)))
+  check(`[${width}] 2회 정산 단계 표시(① 지금 선지급 → ② 영수증 발급 후)`, /지금 · 등록비 먼저 받기.*영수증 발급 후 · 최종 정산/.test(await text(p)) && (await text(p)).includes('왜 두 번 정산하나요?'))
   check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본 + 크로스체크`, (await p.locator('.vx-form .tf-box').count()) === 1 && /신청서 등록비.*300,000원.*✓ 같아요/.test(await p.evaluate(() => document.querySelector('.vx-check').innerText.replace(/\s+/g, ' '))))
   await shot(p, `${width}-voucher-adv`)
   await next(p)
@@ -119,7 +121,7 @@ for (const width of [1280, 390]) {
   await checkAll(p)
   const td = await text(p)
   check(`[${width}] 제출 준비 끝 + 1~2일 전 + 지급 완료 아님`, td.includes('선지급 전표 제출 준비 끝') && td.includes('1~2일 전') && td.includes('지급·정산이 끝난 건 아니에요'), td.slice(0, 60))
-  check(`[${width}] 선지급(①+② 미리 보기) 끝까지 클릭 수 ≤ 13(서류 체크 포함)`, clicks <= 13, `${clicks}번`)
+  check(`[${width}] 선지급(①+② 미리 보기) 끝까지 클릭 수 ≤ 14(서류 체크 포함)`, clicks <= 14, `${clicks}번`)
   await shot(p, `${width}-done-adv`)
   const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('expense_guide_voucher_v1') || 'null'))
   check(`[${width}] 이 기기에 저장·최종 정산 남음`, saved && saved.pendingFinal === true && saved.advanceAmount === 300000)
@@ -131,7 +133,7 @@ for (const width of [1280, 390]) {
   clicks++; await p.click('#voucher-resume .vg-btn-primary'); await p.waitForTimeout(400)
   check(`[${width}] 재개: 처리됐는지 다시 묻는다`, (await screen(p)) === 'resumeQ')
   await shot(p, `${width}-resumeQ`)
-  await tap(p, '네, 보냈어요')
+  await tap(p, '네, 처리됐어요')
   check(`[${width}] 재개: 선지급 때 고른 목적·직종은 다시 묻지 않는다`, (await screen(p)) === 'evidence')
   await shot(p, `${width}-evidence`)
   await tap(p, '네, 다 받았어요')
@@ -168,13 +170,35 @@ for (const width of [1280, 390]) {
   await ctx.close()
 }
 
+// ── 1-b. 등록비 + 여비 함께 먼저 받기(2026-09-30 지석초이 "일당·숙박·교통비도 먼저 받는 경우") ──
+{
+  const [ctx, p] = await page(390)
+  await toCard11(p)
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  await tap(p, '먼저 받아야 할 돈이 있어요'); await tap(p, '등록비 + 여비 둘 다'); await tap(p, '교육이 끝난 뒤에 받아요')
+  const ln = await lines(p)
+  check('등록비+여비 선지급: 차 가지급금 567,200 / 대 보통예금 300,000 + 현금 267,200',
+    JSON.stringify(ln.map(l => [l[0], l[2], l[3]])) === JSON.stringify([['가지급금-기타', 'D', 567200], ['보통예금', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln))
+  { const tt = await text(p); check('여비 포함이면 ② 시점은 "다녀와서"', /지금·등록비·여비먼저받기.*다녀와서·최종정산/.test(tt.replace(/\s+/g, '')), tt.slice(0, 120)) }
+  check('신청서 형광펜: 등록비·일당·숙박·교통 행 모두', await p.evaluate(() => ['fee', 'daily', 'lodging', 'transport'].every(k => document.querySelector(`.vx-form tr.hl-main[data-kind="${k}"]`))))
+  // x-nb(줄바꿈 방지 토막)가 flex·grid의 바로 아래 자식이면 토막마다 따로 놓여 '일당 ·숙 박비'처럼 갈라진다(2026-09-30 발견)
+  const split = await p.evaluate(() => [...document.querySelectorAll('#card-12 x-nb')].filter(x => /flex|grid/.test(getComputedStyle(x.parentElement).display)).map(x => x.parentElement.className + ':' + x.textContent))
+  check('전표 안내 화면에 flex·grid 안에서 갈라지는 글자 없음', split.length === 0, JSON.stringify(split.slice(0, 5)))
+  await shot(p, 'adv-both-voucher')
+  await next(p); await tap(p, '교육·학회 참석'); await tap(p, '그 외 직원')
+  const ln2 = await p.evaluate(() => vgFinalPreview().lines.map(l => [l.name, l.side, l.amount]))
+  check('② 미리 보기: 가지급금 한 줄로 567,200 정리, 더 줄 현금 없음',
+    JSON.stringify(ln2) === JSON.stringify([['교육훈련비-기타', 'D', 567200], ['가지급금-기타', 'C', 567200]]), JSON.stringify(ln2))
+  await ctx.close()
+}
+
 // ── 2. 등록비 카드 결제 → 선지급·납부 방법 질문 생략, 카드 줄 ──
 {
   const [ctx, p] = await page(1280)
   await toCard11(p, { feeMode: 'card' })
   await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
-  check('카드 결제한 등록비는 선지급 선택지 없음', !(await text(p)).includes('등록비를 먼저 보내요'))
-  await tap(p, '다녀온 비용을 정산해요')
+  check('카드로 낸 등록비는 선지급 대상에서 빠지고 여비만 먼저 받을 수 있다', (await text(p)).includes('일당·숙박비·교통비를 출장 전에 미리 받아요'))
+  await tap(p, '다녀온 비용을 한 번에 정산해요')
   check('카드 결제는 납부 방법을 다시 묻지 않고 목적으로', (await screen(p)) === 'purpose')
   await tap(p, '회의·업무 출장'); await tap(p, '네, 다 받았어요')
   const ln = await lines(p)
@@ -197,8 +221,8 @@ for (const width of [1280, 390]) {
   const [ctx, p] = await page(1280)
   await toCard11(p, { fee: 0 })
   await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
-  check('등록비 없으면 선지급 선택지 없음', !(await text(p)).includes('등록비를 먼저 보내요'))
-  await tap(p, '다녀온 비용을 정산해요'); await tap(p, '회의·업무 출장')
+  check('등록비 없으면 선지급은 여비만', (await text(p)).includes('일당·숙박비·교통비를 출장 전에 미리 받아요') && !(await text(p)).includes('등록비를 병원 돈으로'))
+  await tap(p, '다녀온 비용을 한 번에 정산해요'); await tap(p, '회의·업무 출장')
   check('영수증 필요한 항목이 없으면 영수증 질문 없이 바로 전표', (await screen(p)) === 'voucher')
   await ctx.close()
 }
