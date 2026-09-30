@@ -82,7 +82,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 첫 화면은 바로 '무엇을 하려고 하나요?'(확인 화면 없음)`, (await screen(p)) === 'task' && (await text(p)).includes('예상 567,200원'))
   check(`[${width}] 선택 화면은 다음 버튼 없이 고르면 넘어간다`, await p.isHidden('#vg-next'))
   await shot(p, `${width}-task`)
-  { const tt = await text(p); check(`[${width}] 처음에 정산 방법 3가지(한 번에 / 등록비만 먼저 / 모두 먼저)`, tt.includes('다녀와서 한 번에 정산받을게요') && tt.includes('등록비만 먼저 회사 돈으로 보낼게요') && tt.includes('모든 비용을 먼저 받아 둘게요') && tt.includes('전표 2장'), tt.slice(0, 200)) }
+  { const tt = await text(p); check(`[${width}] 처음에 정산 방법 3가지(한 번에 / 등록비만 먼저 / 모두 먼저)`, tt.includes('다녀와서 한 번에 정산받을게요') && tt.includes('등록비만 먼저 회사 돈으로 보낼게요') && tt.includes('모든 비용을 먼저 받아 둘게요') && tt.includes('전표를 한 번 작성하면 끝나요') && tt.includes('번거롭지만 전표를 두 번 작성해야 해요') && tt.includes('추천') && tt.includes('왜 두 번 정산하나요?'), tt.slice(0, 200)) }
   await tap(p, '등록비만 먼저 회사 돈으로 보낼게요')
   check(`[${width}] 등록비만 고르면 영수증 시점 질문`, (await screen(p)) === 'advEv')
   await shot(p, `${width}-advEv`)
@@ -103,6 +103,7 @@ for (const width of [1280, 390]) {
     const y = await p.evaluate(() => [...document.querySelectorAll('.vt-sum')].map(e => Math.round(e.getBoundingClientRect().top)))
     check(`[${width}] 차변·대변 합계 줄이 같은 높이`, y[0] === y[1], JSON.stringify(y))
   }
+  check(`[${width}] ① 제목이 가지급금 처리임을 밝힌다`, (await text(p)).includes('가지급금으로 처리해요'))
   check(`[${width}] 2회 정산 단계 표시(① 지금 선지급 → ② 영수증 발급 후)`, /지금 · 등록비 먼저 받기.*영수증 발급 후 · 최종 정산/.test(await text(p)) && (await text(p)).includes('왜 두 번 정산하나요?'))
   check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본 + 크로스체크`, (await p.locator('.vx-form .tf-box').count()) === 1 && /신청서 등록비.*300,000원.*✓ 같아요/.test(await p.evaluate(() => document.querySelector('.vx-check').innerText.replace(/\s+/g, ' '))))
   await shot(p, `${width}-voucher-adv`)
@@ -188,6 +189,20 @@ for (const width of [1280, 390]) {
   const ln2 = await p.evaluate(() => vgFinalPreview().lines.map(l => [l.name, l.side, l.amount]))
   check('② 미리 보기: 가지급금 한 줄로 567,200 정리, 더 줄 현금 없음',
     JSON.stringify(ln2) === JSON.stringify([['교육훈련비-기타', 'D', 567200], ['가지급금-기타', 'C', 567200]]), JSON.stringify(ln2))
+  await ctx.close()
+}
+
+// ── 1-c. 같은 건에 이어하기 흔적(resumed·처리 상태)이 저장돼 있어도 카드11에서 다시 시작하면 정산 방법부터(2026-10-01) ──
+{
+  const [ctx, p] = await page(1280)
+  await toCard11(p)
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  await p.evaluate(() => { Object.assign(vg, { resumed: true, task: 'final', feePay: 'advance', evAll: 'received', screen: 'voucher', pendingFinal: false }); vgSave(); goToCard(11) })
+  await p.waitForTimeout(400)
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  check('흔적이 있어도 다시 시작하면 정산 방법부터', (await screen(p)) === 'task' && !(await p.evaluate(() => vg.resumed)))
+  await tap(p, '모든 비용을 먼저 받아 둘게요'); await tap(p, '교육이 끝난 뒤에 받아요')
+  check('다시 시작해도 먼저 받기는 ① 가지급금 전표', (await lines(p))[0][0] === '가지급금-기타' && (await text(p)).includes('가지급금으로 처리해요'))
   await ctx.close()
 }
 
