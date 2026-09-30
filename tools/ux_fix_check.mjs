@@ -269,6 +269,25 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await ctx.close()
 }
 
+// ── H. 2026-09-30 지석초이: 공문에 연도가 없으면 추정 연도를 화면에 쓰지 않는다('(연도는 추정)' 문구도 없음) ──
+{
+  const F = '/Users/jiseokchoi/ODDCHOI/workspace/09_교육, 출장 정산 가이드/테스트공문_업로드함/삼일아카데미_비영리법인의 회계와 세무해설.pdf'
+  const fs = await import('node:fs')
+  if (fs.existsSync(F)) {
+    const [ctx,p] = await newPage()
+    await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
+    await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(500)
+    await p.setInputFiles('#fileInput', F)
+    await p.waitForFunction(()=>!document.getElementById('ctaNext3').disabled,{timeout:120000})
+    const card3 = await p.evaluate(() => [state.parsedMeta.yearGuessed, document.getElementById('parseResult').innerText])
+    await p.click('#ctaNext3'); await p.waitForTimeout(700)
+    const head = await p.evaluate(() => document.getElementById('c4-period-msg').innerText)
+    check('H 연도 없는 공문(삼일아카데미)은 연도 추정으로 읽힌다', card3[0] === true, String(card3[0]))
+    check('H 카드3·카드4에 추정 연도·"추정" 문구가 없다', !/연도는 추정|요일이 맞는|\d{4}년/.test(card3[1] + head), head.replace(/\s+/g, ' '))
+    await ctx.close()
+  }
+}
+
 await b.close()
 console.log('\n── 요약 ──')
 console.log(`총 ${out.length}건 · FAIL ${out.filter(l=>l.startsWith('FAIL')).length}건`)
