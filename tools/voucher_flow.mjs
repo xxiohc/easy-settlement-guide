@@ -90,7 +90,12 @@ for (const width of [1280, 390]) {
   const ln = await lines(p)
   check(`[${width}] 선지급 전표: 차 가지급금-기타 1114-99 / 대 보통예금 1102-02 · 300,000`,
     JSON.stringify(ln) === JSON.stringify([['가지급금-기타', '1114-99', 'D', 300000], ['보통예금', '1102-02', 'C', 300000]]), JSON.stringify(ln))
-  check(`[${width}] 차변·대변 카드를 크게 + 합계 일치`, (await p.locator('.vt-card').count()) === 2 && (await p.textContent('.vt-total')).includes('일치'))
+  check(`[${width}] 차변·대변 카드 + 칸마다 합계 + 일치 표시`, (await p.locator('.vt-card').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.textContent('.vt-total')).includes('같아요'))
+  check(`[${width}] 전표 화면에 복사 버튼 없음`, (await p.locator('#vg-screen [data-copy], #vg-screen .vg-copy').count()) === 0)
+  if (width >= 1280) {
+    const y = await p.evaluate(() => [...document.querySelectorAll('.vt-sum')].map(e => Math.round(e.getBoundingClientRect().top)))
+    check(`[${width}] 차변·대변 합계 줄이 같은 높이`, y[0] === y[1], JSON.stringify(y))
+  }
   await shot(p, `${width}-voucher-adv`)
   await next(p)
   check(`[${width}] 서류: 출장신청서 + 통장 사본(필요할 때만)`, /출장신청서.*통장 사본/.test(await text(p)))

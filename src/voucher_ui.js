@@ -77,7 +77,7 @@ function resumeVoucherGuide(finalNow) {
   vg.fromFlow = false
   if (finalNow) {
     // 저장한 '보낼 예정액'을 실제 지급액으로 여기지 않는다 — 처리됐는지 다시 묻는다
-    Object.assign(vg, { task: 'final', feePay: null, resumed: true, evAll: null, checks: {}, memoEdited: false, pendingFinal: false, screen: 'resumeQ' })
+    Object.assign(vg, { task: 'final', feePay: null, resumed: true, evAll: null, checks: {}, pendingFinal: false, screen: 'resumeQ' })
     vgSave()
   }
   vgFrom = 2
@@ -130,7 +130,7 @@ function vgModel() {
 function vgResult() {
   if (!vg || !VG_RULES || !vg.task) return null
   const m = vgModel()
-  if (!vg.memoEdited) vg.memo = Voucher.memoDraft(m)
+  vg.memo = Voucher.memoDraft(m)
   m.memo = vg.memo
   if (vg.task === 'advance') { m.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; return Voucher.buildAdvance(m, VG_RULES) }
   return Voucher.buildFinal(m, VG_RULES)
@@ -247,7 +247,6 @@ const pick = (path, value, icon, title, sub = '') => choice(vgGet(path) === valu
 const why = (q, a) => `<details class="vg-why"><summary>${q}</summary><div>${a}</div></details>`
 const moneyInput = (path, val, ph = '금액') =>
   `<span class="vg-money"><input type="text" inputmode="numeric" class="info-input" data-money="${path}" value="${val != null && val !== '' ? Number(val).toLocaleString() : ''}" placeholder="${ph}"><em>원</em></span>`
-const copyBtn = (text, label = '복사') => `<button type="button" class="vg-copy" data-copy="${escapeHtml(text)}">${label}</button>`
 function vgGet(path) { return path.split('.').reduce((o, k) => (o == null ? o : o[k]), vg) }
 const q = (title, sub = '') => `<h1 class="card-question">${title}</h1>${sub ? `<p class="card-desc">${sub}</p>` : ''}`
 
@@ -382,27 +381,33 @@ const VG_SCREEN = {
   // 전표 — 차변·대변을 크게
   voucher(r) {
     const D = r.lines.filter(l => l.side === 'D'), C = r.lines.filter(l => l.side === 'C')
+    // 2026-09-30 지석초이: 이 화면에서 복사해 시스템에 붙일 환경이 아니다 — 보기 전용, 계정명·금액을 한 줄에 맞춰 정렬
     const card = (l, side) => `<div class="vt-card vt-${side}">
-      <button type="button" class="vt-code" data-copy="${escapeHtml(l.code || '')}" ${l.code ? '' : 'disabled'}>${escapeHtml(l.code || '코드 확인 필요')}</button>
-      <div class="vt-name">${escapeHtml(l.name)}</div>
-      <button type="button" class="vt-amt" data-copy="${l.amount ?? ''}" ${l.amount == null ? 'disabled' : ''}>${Voucher.won(l.amount)}</button>
-      <div class="vt-plain">${escapeHtml(l.plain)}${l.memo ? ` · <span class="vt-memo">적요: ${escapeHtml(l.memo)}</span>` : ''}</div>
+      <span class="vt-code">${escapeHtml(l.code || '코드 확인 필요')}</span>
+      <div class="vt-line"><span class="vt-name">${escapeHtml(l.name)}</span><span class="vt-amt${l.amount == null ? ' is-need' : ''}">${Voucher.won(l.amount)}</span></div>
+      <div class="vt-plain">${escapeHtml(l.plain)}</div>
+      ${l.memo ? `<div class="vt-memo">적요 · ${escapeHtml(l.memo)}</div>` : ''}
     </div>`
+    const sum = (label, v) => `<div class="vt-sum"><span>${label} 합계</span><b>${Voucher.won(v)}</b></div>`
     const kind = vg.task === 'advance' ? '등록비 선지급 전표' : '최종 정산 전표'
     const flow = vg.task === 'advance' ? '지금 선지급 → 교육 후 최종 정산' : (vgModel().bankPay?.status === 'advance' ? '선지급 등록비까지 정리' : '한 번에 정산')
     const blocks = r.issues.filter(i => i.level === 'block')
     const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
     return `<div class="vg-wrap"><div class="vt-head"><span class="vt-kind">${kind}</span><span class="vt-flow">${escapeHtml(flow)}</span></div>
-      ${q('전표에 이렇게<br>적으세요', '코드·금액을 누르면 복사돼요')}
+      ${q('전표에 이렇게<br>적으세요')}
       <div class="vt-grid">
-        <div class="vt-col"><div class="vt-col-title"><b>차변</b><span>돈이 쓰인 곳</span></div>${D.map(l => card(l, 'd')).join('')}</div>
-        <div class="vt-col"><div class="vt-col-title"><b>대변</b><span>돈이 나간 곳</span></div>${C.map(l => card(l, 'c')).join('')}</div>
+        <div class="vt-col-title vt-dt"><b>차변</b><span>돈이 쓰인 곳</span></div>
+        <div class="vt-col-title vt-ct"><b>대변</b><span>돈이 나간 곳</span></div>
+        <div class="vt-cards vt-dc">${D.map(l => card(l, 'd')).join('')}</div>
+        <div class="vt-cards vt-cc">${C.map(l => card(l, 'c')).join('')}</div>
+        <div class="vt-ds">${sum('차변', r.sumD)}</div>
+        <div class="vt-cs">${sum('대변', r.sumC)}</div>
       </div>
-      <div class="vt-total${r.balanced ? ' is-ok' : ''}"><span>합계</span><b>${Voucher.won(r.sumD)}</b><i>${r.balanced ? '=' : '≠'}</i><b>${Voucher.won(r.sumC)}</b><em>${r.balanced ? '✓ 일치' : '확인 필요'}</em></div>
+      <div class="vt-total${r.balanced ? ' is-ok' : ''}">${r.balanced ? '✓ 차변 합계와 대변 합계가 같아요' : '차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요'}</div>
       ${compareAside(r)}
-      <div class="vt-memo-row"><label>적요</label><textarea class="info-input vg-textarea" rows="2" data-text="memo" data-memo="1">${escapeHtml(vg.memo || '')}</textarea>${copyBtn(vg.memo || '', '복사')}</div>
+      <div class="vt-memo-row"><span>적요</span><b>${escapeHtml(vg.memo || '')}</b></div>
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
-      ${vg.task === 'advance' && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p>${copyBtn(ask, '문구 복사')}</div>` : ''}
+      ${vg.task === 'advance' && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
       <button type="button" class="vg-link" onclick="vgJump('amounts')">금액이 달라요 · 고치기</button>
       ${why('차변·대변이 뭐예요?', '한 건의 돈을 두 쪽에 나눠 적어요. <b>차변</b>은 돈이 쓰인 곳(비용, 먼저 보낸 돈), <b>대변</b>은 돈이 나간 곳(현금·병원 통장·법인카드)이에요. 두 쪽 합계는 늘 같아요.')}
       ${why('원 자료 사례 보기', vg.task === 'advance'
@@ -432,7 +437,6 @@ const VG_SCREEN = {
     const ready = !left.length
     const adv = vg.task === 'advance'
     if (ready && adv && !vg.pendingFinal) { vg.pendingFinal = true; vg.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; vgSave() }
-    const summary = vgSummaryText(r)
     const D = r.lines.filter(l => l.side === 'D'), C = r.lines.filter(l => l.side === 'C')
     const row = l => `<div class="vd-row"><span class="vd-code">${escapeHtml(l.code || '—')}</span><span class="vd-name">${escapeHtml(l.name)}</span><b>${Voucher.won(l.amount)}</b></div>`
     return `<div class="vg-print">
@@ -444,7 +448,6 @@ const VG_SCREEN = {
       ${r.usesCashOrBank ? `<p class="vg-warn">⏰ 현금·보통예금 지급 전표는 <b>지급일 1~2일 전</b>까지 경영지원팀에 내요</p>` : ''}
       <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요.</p></div>
       <div class="vg-actions">
-        ${copyBtn(summary, '📋 전체 복사')}
         <button type="button" class="vg-btn" onclick="window.print()">🖨 인쇄</button>
         <button type="button" class="vg-btn" onclick="if (confirm('저장된 전표 안내를 지울까요?')) { vgDelete(); goToCard(2) }">🗑 삭제</button>
       </div>
@@ -467,17 +470,6 @@ function vgLeft(r) {
   return [...new Set([...left, ...docsLeft, ...userLeft])]
 }
 
-function vgSummaryText(r) {
-  const t = vg.trip
-  const L = [`[${vg.task === 'advance' ? '등록비 선지급 전표' : '최종 정산 전표'}] ${t.title || ''}`]
-  if (t.startDate) L.push(`일정: ${t.startDate}${t.endDate && t.endDate !== t.startDate ? ` ~ ${t.endDate}` : ''}`)
-  L.push(`적요: ${vg.memo || ''}`)
-  for (const l of r.lines) L.push(`${l.side === 'D' ? '차변' : '대변'}  ${l.code || '코드 확인 필요'} ${l.name}  ${Voucher.won(l.amount)}${l.memo ? `  (${l.memo})` : ''}`)
-  L.push(`합계: 차변 ${Voucher.won(r.sumD)} / 대변 ${Voucher.won(r.sumC)}`)
-  L.push(`서류: ${(r.docs || []).map(d => d.title + (d.optional ? '(필요 시)' : '')).join(', ')}`)
-  if (vg.task === 'advance') L.push('남은 일: 교육이 끝나면 영수증을 받아 최종 정산 전표 작성')
-  return L.join('\n')
-}
 
 // 입력칸·복사·체크(이벤트 위임)
 function bindVoucherEvents() {
@@ -490,7 +482,6 @@ function bindVoucherEvents() {
       const n = parseInt(el.value.replace(/[^\d]/g, ''), 10)
       vgSet(el.dataset.money, Number.isFinite(n) ? n : null)
     } else if (el.dataset.text) {
-      if (el.dataset.memo) vg.memoEdited = true
       vgSet(el.dataset.text, el.value.trim())
     } else if (el.dataset.check) {
       vg.checks = { ...(vg.checks || {}), [el.dataset.check]: el.checked }
@@ -510,20 +501,6 @@ function bindVoucherEvents() {
       document.getElementById('vg-next').disabled = vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
     }
   })
-  card.addEventListener('click', e => {
-    const b = e.target.closest('[data-copy]')
-    if (!b || b.disabled) return
-    const text = b.dataset.copy
-    const done = () => { const o = b.dataset.label || b.textContent; b.dataset.label = o; b.classList.add('is-copied'); b.textContent = '복사됨 ✓'; setTimeout(() => { b.textContent = o; b.classList.remove('is-copied') }, 1100) }
-    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done))
-    else fallbackCopy(text, done)
-  })
-}
-function fallbackCopy(text, done) {
-  const ta = document.createElement('textarea')
-  ta.value = text; document.body.appendChild(ta); ta.select()
-  try { document.execCommand('copy'); done() } catch { /* 복사 불가 */ }
-  ta.remove()
 }
 
 if (typeof document !== 'undefined') {
