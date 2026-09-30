@@ -3214,7 +3214,9 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .rc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 13.5px; }
 .rc-tag { flex: none; padding: 2px 8px; border-radius: 999px; background: #f2f4f6; color: var(--subtle); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
 .rc-tag.is-xfer { background: #f3edff; color: #6d28d9; }
-.rc-foot { margin-top: 10px; font-size: 12.5px; color: var(--subtle); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* flex로 두면 글 속 x-nb(시각 묶음)가 flex 항목으로 블록이 돼 문장이 갈라진다(wrap_scan 2026-09-30) — 보통 글 줄로 둔다 */
+.rc-foot { margin-top: 10px; font-size: 12.5px; color: var(--subtle); line-height: 1.8; }
+.rc-foot .slack-pill { margin-right: 6px; }
 .rc-note { margin: 6px 2px 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
 .slack-pill.is-late { background: #fef2f2; color: #b91c1c; }
 /* 노선도 — 점(역)과 선(구간). 점 중심(6px)에 선을 맞춘다 */
