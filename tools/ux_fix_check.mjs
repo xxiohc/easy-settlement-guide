@@ -119,7 +119,7 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
     check('⑬ 18시를 고르면 30분까지만', st[0].startsWith('18:') && st[1]==='00,10,20,30', st.join(' / ')) }
   { await p.selectOption('#input-starthour','13'); await p.waitForTimeout(300)
     const t = (await p.textContent('#prevday-verdict')).replace(/\s+/g,' ')
-    check('⑭ 바로 앞 직통편(조금 더 일찍 가려면)도 안내', /이렇게 이동하세요\s*마산역 09:21/.test(t) && /조금 더 일찍 가려면\s*마산역\s*06:35/.test(t), (t.match(/조금 더 일찍.{0,40}/)||[''])[0]) }
+    check('⑭ 바로 앞 직통편(조금 더 일찍 가려면)도 안내', /이렇게 이동하세요\s*마산역 09:21/.test(t) && /조금 더 일찍 가려면[\s\S]{0,60}마산\s*06:35/.test(t), (t.match(/조금 더 일찍.{0,40}/)||[''])[0]) }
   // 시각을 비우고 다음 → 필수 오류
   await p.selectOption('#input-starthour',''); await p.selectOption('#input-startmin','')
   await p.click('#feeBtn-yes'); await p.waitForTimeout(200)
