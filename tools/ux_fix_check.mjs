@@ -226,6 +226,32 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await ctx.close()
 }
 
+// ── F. 2026-09-30 지석초이: "기간 / N박 M일 출장이시군요!"는 두 줄, 어중간한 곳에서 꺾이지 않는다 ──
+{
+  const fs = await import('node:fs')
+  const DOCS = '/Users/jiseokchoi/ODDCHOI/workspace/09_교육, 출장 정산 가이드/테스트공문_업로드함/'
+  const F = DOCS + '제31차 대한의료관련감염관리학회 학술대회와 연수교육 개최 안내件.pdf'
+  if (fs.existsSync(F)) {
+    for (const w of [360, 420]) {
+      const [ctx,p] = await newPage()
+      await p.setViewportSize({ width: w, height: 900 })
+      await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
+      await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(600)
+      await p.setInputFiles('#fileInput', F)
+      await p.waitForFunction(()=>!document.getElementById('ctaNext3').disabled,{timeout:120000})
+      await p.click('#ctaNext3'); await p.waitForTimeout(700)
+      const r = await p.evaluate(() => {
+        const lines = [...document.querySelectorAll('#c4-period-msg .period-line')]
+        const lh = parseFloat(getComputedStyle(document.getElementById('c4-period-msg')).lineHeight) || 0
+        return { n: lines.length, last: lines.at(-1)?.textContent || '', lastH: lines.at(-1)?.getBoundingClientRect().height || 0, lh }
+      })
+      check(`F ${w}px 기간 인사 두 줄(기간 / N박 M일 출장)`, r.n === 2 && /^\d+(박 \d+일|일 \(당일치기\)) 출장이시군요!$/.test(r.last), `${r.n}줄 · ${r.last}`)
+      check(`F ${w}px "N박 M일 출장이시군요!" 한 줄 유지`, r.lastH > 0 && r.lastH < r.lh * 1.5, `높이 ${Math.round(r.lastH)} / 줄높이 ${Math.round(r.lh)}`)
+      await ctx.close()
+    }
+  }
+}
+
 await b.close()
 console.log('\n── 요약 ──')
 console.log(`총 ${out.length}건 · FAIL ${out.filter(l=>l.startsWith('FAIL')).length}건`)

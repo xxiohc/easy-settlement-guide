@@ -18,6 +18,7 @@ const MIN_SLACK      = 5    // 추천편이 지켜야 할 최소 여유 (ARRIVE_
 const NO_TRAIN_KM    = 25   // 마산역에서 이 거리 안이면 기차가 필요 없다
 const CAND_LIMIT     = 10   // 비교할 도착역 후보 수
 const CAND_MAX_KM    = 80   // 목적지에서 이보다 먼 역은 후보로 보지 않는다
+const PREV_DAY_ARRIVE_BY = 22 * 60   // 전날 이동은 전날 밤 10시까지 도착하는 편으로 권한다
 const ACCESS_TOL     = 30   // 가장 가까운 역보다 접근시간이 이만큼 더 걸리는 역은 버린다
 const TRANSFER_BACK  = 180  // 최적 직통보다 이만큼 이른 출발편까지만 환승을 탐색한다
 const DETOUR_RATIO   = 2.0  // 철도 이동거리가 직선거리의 이 배 이상이면 우회로 본다
@@ -494,15 +495,39 @@ function planPreviousDay({ lat, lon, dow, destRow, access, transit }) {
     .sort((a, b) => a.ai.min - b.ai.min)
   if (!scored.length) return null
   const { s: st, ai } = scored[0]
-  const its = findItineraries(st.name, 1440 + 360, prevDow).filter(it => !it.detour)
+  // 전날 저녁 22:00까지 닿는 편 — 예전엔 다음 날 06:00이 마감이라 자정 넘어 도착(22:04→00:49)을 권했다(2026-09-30)
+  const its = findItineraries(st.name, PREV_DAY_ARRIVE_BY, prevDow).filter(it => !it.detour)
   if (!its.length) return null
   return { station: st.name, access: ai.min, accessSrc: ai.src, options: its.slice(0, 3) }
+}
+
+// 당일 가장 빨리 현장에 닿는 길 — 시작시각에 못 닿아 전날 이동으로 판정된 구간에서 '왜 안 되는지'를 보여 준다.
+// 예: 용인 The UniverSE 08:30 → 마산 04:59 → 동대구 환승 → SRT 동탄 08:24(현장 약 08:49, 19분 늦음)
+function earliestSameDay({ lat, lon, dow, destRow, access, transit }) {
+  if (!KtxRoute.ready) return null
+  const scored = candidateStations(lat, lon).map(st => ({ st, ai: accessInfo(st.name, st.km, destRow, access, transit) }))
+  if (!scored.length) return null
+  const minA = Math.min(...scored.map(x => x.ai.min))
+  let best = null
+  for (const { st, ai } of scored.filter(x => x.ai.min <= minA + ACCESS_TOL)) {
+    // findItineraries 는 첫 열차마다 '마감 전 가장 늦은' 환승만 남긴다 — 마감을 23:59로 주면 이른 환승(동대구 06:38 SRT)이 빠졌다.
+    // 마감을 05:00부터 15분씩 늘려 처음 잡히는 편이 그 역의 가장 이른 도착이다.
+    for (let dl = 5 * 60; dl < 24 * 60; dl += 15) {
+      const its = findItineraries(st.name, dl, dow).filter(i => !i.detour)
+      if (!its.length) continue
+      const it = its.reduce((a, b) => (b.arr < a.arr ? b : a))
+      const site = it.arr + ai.min
+      if (!best || site < best.site) best = { ...it, station: st.name, access: ai.min, site }
+      break
+    }
+  }
+  return best
 }
 
 if (typeof module !== 'undefined') {
   module.exports = { KtxRoute, loadRouteData, initRouteData, planTrip, planPreviousDay,
                      planFromStation, fareStationNames, settlementFare,
                      accessMinutes, accessInfo, findDestination, haversineKm, fmtTime, fmtDur, detourOf,
-                     busEstimate,
+                     busEstimate, earliestSameDay,
                      findItineraries, candidateStations, fareOf }
 }
