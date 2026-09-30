@@ -306,6 +306,30 @@ function candidateStations(lat, lon, limit = CAND_LIMIT) {
 // 출장 시작시각(startMin)에 목적지에 도착하도록 마산역 출발편을 역산한다.
 // destRow: 등재된 기관 정보(있으면 확인된 접근시간 사용), access: 사용자가 직접 넣은 {역명: 분}
 // only: 사용자가 도착역을 직접 지정한 경우 그 역으로만 계산한다(폴백 입력).
+// 대안 여정의 환승은 동대구·대전을 먼저 본다(2026-09-30 지석초이 "환승은 동대구나 대전에서 갈아타는 게 최우선").
+// findItineraries는 출발편마다 가장 빨리 닿는 환승역 하나만 남겨(광명 등) 두 역 환승이 가려진다 — 역마다 따로 찾는다.
+const PREFERRED_HUBS = ['동대구', '대전']
+function hubItineraries(dest, deadline, dow, hub) {
+  const out = []
+  for (const a of trainsAt(ORIGIN_STATION)) {
+    if (!runsOn(a, dow)) continue
+    const oi = stopIndex(a, ORIGIN_STATION)
+    if (oi < 0 || stopIndex(a, dest) > oi) continue          // 그대로 타면 도착역까지 가는 열차는 갈아탈 이유가 없다
+    const leg1 = legOf(a, ORIGIN_STATION, hub)
+    if (!leg1) continue
+    let pick = null
+    for (const b of trainsAt(hub)) {
+      if (!runsOn(b, dow)) continue
+      const leg2 = legOf(b, hub, dest)
+      if (!leg2 || leg2.arr > deadline || leg2.dep < leg1.arr + TRANSFER_MIN) continue
+      if (!pick || leg2.arr < pick.arr) pick = { legs: [leg1, leg2], transfers: 1, via: [hub], dep: leg1.dep, arr: leg2.arr, wait: leg2.dep - leg1.arr, detour: detourOf(hub, dest) }
+    }
+    if (pick) out.push(pick)
+  }
+  // 가장 늦게 떠나도 닿는 편이 먼저(같으면 빨리 닿는 편)
+  return out.sort((x, y) => y.dep - x.dep || x.arr - y.arr)
+}
+
 function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, transit, only }) {
   if (!KtxRoute.ready) return { ok: false, reason: 'data' }
 
@@ -412,10 +436,49 @@ function planTrip({ lat, lon, startMin, dow, isMS, endMin, destRow, access, tran
   const sameStationLater = pool
     .filter(p => p.station === best.station && p.dep !== best.dep)
     .sort((a, b) => a.totalMin - b.totalMin)[0]
-  const alternatives = [...otherStations.slice(0, 2), sameStationLater]
+  const general = [...otherStations.slice(0, 2), sameStationLater]
     .filter(Boolean)
     .sort(byTotal)
-    .slice(0, 3)
+  // 동대구·대전 환승편을 대안 맨 앞에 — 환승역마다 가장 나은 한 편(여러 도착역 중 byTotal 기준)
+  const buffer = noBuffer ? 0 : ARRIVE_BUFFER
+  const hubAlts = []
+  for (const hub of PREFERRED_HUBS) {
+    const opts = []
+    for (const { st, ai } of cands) {
+      if (st.name === hub) continue
+      const it = hubItineraries(st.name, startMin - ai.min - buffer, dow, hub)[0]
+      if (!it || (dropDetour && it.detour)) continue
+      const margin = startMin - ai.min - it.arr
+      opts.push({
+        station: st.name, stationKm: Math.round(st.km * 10) / 10, stationAddr: st.addr,
+        access: ai.min, accessSrc: ai.src, accessRoute: ai.route || null, deadline: startMin - ai.min - buffer,
+        fare: fareOf(st.name, isMS), margin, slack: margin - ARRIVE_BUFFER, tight: margin < TIGHT_SLACK + ARRIVE_BUFFER,
+        totalMin: startMin - it.dep, travelMin: it.arr + ai.min - it.dep, preferredHub: hub, ...it,
+      })
+    }
+    const top = opts.sort(byTotal)[0]
+    if (top) hubAlts.push(top)
+  }
+  // 같은 도착역·같은 출발편은 환승역만 달라도 같은 여정이다 — 권한 편과 겹치거나 서로 겹치면 뺀다
+  // 되돌아가는 환승은 대안에서 뺀다 — 둘째 열차가 환승역에서 도착역으로 가는 길에 마산을 다시 지나면
+  // (마산→진주 환승→다시 마산 경유 서울행) 첫 구간이 반대 방향이었다는 뜻이다. 도착역을 지나쳐 되돌아오는
+  // 환승(영등포행을 서울에서 갈아타기)도 같은 이유로 뺀다: 첫 열차가 도착역에 먼저 서면 그냥 내리면 된다.
+  const backtrack = a => {
+    if (!a.transfers) return false
+    const [l1, l2] = a.legs
+    const t2 = trainsAt(l2.from).find(t => t.no === l2.no)
+    const t1 = trainsAt(l1.from).find(t => t.no === l1.no)
+    const passesOrigin = t2 && (() => { const i = stopIndex(t2, l2.from), j = stopIndex(t2, l2.to), o = stopIndex(t2, ORIGIN_STATION); return o > i && o < j })()
+    const passesDest = t1 && (() => { const i = stopIndex(t1, l1.from), j = stopIndex(t1, l1.to), d = stopIndex(t1, a.station); return d > i && d < j })()
+    // 환승역 자체가 이 목적지의 후보 도착역이면(서울에서 갈아타 영등포로) 거기서 내리면 된다
+    const hubIsCand = cands.some(c => c.st.name === a.via[0])
+    return !!(passesOrigin || passesDest || hubIsCand)
+  }
+  const altKey = a => `${a.station}|${a.dep}`
+  const seenAlt = new Set([altKey(best)])
+  const alternatives = [...hubAlts.sort(byTotal), ...general.filter(a => !backtrack(a))]
+    .filter(a => !seenAlt.has(altKey(a)) && seenAlt.add(altKey(a)))
+    .slice(0, 4)
 
   let ret = null
   if (endMin != null) {
