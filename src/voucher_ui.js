@@ -69,6 +69,8 @@ function startVoucherGuide() {
       vgNotice = '앞 단계 금액이 바뀌어 새 금액으로 바꿨어요.'
     }
     vg.trip = { ...saved.trip, ...fresh.trip }
+    // 카드11에서 다시 들어오면 새로 고르는 것 — 이어하기(②)용 흔적이 남아 흐름이 섞이지 않게 비운다(2026-10-01)
+    Object.assign(vg, { resumed: false, feePay: null, evAll: null, checks: {}, pendingFinal: false, screen: 'task' })
     if (fresh.formHtml) { vg.formHtml = fresh.formHtml; vg.formTotal = fresh.formTotal; vg.planTotal = fresh.planTotal }
     vg.fromFlow = true
   } else {
@@ -453,7 +455,7 @@ function voucherView(r, stage, memo, preview) {
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
   // 2026-09-30 지석초이: 딱딱한 '전표에 이렇게 적으세요' 대신 친근한 말투로
   const W = vgWord()
-  const title = stage === 1 ? `① ${W.what}는 먼저<br>이렇게 처리해요` : stage === 2 && preview ? `② ${W.when}<br>이 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
+  const title = stage === 1 ? `① 먼저 받는 ${W.what}는<br>가지급금으로 처리해요` : stage === 2 && preview ? `② ${W.when}<br>이 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
   const total = r.balanced ? '<div class="vt-total is-ok">✓ 차변 합계와 대변 합계가 같아요</div>'
     : preview && r.sumD == null ? '<div class="vt-total is-wait">영수증 금액이 정해지면 두 합계가 같아져요</div>'
     : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
@@ -480,14 +482,15 @@ const VG_SCREEN = {
     const opts = vgAdvOptions()
     const on = (task, kinds) => vg.task === task && (task === 'final' || JSON.stringify(vgAdvKinds()) === JSON.stringify(kinds))
     const card = (task, kinds, icon, title, now, later, n) => choice(on(task, kinds), `onclick="vgPickCase('${task}', ${kinds ? `['${kinds.join("','")}']` : 'null'})"`, icon, title,
-      `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span><span class="pc-n">전표 ${n}장</span>`)
+      `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span><span class="pc-n${n === 1 ? ' is-one' : ''}">${n === 1 ? '전표를 한 번 작성하면 끝나요' : '번거롭지만 전표를 두 번 작성해야 해요'}</span>`)
     const all = opts.includes('fee') && opts.includes('travel')
-    return tripChip() + q('어떻게<br>정산받을까요?') + `<div class="choice-list pc-list">
-      ${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}
+    return tripChip() + q('어떻게<br>정산받을까요?', '특별한 사정이 없으면 다녀와서 한 번에 정산하는 게 가장 간단해요') + `<div class="choice-list pc-list">
+      <div class="pc-best"><span class="pc-badge">추천</span>${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}</div>
+      ${opts.length ? '<div class="pc-sep">꼭 먼저 받아야 할 때만</div>' : ''}
       ${opts.includes('fee') ? card('advance', ['fee'], '🏦', '등록비만 먼저 회사 돈으로 보낼게요', `지금 등록비 ${fee.toLocaleString()}원`, tr ? `다녀와서 일당·숙박·교통비 ${tr.toLocaleString()}원` : '영수증이 나오면 최종 정산', 2) : ''}
       ${opts.includes('travel') ? card('advance', all ? ['fee', 'travel'] : ['travel'], '📦', all ? '모든 비용을 먼저 받아 둘게요' : '여비를 먼저 받아 둘게요',
         `지금 ${all ? `${(fee + tr).toLocaleString()}원 모두` : `일당·숙박·교통비 ${tr.toLocaleString()}원`}`, '교육 수료 후 최종 정산', 2) : ''}
-      </div>${opts.length ? why('두 번 정산은 왜 하나요?', '등록비가 커서 병원 돈으로 먼저 보내야 하거나, 일당·숙박비·교통비를 출장 전에 먼저 받아야 하거나, 영수증이 아직 없을 때예요. 먼저 받은 돈은 가지급금으로 적어 두고, 다녀와서 서류가 갖춰지면 실제 비용으로 최종 정산해요.') : ''}`
+      </div>${opts.length ? twoStepWhy() : ''}`
   },
 
   resumeQ() {
