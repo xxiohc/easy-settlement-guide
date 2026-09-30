@@ -3586,7 +3586,7 @@ function renderPrevDayVerdict() {
   const off = state.isOnline || state.isJeju
   aside.classList.toggle('is-off', off)
   // 장소를 못 정한 상태면 여정표 맨 위에 같은 경고를 건다 — 역까지 기차 시간은 맞아도 현장까지 시간은 추정일 뿐이다
-  const head = '<div class="ra-head">🚄 첫날 이동 안내</div>' + (state.placeNeedsPick
+  const head = '<div class="ra-head">첫날 이동 안내</div>' + (state.placeNeedsPick
     ? '<div class="ra-pick-warn">⚠️ 교육 장소를 지도에서 확인하지 못했어요. 장소 칸에서 검색해 목록에서 고르면 현장까지 걸리는 시간이 나와요.</div>' : '')
   const show = (html, hasResult) => {
     el.innerHTML = head + html
