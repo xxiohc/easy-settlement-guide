@@ -12,6 +12,7 @@ if [ -z "$QUICK" ]; then
   # 로컬 서버(8799)가 없으면 띄운다 — 판독·화면 점검은 실제 브라우저로 한다
   if ! curl -s -o /dev/null http://localhost:8799/; then (npx serve -l 8799 --no-clipboard . >/dev/null 2>&1 &); sleep 4; fi
   step "화면 점검(ux_fix_check)"; out=$(node tools/ux_fix_check.mjs 2>&1); echo "$out" | tail -1; echo "$out" | grep -q 'FAIL 0건' || { echo "$out" | grep '^FAIL' | head; fail=1; }
+  step "전표 작성 안내(voucher_flow)"; out=$(node tools/voucher_flow.mjs 2>&1); echo "$out" | tail -1; echo "$out" | grep -q 'FAIL 0건' || { echo "$out" | grep '^FAIL' | head; fail=1; }
   # 2026-09-30: 여정 카드의 줄바꿈·가로넘침을 배포 뒤에야 따로 돌려 잡았다 — 배포 전 점검에 넣는다
   step "줄바꿈·가로넘침(wrap_scan)"; out=$(node tools/wrap_scan.mjs 2>&1); echo "$out" | tail -1; echo "$out" | grep -q '총 0건' || { echo "$out" | grep '^FAIL' | head; fail=1; }
   for e in webkit chrome; do
