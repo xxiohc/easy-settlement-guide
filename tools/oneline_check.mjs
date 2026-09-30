@@ -11,7 +11,6 @@ for (const width of [320, 390, 430]) {
   p.on('pageerror', e => errs.push(e.message))
   await p.goto(BASE, { waitUntil: 'networkidle' })
 
-  await p.click('[data-choice="done"]'); await p.waitForTimeout(300)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
 
   // 온라인 선택 → 교육 시각·장소·지역 숨김

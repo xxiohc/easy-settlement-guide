@@ -10,7 +10,7 @@ const b = await (process.env.ENGINE === 'chrome' ? chromium.launch() : webkit.la
 const p = await (await b.newContext({ viewport: { width: 420, height: 900 } })).newPage()
 await p.goto(BASE, { waitUntil: 'networkidle' })
 await p.evaluate(() => { const orig = parseDocMeta; window.__texts = {}; parseDocMeta = (f, t) => { window.__texts[f] = t; return orig(f, t) } })
-await p.click('[data-choice="done"]'); await p.click('[data-choice="has-doc"]')
+await p.click('[data-choice="has-doc"]')
 const out = {}
 for (const file of fs.readdirSync(DIR).sort()) {
   if (file.startsWith('.') || fs.statSync(path.join(DIR, file)).isDirectory()) continue

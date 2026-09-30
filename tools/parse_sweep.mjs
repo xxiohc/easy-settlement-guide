@@ -20,7 +20,7 @@ async function freshPage() {
   if (p) await p.close()
   p = await ctx.newPage()
   await p.goto(BASE, { waitUntil: 'networkidle' })
-  await p.click('[data-choice="done"]'); await p.click('[data-choice="has-doc"]')
+  await p.click('[data-choice="has-doc"]')
 }
 await freshPage()
 const sq = v => String(v ?? '').replace(/\s+/g, '')

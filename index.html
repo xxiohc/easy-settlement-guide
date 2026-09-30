@@ -38,43 +38,10 @@
       <div class="card-viewport" id="cardViewport">
 
         <!-- ══════════════════════════════════════
-             CARD 1: 출장 여부
-        ══════════════════════════════════════ -->
-        <section class="flow-card active" id="card-1" data-step="1">
-          <button class="back-btn hidden" aria-label="뒤로"></button>
-          <div class="step-trail" id="trail-1"></div>
-
-          <div class="card-body">
-            <div class="card-icon">
-              <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-                <rect width="56" height="56" rx="18" fill="#EEF6FF"/>
-                <path d="M18 36V22a2 2 0 012-2h16a2 2 0 012 2v14" stroke="#3182f6" stroke-width="2" stroke-linecap="round"/>
-                <path d="M14 36h28" stroke="#3182f6" stroke-width="2" stroke-linecap="round"/>
-                <rect x="24" y="26" width="8" height="10" rx="1" stroke="#3182f6" stroke-width="1.5"/>
-              </svg>
-            </div>
-            <h1 class="card-question">어떤 출장인가요?</h1>
-            <p class="card-desc">정산 또는 출장 준비에 필요한 것을 안내해드릴게요</p>
-            <div class="choice-list">
-              <button class="choice-btn" data-choice="done" onclick="select1('done')">
-                <span class="choice-icon">✅</span>
-                <div><strong>출장 — 다녀왔어요</strong><span>정산 서류를 준비할게요</span></div>
-                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
-              </button>
-              <button class="choice-btn" data-choice="planned" onclick="select1('planned')">
-                <span class="choice-icon">📅</span>
-                <div><strong>출장 — 갈 예정이에요</strong><span>출장 준비에 필요한 것을 알려드릴게요</span></div>
-                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- ══════════════════════════════════════
              CARD 2: 공문 여부
         ══════════════════════════════════════ -->
-        <section class="flow-card" id="card-2" data-step="2">
-          <button class="back-btn" onclick="goBack(2)" aria-label="뒤로">
+        <section class="flow-card active" id="card-2" data-step="2">
+          <button class="back-btn hidden" onclick="goBack(2)" aria-label="뒤로">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
           <div class="step-trail" id="trail-2"></div>

@@ -24,7 +24,6 @@ for (const c of CASES) {
   const ctx = await b.newContext({ viewport: { width: 430, height: 900 } })
   const p = await ctx.newPage()
   await p.goto(BASE, { waitUntil: 'networkidle' })
-  await p.click('[data-choice="done"]');     await p.waitForTimeout(400)
   await p.click('[data-choice="has-doc"]');  await p.waitForTimeout(600)
   const fi = await p.$('input[type=file]')
   await fi.setInputFiles(DIR + c.file)
