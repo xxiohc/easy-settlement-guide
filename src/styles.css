@@ -3469,3 +3469,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vx-form.has-focus tr.hl-main:not(.is-focus) > th, .vx-form.has-focus tr.hl-main:not(.is-focus) > td,
 .vx-form.has-focus .tf-total-row.hl-main:not(.is-focus) { background: transparent !important; }
 .vx-form.has-focus tr.hl-pay:not(.is-focus) { opacity: .45; }
+/* 색 줄이기(2026-09-30 지석초이 "글자 색이 너무 많아 정신없다, 필요한 부분만") — 장부는 검정·회색, 색은 '일치' 한 줄만 */
+.vt-d .vt-head-row b, .vt-c .vt-head-row b { color: var(--ink); }
+.vt-d .vt-sum b, .vt-c .vt-sum b { color: var(--ink); }
+.vt-sum span { color: var(--ink); }
+.vt-plain em { color: var(--subtle); }
+.vt-total { margin-top: 8px; padding: 6px 4px; background: none !important; text-align: right; font-size: 14px; }
+.vt-total.is-ok { color: #047857; }
+.vt-total:not(.is-ok) { color: #c2410c; }
+/* 신청서 꼬리표도 한 가지 색으로 — 형광펜(노랑)만 강조색으로 남긴다 */
+.hl-tag, .hl-tag.t-cash, .hl-tag.t-card, .hl-tag.t-adv, .hl-tag.t-bank, .hl-tag.t-memo { background: rgba(25,31,40,0.07); color: var(--ink); }
+.hl-tag.t-now { background: var(--ink); color: #fff; }
