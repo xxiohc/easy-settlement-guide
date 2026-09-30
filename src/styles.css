@@ -3492,3 +3492,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 @media (max-width: 480px) { .ts-flow { grid-template-columns: 1fr; } .ts-flow i { justify-self: center; transform: rotate(90deg); } }
 .ts-reasons p { margin: 0; flex: 1; }
 .vs-step em { font-style: normal; }
+.pc-list .choice-btn span.pc-flow { display: block; }
+.pc-flow i { font-style: normal; color: var(--muted); }
+.pc-list .choice-btn span.pc-n { display: inline-block; margin-top: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(25,31,40,0.07); color: var(--ink); font-size: 12px; font-weight: 700; }

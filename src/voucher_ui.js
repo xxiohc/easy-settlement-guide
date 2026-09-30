@@ -206,7 +206,6 @@ function vgScreens() {
   else list.push(['task', 0])
   if (vg.task === 'advance') {
     // 2회 정산(원 자료 p.4 Case②): ① 지금 선지급 전표, ② 영수증(적격증빙) 발급 후 최종 정산 전표를 미리 보여 준다
-    if (vgAdvOptions().length > 1) list.push(['advWhat', 0])
     if (vgAdvKinds().includes('fee')) list.push(['advEv', 0])
     list.push(['voucher', 1], ['purpose', 1])
     if (vg.purpose === 'edu') list.push(['job', 1])
@@ -227,7 +226,7 @@ function vgScreens() {
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
 }
-const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'advWhat', 'advEv', 'feePay', 'purpose', 'job', 'evidence']
+const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'advEv', 'feePay', 'purpose', 'job', 'evidence']
 
 function vgGo(delta) {
   const list = vgScreens()
@@ -254,6 +253,13 @@ function vgSet(path, value) {
   o[keys.at(-1)] = value
   vgSave()
   renderVoucher()
+}
+// 정산 방법 한 번에 고르기(할 일 + 먼저 받을 돈)
+function vgPickCase(task, kinds) {
+  vg.task = task
+  vg.advKinds = kinds || null
+  vgSave(); renderVoucher()
+  setTimeout(() => vgGo(1), 160)
 }
 // 고르면 잠깐 표시한 뒤 다음 화면으로(본 흐름 select 와 같은 손맛)
 function vgPick(path, value) {
@@ -468,25 +474,20 @@ function voucherView(r, stage, memo, preview) {
 }
 
 const VG_SCREEN = {
+  // 2026-09-30 지석초이: 처음부터 세 가지 정산 방법으로 나눠 고른다 — 한 번에 / 등록비만 먼저 / 모두 먼저
   task() {
-    const fee = vgFee()
-    const online = vg.trip.isOnline
-    const opts = vgAdvOptions()
-    const sub = opts.includes('fee') && opts.includes('travel') ? '등록비를 병원 돈으로 먼저 보내거나, 여비를 미리 받아요'
-      : opts.includes('fee') ? `교육 전에 병원 계좌로 등록비 ${fee.amount.toLocaleString()}원 송금` : '일당·숙박비·교통비를 출장 전에 미리 받아요'
-    return tripChip() + q('지금 무엇을<br>하려고 하나요?') + `<div class="choice-list">
-      ${opts.length ? pick('task', 'advance', '📤', '먼저 받아야 할 돈이 있어요', `${sub} · 두 번 정산`) : ''}
-      ${pick('task', 'final', '🧾', online ? '교육비를 정산해요' : '다녀온 비용을 한 번에 정산해요', online ? '교육이 끝난 뒤' : '다녀와서 · 지금 미리 볼 수도 있어요')}
-      </div>${opts.length ? why('두 번 정산은 언제 하나요?', '등록비가 커서 병원 돈으로 먼저 보내야 하거나, 일당·숙박비·교통비를 출장 전에 먼저 받아야 하거나, 영수증이 아직 없을 때예요. 먼저 받은 돈은 가지급금으로 적어 두고, 다녀와서 서류가 갖춰지면 실제 비용으로 최종 정산해요.') : ''}`
-  },
-
-  advWhat() {
     const fee = vgFee()?.amount, tr = Voucher.travelSum(vg)
-    return twoStepWhy() + q('무엇을<br>먼저 받나요?') + `<div class="choice-list">
-      ${choice(JSON.stringify(vg.advKinds) === '["fee"]', `onclick="vgPick('advKinds', ['fee'])"`, '🏦', '등록비만', `병원이 주최기관에 ${fee.toLocaleString()}원 먼저 송금`)}
-      ${choice(JSON.stringify(vg.advKinds) === '["travel"]', `onclick="vgPick('advKinds', ['travel'])"`, '🧳', '여비만 (일당·숙박비·교통비)', `제가 ${tr.toLocaleString()}원 먼저 받아요`)}
-      ${choice(JSON.stringify(vg.advKinds) === '["fee","travel"]', `onclick="vgPick('advKinds', ['fee','travel'])"`, '📦', '등록비 + 여비 둘 다', `모두 ${(fee + tr).toLocaleString()}원`)}
-      </div>`
+    const opts = vgAdvOptions()
+    const on = (task, kinds) => vg.task === task && (task === 'final' || JSON.stringify(vgAdvKinds()) === JSON.stringify(kinds))
+    const card = (task, kinds, icon, title, now, later, n) => choice(on(task, kinds), `onclick="vgPickCase('${task}', ${kinds ? `['${kinds.join("','")}']` : 'null'})"`, icon, title,
+      `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span><span class="pc-n">전표 ${n}장</span>`)
+    const all = opts.includes('fee') && opts.includes('travel')
+    return tripChip() + q('어떻게<br>정산받을까요?') + `<div class="choice-list pc-list">
+      ${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}
+      ${opts.includes('fee') ? card('advance', ['fee'], '🏦', '등록비만 먼저 회사 돈으로 보낼게요', `지금 등록비 ${fee.toLocaleString()}원`, tr ? `다녀와서 일당·숙박·교통비 ${tr.toLocaleString()}원` : '영수증이 나오면 최종 정산', 2) : ''}
+      ${opts.includes('travel') ? card('advance', all ? ['fee', 'travel'] : ['travel'], '📦', all ? '모든 비용을 먼저 받아 둘게요' : '여비를 먼저 받아 둘게요',
+        `지금 ${all ? `${(fee + tr).toLocaleString()}원 모두` : `일당·숙박·교통비 ${tr.toLocaleString()}원`}`, '교육 수료 후 최종 정산', 2) : ''}
+      </div>${opts.length ? why('두 번 정산은 왜 하나요?', '등록비가 커서 병원 돈으로 먼저 보내야 하거나, 일당·숙박비·교통비를 출장 전에 먼저 받아야 하거나, 영수증이 아직 없을 때예요. 먼저 받은 돈은 가지급금으로 적어 두고, 다녀와서 서류가 갖춰지면 실제 비용으로 최종 정산해요.') : ''}`
   },
 
   resumeQ() {
