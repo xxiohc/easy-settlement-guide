@@ -3248,3 +3248,5 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .route-aside-inner .ra-t, .route-aside-inner time, .slack-pill, .rc-tag, .ra-link { white-space: nowrap; }
 .rs-seg.is-bus::before { background: #059669; }
 .rs-seg.is-bus span { color: #047857; }
+.rc-foot .ra-links { display: flex; margin-top: 2px; }
+.rc-access { color: var(--muted); font-size: 12px; }
