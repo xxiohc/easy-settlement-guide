@@ -3383,3 +3383,4 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vd-code { font-weight: 700; color: var(--subtle); font-variant-numeric: tabular-nums; }
 .vd-row b { font-variant-numeric: tabular-nums; }
 .vd-memo { padding-top: 8px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--subtle); }
+.rc-later { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #ecfdf3; color: #047857; font-size: 12px; font-weight: 700; }

@@ -3539,16 +3539,17 @@ function noTrainHtml() {
 // 환승편·다른 도착역 중 제때 닿는 편을 두 개까지 보인다. 정산 운임은 위의 권한 편 기준 그대로다.
 function altRoutesHtml(best) {
   const r = computeRoutePlan()
+  // 2026-09-30 지석초이: 대안은 '마산에서 더 늦게 타고 동대구·대전에서 갈아타 제때 닿는 편'만 보인다.
+  // 같은 시각에 떠나 갈아타기만 하는 편(광명 환승 등)은 비효율이라 싣지 않는다.
   const alts = ((r && r.plan && r.plan.alternatives) || [])
-    .filter(a => a.dep !== best.dep || a.station !== best.station)
-    .filter(a => a.transfers > 0 || a.station !== best.station)
-    .slice(0, 3)   // 동대구·대전 환승편이 앞에 온다(route.js PREFERRED_HUBS)
+    .filter(a => a.transfers > 0 && ['동대구', '대전'].includes((a.via || [])[0]) && a.dep > best.dep)
+    .slice(0, 2)
   if (!alts.length) return ''
   const start = toMinutes(state.startTime)
-  const cards = alts.map(a => routeCard(`${escapeHtml(a.station)}역`, xferTag(a), a, { access: a.access },
+  const cards = alts.map(a => routeCard(`마산 ${fmtTime(a.dep)} 출발 <span class="rc-later">${fmtDur(a.dep - best.dep)} 늦게</span>`, xferTag(a), a, { access: a.access },
     (Number.isFinite(start) ? slackPill(start - (a.arr + a.access)) : '') +
     `<span class="rc-access">${escapeHtml(a.station)}역→현장 대중교통 약 ${fmtDur(a.access)}(추정)</span>${stationRouteLinks(a.station, r.dest)}`)).join('')
-  return `<div class="rc-group"><div class="rc-group-title">대안 여정</div>${cards}` +
+  return `<div class="rc-group"><div class="rc-group-title">대안 여정 · 더 늦게 출발</div>${cards}` +
     `<div class="rc-note">정산 운임은 위에서 권한 편 기준이에요. 좌석·시간은 코레일·SRT에서 확인하세요.</div></div>`
 }
 
