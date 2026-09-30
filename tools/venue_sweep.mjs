@@ -17,7 +17,7 @@ for (const file of Object.keys(EXP)) {
   const f = path.join(DIR, file); if (!fs.existsSync(f)) continue
   const p = await (await b.newContext({ viewport: { width: 1500, height: 1000 } })).newPage()
   await p.goto(BASE, { waitUntil: 'networkidle' })
-  await p.click('[data-choice="planned"]'); await p.click('[data-choice="has-doc"]')
+  await p.click('[data-choice="has-doc"]')
   await p.setInputFiles('#fileInput', f)
   const ok = await p.waitForFunction(() => !document.getElementById('ctaNext3').disabled, { timeout: 240000 }).then(() => true, () => false)
   if (!ok) { rows.push({ file, verdict: 'TIMEOUT' }); await p.close(); continue }

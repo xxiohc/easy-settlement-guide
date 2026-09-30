@@ -18,7 +18,9 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
 // ── A. 공문 없음 · 오프라인 · 등록비 없음 → 카드4에서 카드8로 ──
 {
   const [ctx,p] = await newPage()
-  await p.click('[data-choice="done"]'); await p.waitForTimeout(400)
+  // 2026-09-30: 첫 화면은 공문 여부, '다녀왔어요' 선택지는 없다
+  check('0 첫 화면이 공문 여부(카드2)', await active(p) === 'card-2')
+  check('0 다녀왔어요 선택지 없음', (await p.$('[data-choice="done"]')) === null)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
   check('A 카드4 도달', await active(p) === 'card-4')
   // 데스크톱 크롬은 날짜 칸을 눌러도 달력이 안 열렸다 — 클릭이 showPicker 로 이어지는지 본다
@@ -66,10 +68,11 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
         !(await vis(p,'#field-daytrip')) && (await p.evaluate(()=>state.prevDayMove)) === false)
   await p.click('#ctaNext8'); await p.waitForTimeout(800)
   check('A 카드9 도달', await active(p) === 'card-9')
-  check('⑨ 다녀온 출장 버튼 문구', (await p.textContent('#card9-next-btn')).includes('내용 확인'),
+  // 2026-09-30: 갈 예정 출장만 다룬다 — 신청서를 '작성'하는 문구여야 한다(다녀온 출장 문구는 v1)
+  check('⑨ 갈 예정 출장 버튼 문구', (await p.textContent('#card9-next-btn')).includes('작성하기'),
         await p.textContent('#card9-next-btn'))
   await p.click('#card9-next-btn'); await p.waitForTimeout(700)
-  check('⑨ 카드10 제목 과거형', (await p.textContent('#card10-title')).includes('결재된'), await p.textContent('#card10-title'))
+  check('⑨ 카드10 제목 미리 작성', (await p.textContent('#card10-title')).includes('미리 작성'), await p.textContent('#card10-title'))
   await p.click('#card-10 .cta-btn'); await p.waitForTimeout(600)
   const docs = await p.evaluate(()=>[...document.querySelectorAll('#finalChecklist strong')].map(e=>e.textContent.trim()))
   check('④ 공문 없으면 구비서류에 공문 없음', !docs.some(d=>d.includes('공문')), docs.join(' / '))
@@ -85,7 +88,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   const fs = await import('node:fs')
   if (fs.existsSync(F)) {
     const [ctx,p] = await newPage()
-    await p.click('[data-choice="planned"]'); await p.waitForTimeout(500)
     await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
     await p.fill('#input-place','강북삼성병원'); await p.dispatchEvent('#input-place','input')
     await p.selectOption('#input-starthour','12'); await p.selectOption('#input-startmin','10')
@@ -104,7 +106,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
 // ── B. 서울 · 숙박 · 등록비 있음(카드6 통합) ──
 {
   const [ctx,p] = await newPage()
-  await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
   await p.fill('#input-title','의료기관 평가 연수')
   await p.fill('#input-start','2026-10-12'); await p.fill('#input-end','2026-10-13')
@@ -150,7 +151,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
 // ── C. 공문 업로드 경로 (파싱 + 등록비 미리선택) ──
 {
   const [ctx,p] = await newPage()
-  await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
   await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(600)
   await (await p.$('input[type=file]')).setInputFiles(DOC)
   try {
@@ -173,7 +173,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
 // 교통비는 신청서 합계에 들어가야 한다(예전엔 신청서 합계만 ₩0이라 예상 금액과 달랐다).
 {
   const [ctx,p] = await newPage()
-  await p.click('[data-choice="planned"]'); await p.waitForTimeout(300)
   await p.click('[data-choice="no-doc"]').catch(()=>{}); await p.waitForTimeout(300)
   await p.evaluate(() => {
     Object.assign(state, { title: '창원 교류회', startDate: '2026-10-13', endDate: '2026-10-13', nights: 0, days: 1,
@@ -198,7 +197,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
 // ── F. 창원 시내 이동 여정표(2026-09-29) — 병원→교육장 시내버스·택시 추정 소요와 카카오맵 경로 ──
 {
   const [ctx,p] = await newPage()
-  await p.click('[data-choice="planned"]'); await p.waitForTimeout(300)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(500)
   await p.fill('#input-region', '창원'); await p.evaluate(() => onRegionInput())
   await p.fill('#input-place', '마산대학교 청강기념관')
@@ -214,7 +212,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
 // ── E. 다시 입력하지 않게(2026-09-29 사용자 관점 점검) ──
 {
   const [ctx,p] = await newPage()
-  await p.click('[data-choice="done"]'); await p.waitForTimeout(300)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(500)
   await p.type('#input-place', '부산 벡스코'); await p.waitForTimeout(200)
   check('E 장소 글자로 지역 채움', await p.inputValue('#input-region') === '부산', await p.inputValue('#input-region'))
@@ -235,7 +232,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
     for (const w of [360, 420]) {
       const [ctx,p] = await newPage()
       await p.setViewportSize({ width: w, height: 900 })
-      await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
       await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(600)
       await p.setInputFiles('#fileInput', F)
       await p.waitForFunction(()=>!document.getElementById('ctaNext3').disabled,{timeout:120000})
@@ -255,7 +251,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
 // ── G. 2026-09-30 지석초이: 대안 여정 카드에도 도착역→현장 대중교통·택시 길찾기 링크 ──
 {
   const [ctx,p] = await newPage()
-  await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
   await p.fill('#input-place', '여의도 태영빌딩'); await p.dispatchEvent('#input-place', 'input')
   await p.fill('#input-region', '서울'); await p.dispatchEvent('#input-region', 'input')
@@ -275,7 +270,6 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   const fs = await import('node:fs')
   if (fs.existsSync(F)) {
     const [ctx,p] = await newPage()
-    await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
     await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(500)
     await p.setInputFiles('#fileInput', F)
     await p.waitForFunction(()=>!document.getElementById('ctaNext3').disabled,{timeout:120000})

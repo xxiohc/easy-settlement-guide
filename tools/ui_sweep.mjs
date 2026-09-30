@@ -13,7 +13,6 @@ async function run(withDoc){
   const p = await ctx.newPage()
   const errs=[]; p.on('pageerror',e=>errs.push(e.message))
   await p.goto(BASE,{waitUntil:'networkidle'})
-  await p.click('[data-choice="done"]'); await p.waitForTimeout(400)
   if (withDoc) {
     await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(600)
     const fi = await p.$('input[type=file]')

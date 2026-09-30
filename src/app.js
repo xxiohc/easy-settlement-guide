@@ -3,8 +3,9 @@
 const KAKAO_API_KEY = (typeof window !== 'undefined' && window.KAKAO_API_KEY) || ''
 
 // ── 단계 정의 ────────────────────────────────────────────────────────────────
+// 2026-09-30 지석초이: '갈 예정' 출장만 다룬다 — 첫 질문(다녀왔어요/갈 예정)을 없애고 공문 여부부터 시작한다.
+// 다녀온 출장 흐름은 v1(git 태그 v1)에 있다. 안쪽 코드의 tripStatus==='done' 분기는 되돌리기 쉽게 남겨 둔다.
 const STEPS = [
-  { card: 1,  label: '출장 여부' },
   { card: 2,  label: '공문 여부' },
   { card: 3,  label: '공문 업로드' },
   { card: 4,  label: '정보 확인' },
@@ -19,8 +20,8 @@ const STEPS = [
 
 // ── 상태 ─────────────────────────────────────────────────────────────────────
 const state = {
-  currentCard: 1,
-  tripStatus: null,     // 'done' | 'planned' | 'online'
+  currentCard: 2,
+  tripStatus: 'planned', // 갈 예정 고정(2026-09-30). 'done'은 v1 흐름
   isOnline: false,      // 온라인 교육 여부 (true면 출장비 계산 제외)
   hasDoc: null,         // true | false
   parsedMeta: null,     // 공문 파싱 결과
@@ -193,6 +194,7 @@ function goToCard(n) {
 }
 
 function goBack(cardNum) {
+  if (cardNum <= 2) return   // 첫 화면(공문 여부) 앞에는 카드가 없다
   // 공문 없이 왔을 때 Card 4에서 뒤로 → Card 2로
   if (cardNum === 4 && !state.hasDoc) return goToCard(2)
   // Card 6에서 뒤로 → Card 4 (Card 5·7은 인라인 통합됨)
@@ -376,7 +378,7 @@ function updateProgress() {
   // 헤더 우측 진행률 텍스트
   const ptEl = document.getElementById('headerProgressText')
   if (ptEl) {
-    ptEl.textContent = idx >= 0 && state.currentCard > 1
+    ptEl.textContent = idx >= 0
       ? `${idx + 1} / ${visibleSteps.length} 단계`
       : ''
   }
@@ -5105,7 +5107,7 @@ function escapeHtml(str) {
 
 function restartFlow() {
   Object.assign(state, {
-    currentCard: 1, tripStatus: null, isOnline: false, hasDoc: null, parsedMeta: null,
+    currentCard: 2, tripStatus: 'planned', isOnline: false, hasDoc: null, parsedMeta: null,
     title: '', startDate: '', endDate: '', nights: 0, days: 0,
     place: '', region: '', isJeju: false, isSeoul: false, fee: 0,
     hasFee: null, feeStatus: null, receiptType: null,
@@ -5137,11 +5139,11 @@ function restartFlow() {
     card.style.transform = 'translateX(100%)'
     card.style.transition = 'none'
   })
-  const card1 = document.getElementById('card-1')
-  card1.classList.add('active')
-  card1.style.transform = ''
+  const first = document.getElementById('card-2')
+  first.classList.add('active')
+  first.style.transform = ''
   updateProgress()
-  if (!navigatingByHistory) history.pushState({ card: 1 }, '')
+  if (!navigatingByHistory) history.pushState({ card: 2 }, '')
 }
 
 // ── 자동 테스트 (콘솔에서 runTests() 호출) ────────────────────────────────────

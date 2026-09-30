@@ -29,7 +29,6 @@ for (const width of [320, 390, 430]) {
   const errs = []
   p.on('pageerror', e => errs.push(e.message))
   await p.goto(BASE, { waitUntil: 'networkidle' })
-  await p.click('[data-choice="done"]'); await p.waitForTimeout(300)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
 
   await p.fill('#input-title', '재무부서장 정기세미나')

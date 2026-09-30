@@ -70,7 +70,7 @@ for (const [name,w,h] of VIEWPORTS) {
   }
 
   await check('01')
-  await p.click('[data-choice="done"]',{timeout:8000}); await check('02')
+  await check('02')
   await p.click('[data-choice="no-doc"]',{timeout:8000}); await p.waitForTimeout(600)
   await p.evaluate(FILL); await p.waitForTimeout(800)
   await p.evaluate(()=>{document.getElementById('placeSuggest')?.classList.add('hidden')})

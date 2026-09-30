@@ -101,7 +101,6 @@ for (const width of WIDTHS) {
     await p.goto(BASE, { waitUntil: 'networkidle' })
     const L = withDoc ? '주행(공문있음)' : '주행(공문없음)'
     try {
-      await p.click('[data-choice="done"]'); await p.waitForTimeout(300)
       await scanState(p, L + ' 카드2', width)
       if (withDoc) {
         await p.click('[data-choice="has-doc"]'); await p.waitForTimeout(500)
