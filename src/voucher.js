@@ -40,9 +40,9 @@
   // 증빙 시점·기존 처리 상태로만 정한다.
   function decidePlan(v) {
     if (v.task === 'advance') {
-      if (v.feeEvidence === 'after') return { code: 'B', title: '등록비를 먼저 보내고, 교육이 끝난 뒤 정산을 마무리해요',
+      if (v.feeEvidence === 'after') return { code: 'B', title: '등록비를 먼저 보내고, 영수증이 발급되면 정산을 마무리해요',
         why: '돈은 지금 보내야 하지만 정산에 필요한 증빙은 나중에 나오기 때문이에요. 먼저 보낸 돈을 ‘가지급금’으로 적어 두고, 증빙을 받은 뒤 실제 비용으로 정리해요.',
-        now: '등록비 선지급 전표 작성', later: '교육이 끝나면 증빙을 받아 최종 정산 전표 작성' }
+        now: '등록비 선지급 전표 작성', later: '영수증(증빙)이 발급되면 최종 정산 전표 작성' }
       if (v.feeEvidence === 'received') return { code: 'E', title: '처리 기준 확인이 필요해요',
         why: '돈을 먼저 보내지만 증빙은 이미 받은 경우예요. 이때 가지급금으로 할지 바로 비용으로 할지는 받은 자료에 나와 있지 않아요.',
         now: '경영지원팀에 처리 방법 확인', later: '확인한 방법대로 전표 작성', unconfirmed: 'prepayWithEvidence' }

@@ -102,13 +102,13 @@ for (const width of [1280, 390]) {
     const y = await p.evaluate(() => [...document.querySelectorAll('.vt-sum')].map(e => Math.round(e.getBoundingClientRect().top)))
     check(`[${width}] 차변·대변 합계 줄이 같은 높이`, y[0] === y[1], JSON.stringify(y))
   }
-  check(`[${width}] 2회 정산 단계 표시(① 지금 선지급 → ② 교육 후)`, /지금 · 등록비 선지급.*교육 후 · 최종 정산/.test(await text(p)))
+  check(`[${width}] 2회 정산 단계 표시(① 지금 선지급 → ② 영수증 발급 후)`, /지금 · 등록비 선지급.*영수증 발급 후 · 최종 정산/.test(await text(p)))
   check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본 + 크로스체크`, (await p.locator('.vx-form .tf-box').count()) === 1 && /신청서 등록비.*300,000원.*✓ 같아요/.test(await p.evaluate(() => document.querySelector('.vx-check').innerText.replace(/\s+/g, ' '))))
   await shot(p, `${width}-voucher-adv`)
   await next(p)
   check(`[${width}] ① 다음은 최종 정산 전표를 위한 목적 질문`, (await screen(p)) === 'purpose')
   await tap(p, '교육·학회 참석'); await tap(p, '간호사')
-  check(`[${width}] ② 교육 후 최종 정산 전표 미리 보기`, (await screen(p)) === 'voucher2')
+  check(`[${width}] ② 영수증 발급 후 최종 정산 전표 미리 보기(대제목)`, (await screen(p)) === 'voucher2' && (await text(p)).includes('영수증이 발급되면 이 전표를 써요'))
   const ln2p = await p.evaluate(() => vgFinalPreview().lines.map(l => [l.name, l.side, l.amount]))
   check(`[${width}] ② 미리 보기: 차 교육훈련비-간호사교육 / 대 가지급금-기타 300,000 + 현금`,
     JSON.stringify(ln2p) === JSON.stringify([['교육훈련비-간호사교육', 'D', 567200], ['가지급금-기타', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln2p))
@@ -124,7 +124,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 이 기기에 저장·최종 정산 남음`, saved && saved.pendingFinal === true && saved.advanceAmount === 300000)
   await p.reload({ waitUntil: 'networkidle' }); await p.waitForTimeout(400)
   const rs = await p.evaluate(() => document.getElementById('voucher-resume').innerText.replace(/\s+/g, ' '))
-  check(`[${width}] 첫 화면에 '최종 정산이 남아 있어요'`, rs.includes('최종 정산이 남아 있어요') && rs.includes('300,000원'), rs.slice(0, 80))
+  check(`[${width}] 첫 화면에 '최종 정산이 남아 있어요'`, rs.includes('최종 정산이 남아 있어요') && rs.includes('300,000원') && rs.includes('영수증 받았어요 · 최종 정산 시작'), rs.slice(0, 80))
   await shot(p, `${width}-resume-banner`)
   clicks = 0
   clicks++; await p.click('#voucher-resume .vg-btn-primary'); await p.waitForTimeout(400)
