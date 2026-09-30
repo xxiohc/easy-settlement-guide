@@ -182,8 +182,8 @@ for (const width of [1280, 390]) {
     ln[0][0] === '여비교통비-국내출장비' && ln.some(([n, , s, a]) => n === '미지급비용-법인개인카드' && s === 'C' && a === 300000) && !ln.some(([n]) => n === '보통예금'), JSON.stringify(ln))
   await next(p)
   const tone = await text(p)
-  check('한 번에 정산 제출 준비: 전표/증빙/마지막 확인 묶음, 증빙에 신청서·공문·등록비 영수증, 다시 첨부 문구 없음',
-    (await screen(p)) === 'done' && /전표.*대체전표.*증빙.*출장신청서/.test(tone) && tone.includes('등록비 영수증') && !tone.includes('다시 첨부'), tone.slice(0, 160))
+  check('한 번에 정산 제출 준비: 전표/증빙 두 묶음(마지막 확인 없음), 증빙에 신청서·공문·등록비 영수증, 다시 첨부 문구 없음',
+    (await screen(p)) === 'done' && /전표.*증빙.*출장신청서/.test(tone) && !tone.includes('대체전표') && !tone.includes('마지막 확인') && tone.includes('등록비 영수증') && !tone.includes('다시 첨부'), tone.slice(0, 160))
   await p.evaluate(() => vgJump('voucher'))
   await p.evaluate(() => { vg.checks = { 'user-dup': true }; vgJump('amounts') })
   await p.fill('[data-money="finalAmounts.lodging"]', '50000'); await p.dispatchEvent('[data-money="finalAmounts.lodging"]', 'change'); await p.waitForTimeout(250)
