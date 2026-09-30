@@ -90,7 +90,13 @@ for (const width of [1280, 390]) {
   const ln = await lines(p)
   check(`[${width}] 선지급 전표: 차 가지급금-기타 1114-99 / 대 보통예금 1102-02 · 300,000`,
     JSON.stringify(ln) === JSON.stringify([['가지급금-기타', '1114-99', 'D', 300000], ['보통예금', '1102-02', 'C', 300000]]), JSON.stringify(ln))
-  check(`[${width}] 차변·대변 카드 + 칸마다 합계 + 일치 표시`, (await p.locator('.vt-card').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.textContent('.vt-total')).includes('같아요'))
+  check(`[${width}] 차변·대변 장부 한 줄씩 + 칸마다 합계 + 일치 표시`, (await p.locator('.vt-row').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.textContent('.vt-total')).includes('같아요'))
+  { const x = await p.evaluate(() => [...document.querySelectorAll('.vt-row')].map(r => [r.querySelector('.vt-code').getBoundingClientRect(), r.querySelector('.vt-name').getBoundingClientRect(), r.querySelector('.vt-plain').getBoundingClientRect()]).map(([c, n, pl]) => [Math.round(c.left), Math.round(n.left), Math.round(pl.left), Math.round(c.bottom - n.bottom)]))
+    // 넓은 화면: 코드|계정과목 한 줄(바닥선 같음) · 폰: 코드가 계정과목 위 줄, 같은 왼쪽 선. 어느 쪽이든 설명은 계정과목과 같은 시작, 코드가 이름을 덮지 않는다
+    check(`[${width}] 코드·계정과목 정렬, 설명은 계정과목과 같은 시작`, x.every(([c, n, pl, dy]) => n === pl && (width > 640 ? Math.abs(dy) <= 3 : c === n)), JSON.stringify(x))
+    const overlap = await p.evaluate(() => [...document.querySelectorAll('.vt-row')].some(r => { const a = r.querySelector('.vt-code').getBoundingClientRect(), b = r.querySelector('.vt-name').getBoundingClientRect(); return a.right > b.left + 1 && a.bottom > b.top + 1 && a.top < b.bottom - 1 }))
+    check(`[${width}] 코드가 계정과목 글자를 덮지 않는다`, !overlap) }
+  check(`[${width}] 오른쪽 신청서: 등록비 행만 형광펜, 나머지 흐림`, await p.evaluate(() => { const f = document.querySelector('.vx-form'); return !!f.querySelector('tr.hl-main[data-kind="fee"]') && f.querySelectorAll('tr.hl-main').length === 1 && f.querySelectorAll('tr.hl-dim').length >= 3 }))
   check(`[${width}] 전표 화면에 복사 버튼 없음`, (await p.locator('#vg-screen [data-copy], #vg-screen .vg-copy').count()) === 0)
   if (width >= 1280) {
     const y = await p.evaluate(() => [...document.querySelectorAll('.vt-sum')].map(e => Math.round(e.getBoundingClientRect().top)))
@@ -131,11 +137,15 @@ for (const width of [1280, 390]) {
   const ln2 = await lines(p)
   check(`[${width}] 최종 전표: 차 교육훈련비-간호사교육 567,200 / 대 가지급금-기타 300,000 + 현금 267,200`,
     JSON.stringify(ln2) === JSON.stringify([['교육훈련비-간호사교육', '5301-16-03', 'D', 567200], ['가지급금-기타', '1114-99', 'C', 300000], ['현금', '1101', 'C', 267200]]), JSON.stringify(ln2))
+  check(`[${width}] ② 최종 전표: 긴 계정과목(교육훈련비-간호사교육)도 코드와 겹치지 않음`, !(await p.evaluate(() => [...document.querySelectorAll('.vt-row')].some(r => { const a = r.querySelector('.vt-code').getBoundingClientRect(), b = r.querySelector('.vt-name').getBoundingClientRect(); return a.right > b.left + 1 && a.bottom > b.top + 1 && a.top < b.bottom - 1 }))))
+  check(`[${width}] ② 신청서: 합계 형광펜 + 항목별 현금·가지급금 꼬리표`, await p.evaluate(() => { const f = document.querySelector('.vx-form'); const t = f.innerText; return !!f.querySelector('.tf-total-row.hl-main') && t.includes('가지급금 정리') && t.includes('현금 지급') }))
+  await p.hover('.vt-row >> nth=2'); await p.waitForTimeout(150)
+  check(`[${width}] 전표 현금 줄을 가리키면 신청서의 일당·숙박·교통비 행이 칠해진다`, await p.evaluate(() => [...document.querySelectorAll('.vx-form tr.is-focus')].map(t => t.dataset.kind).filter((v, i, a) => a.indexOf(v) === i).sort().join(',')) === 'daily,lodging,transport')
   const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
   check(`[${width}] 신청서 크로스체크: 합계가 같으면 ✓ 같아요`, cmp.includes('신청서와 전표 금액이 같아요'), cmp)
   check(`[${width}] ② 최종 정산 단계 표시`, (await text(p)).includes('② 최종 정산 전표'))
   if (width >= 1280) {
-    const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-grid').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])
+    const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-ledger').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])
     check(`[${width}] 넓은 화면: 비교 패널은 전표 오른쪽, 가로 넘침 없음`, pos[0] > pos[1] || width < 1480, JSON.stringify(pos))
   }
   await shot(p, `${width}-voucher-final`)

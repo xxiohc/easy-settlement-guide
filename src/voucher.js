@@ -64,17 +64,18 @@
       why: '전체 비용과 이미 결제한 내역을 확인한 뒤, 이번에 지급할 금액을 정리할게요.', now: '최종 정산 전표 작성', later: '' }
   }
 
-  function line(rules, key, side, amount, plain, memo) {
+  // kinds: 이 줄이 신청서의 어느 항목(교통비·일당·숙박비·등록비·항공…)에서 왔는지 — 화면에서 신청서 행과 잇는다
+  function line(rules, key, side, amount, plain, memo, kinds = []) {
     const a = rules.accounts[key] || { name: key, code: '' }
-    return { key, name: a.name, code: a.code, side, amount: num(amount), plain, memo: memo || '' }
+    return { key, name: a.name, code: a.code, side, amount: num(amount), plain, memo: memo || '', kinds }
   }
 
   // 선지급 전표(p.6): 차 가지급금-기타 / 대 보통예금
   function buildAdvance(v, rules) {
     const fee = num(v.advanceAmount != null ? v.advanceAmount : (v.costs || []).find(c => c.kind === 'fee')?.amount)
     const lines = [
-      line(rules, 'advance', 'D', fee, '먼저 보내는 등록비를 잠시 적어 두는 금액'),
-      line(rules, 'bank', 'C', fee, '병원 계좌에서 주최기관으로 보내는 금액'),
+      line(rules, 'advance', 'D', fee, '먼저 보내는 등록비를 잠시 적어 두는 금액', '', ['fee']),
+      line(rules, 'bank', 'C', fee, '병원 계좌에서 주최기관으로 보내는 금액', '', ['fee']),
     ]
     const issues = []
     if (fee == null) issues.push({ level: 'block', key: 'fee', msg: '먼저 보낼 등록비 금액을 넣어 주세요' })
@@ -109,7 +110,7 @@
         const adv = num(bp.amount)
         if (adv == null) issues.push({ level: 'block', key: 'advAmount', msg: '먼저 보낸 등록비(가지급금) 금액을 넣어 주세요' })
         else {
-          credits.push(line(rules, 'advance', 'C', adv, '먼저 보낸 등록비 정리', bp.ref ? `원 전표 ${bp.ref}` : ''))
+          credits.push(line(rules, 'advance', 'C', adv, '먼저 보낸 등록비 정리', bp.ref ? `원 전표 ${bp.ref}` : '', ['fee']))
           if (num(feeItem.amount) != null && adv > feeItem.amount) issues.push({ level: 'block', key: 'overAdvance', msg: rules.unconfirmed.overAdvance })
           if (num(feeItem.amount) != null && adv < feeItem.amount) issues.push({ level: 'block', key: 'underAdvance', msg: rules.unconfirmed.underAdvance })
         }
@@ -117,20 +118,20 @@
       } else if (bp && bp.status === 'unknown') {
         issues.push({ level: 'block', key: 'advanceStatus', msg: rules.unconfirmed.advanceStatus })
       } else if (feePaidByCard) {
-        credits.push(line(rules, 'card', 'C', feeItem.amount, '법인카드로 결제한 등록비', '카드번호·승인일(매출전표 보고)'))
+        credits.push(line(rules, 'card', 'C', feeItem.amount, '법인카드로 결제한 등록비', '카드번호·승인일(매출전표 보고)', ['fee']))
         if (num(feeItem.amount) != null && cardAmt.fee !== feeItem.amount) issues.push({ level: 'check', key: 'feeCardDiff', msg: '카드 결제 금액과 등록비가 달라요. 매출전표 금액을 확인해 주세요' })
       } else if (!paid.personal) {
-        credits.push(line(rules, 'bank', 'C', feeItem.amount, '병원 계좌에서 주최기관으로 보내는 등록비'))
+        credits.push(line(rules, 'bank', 'C', feeItem.amount, '병원 계좌에서 주최기관으로 보내는 등록비', '', ['fee']))
       }
     }
     for (const k of CARD_KINDS) {
       const it = items.find(i => i.kind === k)
-      if (it) credits.push(line(rules, 'card', 'C', it.amount, `법인카드로 결제한 ${KIND_LABEL[k]}`, '카드번호·승인일(매출전표 보고)'))
+      if (it) credits.push(line(rules, 'card', 'C', it.amount, `법인카드로 결제한 ${KIND_LABEL[k]}`, '카드번호·승인일(매출전표 보고)', [k]))
     }
     const cashItems = items.filter(i => FIXED_CASH.includes(i.kind))
     if (cashItems.length) {
       const cashAmt = cashItems.some(i => num(i.amount) == null) ? null : sum(cashItems.map(i => i.amount))
-      credits.push(line(rules, 'cash', 'C', cashAmt, `직원에게 지급(${cashItems.map(i => KIND_LABEL[i.kind]).join('·')})`, '받는 직원 사번'))
+      credits.push(line(rules, 'cash', 'C', cashAmt, `직원에게 지급(${cashItems.map(i => KIND_LABEL[i.kind]).join('·')})`, '받는 직원 사번', cashItems.map(i => i.kind)))
     }
 
     const debitItems = items.filter(i => !i.excluded)
@@ -139,8 +140,9 @@
     const expTotal = missing.length ? null : sum(debitItems.map(i => i.amount))
     const accKey = expenseAccountKey(v.purpose, v.job)
     if (!accKey) issues.push({ level: 'block', key: 'account', msg: v.purpose === 'edu' ? '교육 계정을 고르려면 직종을 골라 주세요' : '비용 목적(교육·학회 / 업무 출장)을 골라 주세요' })
-    const debit = accKey ? line(rules, accKey, 'D', expTotal, '이번 출장·교육에 든 전체 비용')
-      : { key: null, name: '비용 계정 선택 필요', code: '', side: 'D', amount: expTotal, plain: '이번 출장·교육에 든 전체 비용', memo: '' }
+    const allKinds = debitItems.map(i => i.kind)
+    const debit = accKey ? line(rules, accKey, 'D', expTotal, '이번 출장·교육에 든 전체 비용', '', allKinds)
+      : { key: null, name: '비용 계정 선택 필요', code: '', side: 'D', amount: expTotal, plain: '이번 출장·교육에 든 전체 비용', memo: '', kinds: allKinds }
     const lines = [debit, ...credits]
 
     // 신청서 금액(예상)과 최종 금액이 다르면 출장여비 정산서(p.3·p.7)
