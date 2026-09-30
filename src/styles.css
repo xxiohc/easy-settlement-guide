@@ -2912,9 +2912,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
     position: absolute;
     top: 0;
     bottom: 0;
-    left: calc(100% + 40px);
-    width: 280px;
+    left: calc(100% + 32px);
+    /* 2026-09-30 지석초이 "여정표 가로를 더 넓게" — 440px로 펴고, 카드4 본문을 왼쪽으로 (32+440)/2 밀어 둘을 한 덩어리로 가운데 둔다 */
+    width: 440px;
   }
+  #card-4 .card-body, #card-4 .card-footer { position: relative; left: -236px; }
   #card-4 .route-aside-inner { position: sticky; top: 112px; }
 }
 
@@ -3200,3 +3202,47 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 /* 출장 기간 인사: 기간 한 줄, "N박 M일 출장이시군요!" 한 줄 — 단어 중간에서 꺾이지 않게 */
 #c4-period-msg { word-break: keep-all; }
 #c4-period-msg .period-line { display: block; }
+
+.title-check-note { display: block; margin-top: 6px; color: #b45309; font-size: 13px; }
+
+/* ── 여정 도식(2026-09-30) ─────────────────────────────────────────── */
+.rc-group { margin-top: 18px; }
+.rc-group-title { font-size: 12.5px; font-weight: 700; color: var(--subtle); margin: 0 2px 8px; }
+.rc { padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.rc + .rc { margin-top: 8px; }
+.rc-main { margin-top: 12px; background: #fbfcfe; }
+.rc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 13.5px; }
+.rc-tag { flex: none; padding: 2px 8px; border-radius: 999px; background: #f2f4f6; color: var(--subtle); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.rc-tag.is-xfer { background: #f3edff; color: #6d28d9; }
+.rc-foot { margin-top: 10px; font-size: 12.5px; color: var(--subtle); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rc-note { margin: 6px 2px 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.slack-pill.is-late { background: #fef2f2; color: #b91c1c; }
+/* 노선도 — 점(역)과 선(구간). 점 중심(6px)에 선을 맞춘다 */
+.rs { display: flex; align-items: flex-start; }
+.rs-node { flex: none; width: 50px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.rs-node i { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2.5px solid var(--primary); box-sizing: border-box; }
+.rs-node.is-start i { background: var(--primary); }
+.rs-node.is-xfer i { border-color: #6d28d9; width: 14px; height: 14px; margin-top: -1px; margin-bottom: -1px; }
+.rs-node.is-goal i, .rs-node.is-end i { background: #047857; border-color: #047857; }
+.rs-node b { margin-top: 5px; font-size: 12.5px; font-weight: 700; line-height: 1.2; word-break: keep-all; }
+.rs-node time { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1.35; }
+.rs-node time small { display: block; font-size: 11px; color: var(--muted); }
+.rs-node em { margin-top: 3px; padding: 1px 6px; border-radius: 999px; background: #f3edff; color: #6d28d9; font-size: 10.5px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.rs-seg { flex: 1 1 auto; min-width: 26px; position: relative; height: 12px; margin: 0 -19px; z-index: 0; }
+.rs-node { position: relative; z-index: 1; }
+.rs-seg::before { content: ''; position: absolute; left: 0; right: 0; top: 4.5px; height: 3px; border-radius: 2px; background: var(--primary); }
+.rs-seg.is-srt::before { background: #6d28d9; }
+.rs-seg.is-rail::before { background: #64748b; }
+.rs-seg.is-access::before { background: none; border-top: 2.5px dashed #94a3b8; height: 0; top: 5px; }
+.rs-seg span { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); font-size: 10.5px; font-weight: 700; color: var(--primary); white-space: nowrap; background: #fff; padding: 0 3px; border-radius: 4px; }
+.rs-seg.is-srt span { color: #6d28d9; }
+.rs-seg.is-rail span { color: #475569; }
+.rs-seg.is-access span { color: var(--subtle); }
+.rc-main .rs-seg span { background: #fbfcfe; }
+.rs { padding-top: 14px; }
+
+/* 여정표 글은 낱말 중간에서 꺾지 않는다(2026-09-30 지석초이 "문장 흐름이 끊기는 줄바꿈 안 되게") */
+.route-aside-inner { word-break: keep-all; overflow-wrap: break-word; }
+.route-aside-inner .ra-t, .route-aside-inner time, .slack-pill, .rc-tag, .ra-link { white-space: nowrap; }
+.rs-seg.is-bus::before { background: #059669; }
+.rs-seg.is-bus span { color: #047857; }

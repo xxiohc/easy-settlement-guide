@@ -44,11 +44,24 @@ for (const [file, exp] of Object.entries(EXP)) {
   }
   const m = await p.evaluate(() => state.parsedMeta || { docKind: document.querySelector('.result-warn') ? 'unreadable' : undefined })
   const got = { docKind: m.docKind, title: m.title, start: m.startDate, end: m.endDate, time: m.startTime,
-    dest: m.destination, venue: m.venue, venueSearch: m.venueSearch, fee: m.registration ?? null, online: m.isOnline, multiSession: !!m.multiSession }
+    dest: m.destination, venue: m.venue, venueSearch: m.venueSearch, fee: m.registration ?? null, online: m.isOnline, multiSession: !!m.multiSession,
+    titleLow: (m.confidence || {}).title === 'low' }
   const bad = []
-  for (const k of Object.keys(exp)) {
+  // 2026-09-30: 좌표만 맞으면 통과시키던 탓에 화면 장소 칸의 판독 찌꺼기("…미담당자반 : 206호 {담당강")를 놓쳤다.
+  // 장소 글자 자체를 본다 — 원문 핵심어(venueHas)가 다 들어 있고, 찌꺼기 모양이 하나도 없어야 한다.
+  const VENUE_JUNK = /반\s*[:：]\s*\d+\s*호|[『』%{}<>×∎]|\s[*※]|주\s*소\s*[:：]|\s[=:;]\s|\s\d{4,}(?:\s|$)|\s[a-z]{1,3}$|담당강사/
+  const checks = { ...exp }
+  if (got.docKind === 'notice' && !got.online && got.venue) checks.venueClean = true
+  for (const k of Object.keys(checks)) {
     fields++
-    const ok = (k === 'title' || k === 'venue' || k === 'venueSearch') ? sq(got[k]) === sq(exp[k]) : (got[k] ?? '') === (exp[k] ?? '')
+    let ok
+    if (k === 'venueHas') ok = exp.venueHas.every(w => sq(got.venue).includes(sq(w)))
+    else if (k === 'venueClean') ok = !VENUE_JUNK.test(got.venue) && got.venue.length <= 50
+    // 제목은 맞게 읽거나, 못 읽었으면 '확인 필요'로 표시해야 한다 — 틀린 제목을 확신 있게 채우면 실패
+    else if (k === 'title') ok = sq(got.title) === sq(exp.title) || (exp.titleMayFlag && got.titleLow)
+    else if (k === 'titleMayFlag') { fields--; continue }
+    else ok = (k === 'venue' || k === 'venueSearch') ? sq(got[k]) === sq(exp[k]) : (got[k] ?? '') === (exp[k] ?? '')
+    if (k === 'venueHas' || k === 'venueClean') { if (!ok) { wrong++; bad.push(`${k}: 기대 ${JSON.stringify(exp[k] ?? '찌꺼기 없음')} / 실제 ${JSON.stringify(got.venue)}`) } continue }
     if (!ok) { wrong++; bad.push(`${k}: 기대 ${JSON.stringify(exp[k])} / 실제 ${JSON.stringify(got[k])}`) }
   }
   console.log(`${bad.length ? 'FAIL' : 'PASS'} ${file}${bad.map(x => '\n     ' + x).join('')}`)

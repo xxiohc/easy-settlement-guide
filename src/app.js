@@ -1783,7 +1783,7 @@ function parseDocMeta(filename, text) {
 
   // 형식0: 장소를 읽었으면 그 장소로 판정한다 — 본문에는 발신처 주소가 섞여 있다
   extractVenue.rule = 'label'
-  const venue = extractVenue(tc)
+  const venue = repairGarbledVenue(extractVenue(tc), tc)
   const venueRule = venue ? extractVenue.rule : ''
   destination = matchRegionInVenue(venue)
   let destRule = destination ? 'venue' : ''
@@ -1984,7 +1984,8 @@ function parseDocMeta(filename, text) {
   }
 
   const address = extractAddress(tc)
-  const meta = { title: tripTitle(title), address, periodDisplay, startDate, endDate, nights, days, destination, registration,
+  tripTitle.scrubbed = false
+  const meta = { title: tripTitle(title), titleScrubbed: tripTitle.scrubbed, address, periodDisplay, startDate, endDate, nights, days, destination, registration,
            registrationNote, isOnline, startTime, endTime, venue, venueSearch: venueSearchName(venue),
            yearGuessed, isTripDoc, docKind, multiSession }
   meta.rules = { date: dateRule, time: timeRule || '', fee: feeRule, dest: destRule, venue: venueRule, title: titleRule }
@@ -2055,6 +2056,13 @@ function assessMeta(meta, text) {
       down('date', '신청·접수 안내 옆의 날짜예요')
     }
   }
+  // ⑥ 제목: 깨진 토막을 걷었거나, 제목의 영문 약어가 본문 어디에도 다시 안 나오면(OCR이 지어낸 글자 'ET AXTF') 확인받는다
+  if (meta.title) {
+    conf.title = 'high'
+    const lone = (meta.title.match(/[A-Za-z]*[A-Z][A-Za-z]+/g) || []).filter(w => t.split(w).length - 1 < 2)
+    if (meta.titleScrubbed) down('title', '공문 글자가 흐려 제목 일부를 읽지 못했어요')
+    else if (lone.length) down('title', `제목의 '${lone.join(' ')}'를 본문에서 다시 찾지 못했어요`)
+  }
   if (meta.startTime && (meta.startTime < '06:00' || meta.startTime > '21:00')) down('time', `시작시각 ${meta.startTime}은 교육 시각으로 드물어요`)
   if (meta.registration) {
     // ③ 비회원가 대조 — 고른 금액이 '비회원·미등록' 바로 뒤에 적힌 값이면 회원가를 놓친 것이다
@@ -2089,6 +2097,10 @@ function tripTitle(raw) {
     prev = t
     for (const re of TITLE_TAIL_RE) t = t.replace(re, '').trim()
   }
+  // OCR 찌꺼기 토막(홀로 선 자모 'ㅠㅠ', 기호 '&×', '『')은 제목이 아니다 — 걷고 확인 필요로 표시한다(삼성전자 메일, 2026-09-30)
+  const scrubbed = t.split(/\s+/).filter(w => !/^(?:[ㄱ-ㅎㅏ-ㅣ]+|[&×『』%{}<>|\\~^]+[A-Za-z0-9]?)$/.test(w)).join(' ')
+  tripTitle.scrubbed = scrubbed !== t.replace(/\s+/g, ' ').trim()
+  t = scrubbed.replace(/\((\d{1,2})\s*자\)/g, '($1차)')   // "(3자)" — '차'를 '자'로 읽은 OCR
   t = t.replace(/\s{2,}/g, ' ').trim()
   return t.replace(/\s/g, '').length >= 4 ? t : String(raw || '').trim()
 }
@@ -2234,6 +2246,48 @@ function extractAddress(tc) {
   return ''
 }
 
+// OCR이 깨뜨린 조각 — 판독 기호(『』%{}<>&×/)가 섞였거나, 숫자·영문이 뒤엉킨 토막("0006『56", "08/6대", "E48")
+// 층·호·번지·동(3층, 107호, 2F, B1)은 정상 표기라 둔다.
+function ocrJunkToken(w) {
+  if (/[『』%{}<>×|\\]/.test(w) || /(?<![A-Za-z])&|&(?![A-Za-z])/.test(w) || /\d\/\d|\/[가-힣]/.test(w)) return true
+  if (/^(?:[A-Z]?\d{1,4}(?:층|호|번지|동|F)?|B\d|\d+F)$/.test(w)) return false
+  return /\d{3,}[^\d\s가-힣(),.\-]|\d[A-Za-z]{1,2}\d/.test(w)
+}
+// 괄호 속이 한글 없이 짧은 영문 대문자 토막만이면("M EH E48", "AM XH G48") 한글 이름을 잘못 읽은 것이다
+function ocrJunkParen(inner) {
+  const ws = String(inner || '').trim().split(/\s+/)
+  return !/[가-힣]/.test(inner) && ws.length >= 2 && ws.every(w => /^[A-Z0-9<>&]{1,4}$/.test(w))
+}
+// 장소 이름이 판독에서 깨졌으면 "주소 … 서천동로 59 삼성전자 The UniverSE"처럼 주소 뒤에 딸린 건물명으로 되살린다.
+// 되살릴 근거가 없으면 깨진 토막만 걷는다 — 아무 이름이나 지어내지 않는다(2026-09-30 지석초이 "장소가 이상하다").
+function repairGarbledVenue(venue, tc) {
+  let v = String(venue || '')
+  if (!v) return v
+  const pm = v.match(/^(.*?)\s*\(([^)]*)\)?\s*$/)
+  let head = pm ? pm[1] : v
+  let paren = pm ? (pm[2] || '') : ''
+  const parenBad = !!paren && ocrJunkParen(paren)
+  if (parenBad) paren = ''
+  const headBad = head.split(/\s+/).some(ocrJunkToken)
+  if (!headBad) return parenBad ? head : v     // 고칠 게 없으면 원문 그대로(괄호 앞 띄어쓰기까지)
+  // 주소 줄에서 도로명·번지 뒤의 건물명을 찾는다
+  const am = tc.match(/(?<![가-힣])주\s*소(?![가-힣])\s*[：:]?\s*[^\n]{0,60}?(?:로|길|동)\s*\d+(?:-\d+)?\s+([가-힣A-Za-z][가-힣A-Za-z0-9 ]{1,30}?)(?=\s{2,}|\s*[(,]|\s+(?:감사|문의|※|\d+\s*\.)|$)/)
+  let name = am ? am[1].trim() : ''
+  if (name && name.split(/\s+/).some(ocrJunkToken)) name = ''
+  if (name) {
+    // 장소 첫 낱말("The")이 건물명 안에 있으면 거기서부터 쓴다 — "삼성전자 The UniverSE" → "The UniverSE"
+    const first = head.split(/\s+/)[0]
+    const at = first && !ocrJunkToken(first) ? name.indexOf(first) : -1
+    head = at > 0 ? name.slice(at) : name
+  } else {
+    head = head.split(/\s+/).filter(w => !ocrJunkToken(w)).join(' ')
+    if (!/[가-힣]{2,}|[A-Za-z]{3,}/.test(head)) head = ''
+  }
+  head = head.replace(/[,·\s]+$/, '')
+  if (!head) return paren
+  return paren ? `${head}(${paren})` : head
+}
+
 function tidyVenue(raw) {
   let v = String(raw || '')
     .replace(/\s*\(?\s*(?:www\.|https?:\/\/).*$/i, '')        // (www.glad-hotels.com/…) 홈페이지 주소
@@ -2247,6 +2301,8 @@ function tidyVenue(raw) {
     .replace(/^(?:\s|교\s*육\s*일\s*시|교\s*육\s*장\s*소|\d{1,2}\s*차|\d{4}\s*[.\-]\s*\d{1,2}\s*[.\-]\s*\d{1,2}\s*\.?|\(\s*[가-힣]\s*\))+\d{1,2}\s*:\s*\d{2}\s*[-~–]\s*\d{1,2}\s*:\s*\d{2}\s*/, '')
     .replace(/^[\/\s:：\-]+/, '')                               // 포스터 "/ 장소 / 중앙대학교병원"
     .replace(/\s*[▪■◼•ㆍ○◦©◎⊙].*$/, '')                       // 다음 항목 글머리표 "▪ 참석 대상자", "ㆍ사내 강사", 스캔 '○'→'©'
+    // 장소 칸 아래 줄의 분반 배정 "PI담당자반 : 206호 (담당강사 …)"은 장소가 아니다(삼성전자 메일, 2026-09-30)
+    .replace(/\s+\S{0,8}반\s*[:：]\s*\d{1,4}\s*호.*$/, '')
     .replace(/\s+(?:담당|기타|교육대상|대상|참가|등록|사전등록|등록방법|등록비|입금|초록|프로그램|숙박|문의|※|소요|발표자|접\s*수|교\s*육\s*비).*$/, '')
     .replace(/\s*(?:현장\s*참여|ZOOM|Zoom|zoom).*$/, '')           // 하이브리드 교육의 온라인 병기
     .replace(/\s+[-–]\s.*$/, '')                                // 다음 줄 목록 "- 사전등록"
@@ -2254,7 +2310,29 @@ function tidyVenue(raw) {
     .trim()
   // 장소 뒤에 딸린 길 안내 "(여의나루역 1번 출구 도보 10분)"는 검색을 방해한다
   v = v.replace(/\s*\([^)]*(?:출구|도보|분 거리|주차)[^)]*\)\s*$/, '')
-  return fixLetterSpacing(v).slice(0, 60).trim()
+  return trimVenueJunk(fixLetterSpacing(v)).slice(0, 60).trim()
+}
+
+// 장소 이름 뒤에 딸려 온 주석·판독 찌꺼기를 걷는다(2026-09-30 전수 점검: 화면에 "S82 세 3333 그 고게 : = 830-850",
+// "* 주차지원 룰가하니 HERS…", "(본관 6춤) oh", "( 주소 : 대전광역시 …"가 그대로 떴다 — 좌표는 맞아서 점검을 통과했었다).
+const VENUE_TAIL_KEEP = /^[룸홀관실동층점원장당방관]$/
+function trimVenueJunk(raw) {
+  let v = String(raw || '')
+    .replace(/\s*\(?\s*[*※].*$/, '')                  // 주석 "* 주차지원…", "(* 제주특별자치도 …)"
+    .replace(/\s*\(\s*주\s*소\s*[:：].*$/, '')        // 괄호 속 주소 줄 "( 주소 : 대전광역시 …"
+    .replace(/(\d)\s*춤/g, '$1층')                     // 스캔 오독 6춤 → 6층
+    .replace(/\(\s*(\d+)\s*층\s*\)/g, '($1층)')
+    .replace(/\(\s+/g, '(').replace(/\s+\)/g, ')')
+    .replace(/\s*\(\d{2,6}\)/g, '')                    // 숫자만 든 괄호 "(0800)" — 영문 약칭을 잘못 읽은 것
+  let ws = v.split(/\s+/).filter(Boolean)
+  const cut = ws.findIndex((w, i) => i > 0 && /^(?:[=:;*∎■□]+|\d{4,}|\d{3,}-\d{3,})$/.test(w))
+  if (cut > 0) ws = ws.slice(0, cut)
+  while (ws.length > 1) {
+    const w = ws[ws.length - 1]
+    if (/^[^가-힣A-Za-z0-9()]+$/.test(w) || /^[a-z]{1,3}$/.test(w) || (/^[가-힣]$/.test(w) && !VENUE_TAIL_KEEP.test(w)) || (ocrJunkToken(w) && !/\([가-힣]/.test(w))) ws.pop()
+    else break
+  }
+  return ws.join(' ').replace(/[∎■□,·|｜\s]+$/, '').replace(/\s*\([^)]*(?:출구|도보|분 거리|주차)[^)]*\)\s*$/, '')
 }
 
 // 공문 장소에서 '검색할 이름'만 남긴다(2026-09-29 지석초이). 카카오 장소 검색은 "CFO 아카데미4층2강의실"
@@ -2357,7 +2435,7 @@ function renderParseResult(filename, meta, hasText) {
 
   grid.innerHTML = `
     <div class="result-item full"><label>파일명</label><span>${escapeHtml(filename)}</span></div>
-    <div class="result-item full"><label>출장/교육명</label>${fmt(meta.title)}</div>
+    <div class="result-item full"><label>출장/교육명</label>${fmt(meta.title)}${lowTag('title')}</div>
     <div class="result-item"><label>기간</label>${fmt(periodStr)}${lowTag('date')}</div>
     <div class="result-item"><label>지역</label>${fmt(meta.destination)}${lowTag('dest')}</div>
     <div class="result-item"><label>첫날 시작시각</label>${fmt(meta.startTime)}${lowTag('time')}</div>
@@ -2701,6 +2779,15 @@ function holdLowConfidence(meta) {
     offer(document.getElementById('input-start')?.closest('.info-field'), periodWithYear(meta), () => {
       setDocField('input-start', meta.startDate); setDocField('input-end', meta.endDate); onDateChange()
     }, 'date')
+  }
+  // 제목은 정산 금액에 영향이 없어 비우지 않고, 칸 아래에 확인 문구만 단다
+  document.getElementById('title-check-note')?.remove()
+  if (conf.title === 'low' && meta.title) {
+    const note = document.createElement('div')
+    note.id = 'title-check-note'
+    note.className = 'doc-suggest-why title-check-note'
+    note.textContent = `⚠️ ${why('title')} — 공문과 맞는지 확인해 고쳐 주세요`
+    document.getElementById('input-title')?.insertAdjacentElement('afterend', note)
   }
   if (conf.time === 'low' && meta.startTime) {
     setStartTime('', false); renderTimeHint(null)
@@ -3335,10 +3422,13 @@ function busVerdictHtml(plan, startMin) {
   const why = leave >= WORK_START_MIN
     ? `<div class="ra-why">병원에서 ${fmtTime(leave)}에 나서면 닿아요 — 정규 출근시각(08:30) 이후라 전날 이동이 아니에요</div>`
     : `<div class="ra-why">병원에서 ${fmtTime(leave)}에 나서야 해요 — 시외버스 구간은 전날 이동 대상이 아니에요</div>`
+  const short = c.r.terminal.replace(/\s*\(.*\)$/, '').replace(/(?:종합|공용)?(?:시외)?버스(?:공용)?터미널$|터미널$/, '')
+  const strip = routeStrip({ legs: [{ type: '시외버스', dep: c.dep, arr, to: short }] }, { startName: '마산', access: plan.dest ? c.access : null })
   return `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>마산시외버스터미널 ${fmtTime(c.dep)} 출발</b></div>
     ${why}
+    <div class="rc rc-main">${strip}</div>
     <ol class="ra-timeline">
-      <li><span class="ra-t">${fmtTime(leave)}</span><span class="ra-dot"></span><span>삼성창원병원 출발<span class="ra-sub">터미널까지 약 ${fmtDur(plan.originMin)}${BUS_MASAN?.origin?.fromWorkNote ? ` · ${escapeHtml(BUS_MASAN.origin.fromWorkNote)}` : ''}</span></span></li>
+      <li><span class="ra-t">${fmtTime(leave)}</span><span class="ra-dot"></span><span>삼성창원병원 출발<span class="ra-sub"${BUS_MASAN?.origin?.fromWorkNote ? ` title="${escapeHtml(BUS_MASAN.origin.fromWorkNote)}"` : ''}>터미널까지 약 ${fmtDur(plan.originMin)}(추정)</span></span></li>
       <li class="is-train"><span class="ra-t">${fmtTime(c.dep)}</span><span class="ra-dot"></span><span>마산시외버스터미널 출발<span class="ra-sub">시외버스 일반 · 편도 ${c.r.fare.toLocaleString()}원</span>${busListHtml(c, c.dep)}</span></li>
       <li><span class="ra-t">${fmtTime(arr)}</span><span class="ra-dot"></span><span>${escapeHtml(c.r.terminal)} 도착<span class="ra-sub">약 ${fmtDur(c.r.durationMin)}</span></span></li>
       ${plan.dest ? `<li><span class="ra-t">${fmtTime(arr + c.access)}</span><span class="ra-dot"></span><span>현장 도착<span class="ra-sub">${access}</span></span></li>` : `<li><span class="ra-t"></span><span class="ra-dot"></span><span class="ra-sub">${access}</span></li>`}
@@ -3386,6 +3476,38 @@ function cityTripHtml(fare) {
     (Number.isFinite(start) ? `<ol class="ra-timeline">${rows.join('')}</ol>${taxiAlt}` : `<div class="ra-why">첫날 교육 시작시각을 고르면 병원에서 언제 나서야 하는지 알려 드려요. 시내버스 약 ${fmtDur(bus)} · 택시 약 ${fmtDur(taxi)} <b>추정</b></div>${links}`) + note
 }
 
+// ── 여정 도식(2026-09-30 지석초이 "줄글 나열 말고 도식화, 환승편도 도식화") ──────────────────────────
+// 역을 점, 구간을 선으로 잇는다: 마산 ─KTX─ 동대구(환승 21분) ─SRT─ 동탄 ┄25분┄ 현장. 선 색은 열차 종류(KTX 파랑·SRT 보라·
+// 그 밖 회색), 역→현장은 점선이다. 시각은 점 아래에 적는다.
+function trainClass(type) {
+  return /버스/.test(type) ? 'is-bus' : /SRT/i.test(type) ? 'is-srt' : /KTX/i.test(type) ? 'is-ktx' : 'is-rail'
+}
+function routeStrip(it, opt = {}) {
+  const legs = it.legs || []
+  if (!legs.length) return ''
+  const node = (cls, name, time, extra = '') =>
+    `<div class="rs-node ${cls}"><i></i><b>${escapeHtml(name)}</b><time>${time}</time>${extra}</div>`
+  const seg = (cls, label) => `<div class="rs-seg ${cls}"><span>${escapeHtml(label)}</span></div>`
+  let html = node('is-start', opt.startName || '마산', fmtTime(legs[0].dep))
+  legs.forEach((l, i) => {
+    html += seg(trainClass(l.type), String(l.type || '열차').replace(/-산천/, ''))
+    const next = legs[i + 1]
+    if (next) html += node('is-xfer', l.to, `${fmtTime(l.arr)}<small>→${fmtTime(next.dep)}</small>`, `<em>환승 ${fmtDur(next.dep - l.arr)}</em>`)
+    else html += node(opt.access != null ? '' : 'is-end', l.to, fmtTime(l.arr))
+  })
+  if (opt.access != null) {
+    html += seg('is-access', `${opt.accessIcon || ''}${fmtDur(opt.access)}`)
+    html += node('is-goal', '현장', fmtTime(legs[legs.length - 1].arr + opt.access))
+  }
+  return `<div class="rs" role="img" aria-label="${escapeHtml(legs.map((l, i) => `${i ? '' : '마산 ' + fmtTime(l.dep) + ' → '}${l.to} ${fmtTime(l.arr)}`).join(' → '))}">${html}</div>`
+}
+// 여정 한 벌을 카드로 — 머리(역·환승 여부) + 도식 + 결과 알약
+function routeCard(title, tag, it, opt = {}, foot = '') {
+  return `<div class="rc"><div class="rc-head"><b>${title}</b>${tag ? `<span class="rc-tag${/환승/.test(tag) ? ' is-xfer' : ''}">${escapeHtml(tag)}</span>` : ''}</div>` +
+    routeStrip(it, opt) + (foot ? `<div class="rc-foot">${foot}</div>` : '') + `</div>`
+}
+const xferTag = it => it.transfers ? `${(it.via || []).join('·')} 환승` : '직통'
+
 // 당일 열차로는 못 닿는 구간(전날 이동 강제) — '당일 가장 빠른 길'과 '전날 이렇게 가세요'를 같이 보인다(2026-09-30 지석초이:
 // "수원은 아침 도착 열차가 없는데 이럴 때 동탄역으로 환승 알려줘"). 예전엔 "당일 열차가 없어요" 한 줄뿐이었다.
 function noTrainHtml() {
@@ -3395,20 +3517,20 @@ function noTrainHtml() {
   const dest = r && r.dest
   if (!dest || typeof earliestSameDay !== 'function') return head
   const args = { lat: dest.lat, lon: dest.lon, dow: r.dow, destRow: dest.row || null, access: state.accessOverride, transit: state.transitAccess }
-  const legLine = it => it.legs.map((l, i) => `${i === 0 ? '마산' : escapeHtml(l.from)} ${fmtTime(l.dep)} → ${escapeHtml(l.to)} ${fmtTime(l.arr)}`).join(' · 환승 · ')
   let html = head
+  const prev = planPreviousDay(args)
+  if (prev && prev.options.length) {
+    html += `<div class="rc-group"><div class="rc-group-title">전날(${shortDate(state.startDate, -1)}) 이렇게 가세요</div>` +
+      prev.options.slice(0, 2).map((o, i) => routeCard(`${i + 1}. ${escapeHtml(prev.station)}역 ${fmtTime(o.arr)} 도착`, xferTag(o), o)).join('') +
+      `<div class="rc-note">전날 밤 10시 전에 닿는 늦은 편부터 · 역→현장 약 ${fmtDur(prev.access)}(추정)</div></div>`
+  }
   const fast = earliestSameDay(args)
   const start = toMinutes(state.startTime)
   if (fast) {
-    const late = fast.site - start
-    html += `<div class="ra-earlier"><div class="ra-earlier-title">당일 가장 빠른 길 — ${escapeHtml(fast.station)}역${fast.transfers ? ` (${escapeHtml(fast.via.join('·'))} 환승)` : ''}</div>
-      ${legLine(fast)}<span class="ra-sub">현장 약 ${fmtTime(fast.site)} 도착(역→현장 ${fmtDur(fast.access)} 추정) — 교육 시작보다 ${fmtDur(Math.max(late, 0))} 늦어 당일로는 안 돼요</span></div>`
-  }
-  const prev = planPreviousDay(args)
-  if (prev && prev.options.length) {
-    const rows = prev.options.slice(0, 2).map(o => `<li>${legLine(o)}${o.transfers ? ` <span class="ra-sub">${escapeHtml(o.via.join('·'))} 환승</span>` : ' <span class="ra-sub">직통</span>'}</li>`).join('')
-    html += `<div class="ra-earlier"><div class="ra-earlier-title">전날(${shortDate(state.startDate, -1)}) 이렇게 가세요 — ${escapeHtml(prev.station)}역 도착</div>
-      <ol class="ra-prev-list">${rows}</ol><span class="ra-sub">역→현장 ${fmtDur(prev.access)} 추정 · 전날 밤 10시 전에 닿는 늦은 편부터 보여 드려요</span></div>`
+    const late = Math.max(fast.site - start, 0)
+    html += `<div class="rc-group"><div class="rc-group-title">참고 · 당일 가장 빠른 길</div>` +
+      routeCard(`${escapeHtml(fast.station)}역 경유`, xferTag(fast), fast, { access: fast.access },
+        `<span class="slack-pill is-late">교육 시작보다 ${fmtDur(late)} 늦음</span> 당일로는 못 닿아요`) + `</div>`
   }
   return html
 }
@@ -3423,14 +3545,10 @@ function altRoutesHtml(best) {
     .slice(0, 2)
   if (!alts.length) return ''
   const start = toMinutes(state.startTime)
-  const rows = alts.map(a => {
-    const legs = a.legs.map((l, i) => `${i === 0 ? '마산' : escapeHtml(l.from)} ${fmtTime(l.dep)} → ${escapeHtml(l.to)} ${fmtTime(l.arr)}`).join(' · 환승 · ')
-    const site = a.arr + a.access
-    return `<li><b>${escapeHtml(a.station)}역</b>${a.transfers ? ` (${escapeHtml(a.via.join('·'))} 환승)` : ' (직통)'}<span class="ra-sub">${legs}</span>` +
-      `<span class="ra-sub">현장 약 ${fmtTime(site)} 도착 ${Number.isFinite(start) ? slackPill(start - site) : ''}</span></li>`
-  }).join('')
-  return `<div class="ra-earlier"><div class="ra-earlier-title">대안 여정</div><ol class="ra-prev-list">${rows}</ol>` +
-    `<span class="ra-sub">정산 운임은 위에서 권한 편 기준이에요. 좌석·시간은 코레일·SRT에서 확인하세요.</span></div>`
+  const cards = alts.map(a => routeCard(`${escapeHtml(a.station)}역`, xferTag(a), a, { access: a.access },
+    Number.isFinite(start) ? slackPill(start - (a.arr + a.access)) : '')).join('')
+  return `<div class="rc-group"><div class="rc-group-title">대안 여정</div>${cards}` +
+    `<div class="rc-note">정산 운임은 위에서 권한 편 기준이에요. 좌석·시간은 코레일·SRT에서 확인하세요.</div></div>`
 }
 
 function slackPill(min) {
@@ -3452,11 +3570,9 @@ function earlierDirect(b) {
 function earlierTrainHtml(b) {
   const prev = earlierDirect(b)
   if (!prev) return ''
-  return `<div class="ra-earlier">
-    <div class="ra-earlier-title">조금 더 일찍 가려면</div>
-    <div>마산역 <b>${fmtTime(prev.dep)}</b> 출발 → ${escapeHtml(b.station)}역 ${fmtTime(prev.arr)} 도착 → 현장 ${fmtTime(prev.arr + b.access)} 도착 ${slackPill(toMinutes(state.startTime) - (prev.arr + b.access))}
-      <span class="ra-sub">${escapeHtml(prev.legs[0].type)} ${escapeHtml(prev.legs[0].no)} · 정산은 위 ${fmtTime(b.dep)} 편 기준이에요</span></div>
-  </div>`
+  return `<div class="rc-group"><div class="rc-group-title">조금 더 일찍 가려면</div>` +
+    routeCard(`${escapeHtml(b.station)}역`, `${prev.legs[0].type} ${prev.legs[0].no}`, prev, { access: b.access },
+      `${slackPill(toMinutes(state.startTime) - (prev.arr + b.access))} 정산은 위 ${fmtTime(b.dep)} 편 기준이에요`) + `</div>`
 }
 
 // 카드4 첫날 이동 안내 패널(넓은 화면은 오른쪽 여백). '어떻게 가는지'만 안내하고, 전날 이동 인정·추가 금액은
@@ -3493,7 +3609,7 @@ function renderPrevDayVerdict() {
         <span>${i === 0 ? '마산역' : escapeHtml(leg.from) + '역 환승'} 출발<span class="ra-sub">${escapeHtml(leg.type)} ${escapeHtml(leg.no)}</span>
         ${i === 0 && !b.transfers ? korailLinkHtml(leg, b.dep, earlierDirect(b)?.dep) : korailLinkHtml(leg)}</span></li>`)
       if (i < b.legs.length - 1) {
-        rows.push(`<li><span class="ra-t">${fmtTime(leg.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(leg.to)}역 도착</span></li>`)
+        rows.push(`<li><span class="ra-t">${fmtTime(leg.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(leg.to)}역 도착 <span class="rc-tag is-xfer">환승 ${fmtDur(b.legs[i + 1].dep - leg.arr)}</span></span></li>`)
       }
     })
     rows.push(`<li><span class="ra-t">${fmtTime(b.arr)}</span><span class="ra-dot"></span><span>${escapeHtml(b.station)}역 도착</span></li>`)
@@ -3503,7 +3619,8 @@ function renderPrevDayVerdict() {
     rows.push(`<li class="is-goal"><span class="ra-t">${escapeHtml(state.startTime)}</span><span class="ra-dot"></span><span>교육 시작</span></li>`)
     const verdict = `<div class="ra-verdict is-go"><span>이렇게 이동하세요</span><b>마산역 ${fmtTime(b.dep)} 출발</b></div>
       ${j.move ? '<div class="ra-why">정규 출근시각(08:30) 전에 출발하는 편이에요</div>' : ''}`
-    return show(`${verdict}<ol class="ra-timeline">${rows.join('')}</ol>${earlierTrainHtml(b)}${altRoutesHtml(b)}`, true)
+    const overview = routeStrip(b, { access: b.access })
+    return show(`${verdict}<div class="rc rc-main">${overview}</div><ol class="ra-timeline">${rows.join('')}</ol>${earlierTrainHtml(b)}${altRoutesHtml(b)}`, true)
   }
   if (j.kind === 'no-train') return show(noTrainHtml(), true)
   if (j.kind === 'citybus') return show(cityTripHtml(j.fare), true)
