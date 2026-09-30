@@ -325,3 +325,22 @@ test('14시 삼성서울병원은 09:21 서울역 직통으로 당일 이동이�
   assert.equal(p.best.transfers, 0)
   assert.equal(R.fmtTime(p.best.dep), '09:21')
 })
+
+// ── 2026-09-30 지석초이: 대안 여정의 환승은 동대구·대전이 최우선, 되돌아가는 환승은 싣지 않는다 ──
+test('대안 여정: 동대구·대전 환승편이 맨 앞에 온다', () => {
+  for (const [name, t] of [['삼성서울병원', 14 * 60], ['서울지방국세청', 14 * 60], ['건강보험심사평가원', 14 * 60]]) {
+    const p = planFor(name, t)
+    const firstXfer = p.alternatives.find(a => a.transfers)
+    assert.ok(firstXfer, `${name}: 환승 대안 없음`)
+    assert.ok(['동대구', '대전'].includes(firstXfer.via[0]), `${name}: 첫 환승 대안이 ${firstXfer.via[0]} 환승`)
+  }
+})
+test('대안 여정: 마산을 되지나는 환승·후보역에서 갈아타는 환승은 싣지 않는다', () => {
+  for (const name of ['삼성서울병원', '서울지방국세청']) {
+    const p = planFor(name, 14 * 60)
+    for (const a of p.alternatives.filter(x => x.transfers)) {
+      assert.notEqual(a.via[0], '진주', `${name}: 진주 환승(반대 방향)`)
+      assert.notEqual(a.via[0], '서울', `${name}: 서울(후보역)에서 갈아타기`)
+    }
+  }
+})

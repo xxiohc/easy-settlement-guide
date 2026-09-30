@@ -70,6 +70,9 @@ const b = await launcher.launch({})
 
 // 시나리오: 정적 전체(모든 카드 강제 노출) + 실제 주행 2갈래
 async function scanState(p, label, width) {
+  // 웹폰트가 덜 받아진 채 재면 대체 글꼴 폭으로 줄이 꺾여 가끔 '어절중간끊김'이 났다(2026-09-30, 320px 업로드 안내).
+  // 글꼴 로딩이 끝난 뒤 한 프레임 더 기다렸다가 잰다.
+  await p.evaluate(() => document.fonts.ready.then(() => new Promise(r => requestAnimationFrame(() => r()))))
   const r = await p.evaluate(SCAN)
   for (const x of r.bad) rows.push({ w: width, label, kind: '어절중간끊김', ...x })
   for (const x of r.over) rows.push({ w: width, label, kind: '가로넘침', around: `${x.scroll}>${x.client}`, sel: x.sel, full: '' })

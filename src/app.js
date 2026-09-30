@@ -3545,7 +3545,7 @@ function altRoutesHtml(best) {
   const alts = ((r && r.plan && r.plan.alternatives) || [])
     .filter(a => a.dep !== best.dep || a.station !== best.station)
     .filter(a => a.transfers > 0 || a.station !== best.station)
-    .slice(0, 2)
+    .slice(0, 3)   // 동대구·대전 환승편이 앞에 온다(route.js PREFERRED_HUBS)
   if (!alts.length) return ''
   const start = toMinutes(state.startTime)
   const cards = alts.map(a => routeCard(`${escapeHtml(a.station)}역`, xferTag(a), a, { access: a.access },
