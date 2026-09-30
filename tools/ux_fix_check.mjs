@@ -252,6 +252,23 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   }
 }
 
+// ── G. 2026-09-30 지석초이: 대안 여정 카드에도 도착역→현장 대중교통·택시 길찾기 링크 ──
+{
+  const [ctx,p] = await newPage()
+  await p.click('[data-choice="planned"]'); await p.waitForTimeout(400)
+  await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
+  await p.fill('#input-place', '여의도 태영빌딩'); await p.dispatchEvent('#input-place', 'input')
+  await p.fill('#input-region', '서울'); await p.dispatchEvent('#input-region', 'input')
+  await p.fill('#input-start', '2026-10-22'); await p.fill('#input-end', '2026-10-22'); await p.dispatchEvent('#input-start','change')
+  await p.selectOption('#input-starthour', '09'); await p.selectOption('#input-startmin', '30'); await p.waitForTimeout(800)
+  await p.evaluate(() => { state.placeLat = 37.5256; state.placeLon = 126.9255; state.placeNeedsPick = false; renderPrevDayVerdict() }); await p.waitForTimeout(800)
+  const r = await p.evaluate(() => [...document.querySelectorAll('#route-aside .rc-group')].filter(g => /대안 여정/.test(g.textContent))
+    .flatMap(g => [...g.querySelectorAll('.rc')].map(c => ({ st: c.querySelector('.rc-head b')?.textContent, links: [...c.querySelectorAll('.ra-link')].map(a => a.href) }))))
+  check('G 대안 여정 카드가 있다', r.length > 0, `${r.length}장`)
+  check('G 카드마다 그 역에서 출발하는 대중교통·택시 링크', r.length > 0 && r.every(c => c.links.length === 2 && c.links.every(h => decodeURIComponent(h).includes(c.st.replace(/역$/, '') + '역,'))), JSON.stringify(r.map(c => c.st + ':' + c.links.length)))
+  await ctx.close()
+}
+
 await b.close()
 console.log('\n── 요약 ──')
 console.log(`총 ${out.length}건 · FAIL ${out.filter(l=>l.startsWith('FAIL')).length}건`)

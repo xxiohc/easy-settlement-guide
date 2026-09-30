@@ -3320,17 +3320,20 @@ function transitDetailHtml(route) {
     route.steps.map(s => `<li>${escapeHtml(s.text)}</li>`).join('')}</ol></details>`
 }
 
+// 도착역 → 현장 카카오맵 길찾기 링크(대중교통·택시). 대안 여정 카드에도 같은 링크를 단다(2026-09-30 지석초이).
+function stationRouteLinks(station, dest) {
+  const st = KtxRoute.stations && KtxRoute.stations[station]
+  if (!st || !dest || dest.proxy || !Number.isFinite(dest.lat)) return ''
+  return `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', station + '역', st, dest.label || '목적지', dest)}">대중교통 경로 ↗</a>` +
+    `<a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', station + '역', st, dest.label || '목적지', dest)}">택시 경로 ↗</a></span>`
+}
 function accessLine(b, dest) {
   if (!dest || dest.proxy) return `${escapeHtml(b.station)}역 기준 계산 — 장소를 검색 목록에서 고르면 현장까지 실제 거리로 계산해요`
   const basis = b.accessSrc === 'est' ? `추정 · 역에서 <x-nb>직선 ${b.stationKm}km</x-nb> 기준`
     : b.accessSrc === 'transit' ? '서울시 대중교통 조회'
     : b.accessSrc === 'known' ? '확인값' : '직접 입력'
-  const st = KtxRoute.stations && KtxRoute.stations[b.station]
   // 경로 링크는 설명 아래 한 줄에 모은다(2026-09-26 지석초이)
-  const links = st && dest && Number.isFinite(dest.lat)
-    ? `<span class="ra-links"><a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('traffic', b.station + '역', st, dest.label || '목적지', dest)}">대중교통 경로 ↗</a>` +
-      `<a class="ra-link" target="_blank" rel="noopener" href="${kakaoRouteUrl('car', b.station + '역', st, dest.label || '목적지', dest)}">택시 경로 ↗</a></span>`
-    : ''
+  const links = stationRouteLinks(b.station, dest)
   ensureTransit(b, dest)
   return `대중교통 약 ${b.access}분(${basis})${links}${transitDetailHtml(b.accessRoute)}`
 }
@@ -3530,7 +3533,7 @@ function noTrainHtml() {
     const late = Math.max(fast.site - start, 0)
     html += `<div class="rc-group"><div class="rc-group-title">참고 · 당일 가장 빠른 길</div>` +
       routeCard(`${escapeHtml(fast.station)}역 경유`, xferTag(fast), fast, { access: fast.access },
-        `<span class="slack-pill is-late">교육 시작보다 ${fmtDur(late)} 늦음</span> 당일로는 못 닿아요`) + `</div>`
+        `<span class="slack-pill is-late">교육 시작보다 ${fmtDur(late)} 늦음</span> 당일로는 못 닿아요${stationRouteLinks(fast.station, dest)}`) + `</div>`
   }
   return html
 }
@@ -3546,7 +3549,8 @@ function altRoutesHtml(best) {
   if (!alts.length) return ''
   const start = toMinutes(state.startTime)
   const cards = alts.map(a => routeCard(`${escapeHtml(a.station)}역`, xferTag(a), a, { access: a.access },
-    Number.isFinite(start) ? slackPill(start - (a.arr + a.access)) : '')).join('')
+    (Number.isFinite(start) ? slackPill(start - (a.arr + a.access)) : '') +
+    `<span class="rc-access">${escapeHtml(a.station)}역→현장 대중교통 약 ${fmtDur(a.access)}(추정)</span>${stationRouteLinks(a.station, r.dest)}`)).join('')
   return `<div class="rc-group"><div class="rc-group-title">대안 여정</div>${cards}` +
     `<div class="rc-note">정산 운임은 위에서 권한 편 기준이에요. 좌석·시간은 코레일·SRT에서 확인하세요.</div></div>`
 }
