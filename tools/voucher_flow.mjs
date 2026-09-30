@@ -141,9 +141,12 @@ for (const width of [1280, 390]) {
   check(`[${width}] ② 신청서: 합계 형광펜 + 항목별 현금·가지급금 꼬리표`, await p.evaluate(() => { const f = document.querySelector('.vx-form'); const t = f.innerText; return !!f.querySelector('.tf-total-row.hl-main') && t.includes('가지급금 정리') && t.includes('현금 지급') }))
   await p.hover('.vt-row >> nth=2'); await p.waitForTimeout(150)
   check(`[${width}] 전표 현금 줄을 가리키면 신청서의 일당·숙박·교통비 행이 칠해진다`, await p.evaluate(() => [...document.querySelectorAll('.vx-form tr.is-focus')].map(t => t.dataset.kind).filter((v, i, a) => a.indexOf(v) === i).sort().join(',')) === 'daily,lodging,transport')
+  check(`[${width}] 대변 현금 줄을 가리켜도 출장비 합계는 칠하지 않는다`, await p.evaluate(() => !document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && document.querySelector('.vx-form').classList.contains('has-focus')))
+  await p.hover('.vt-row >> nth=0'); await p.waitForTimeout(150)
+  check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계까지 칠한다`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus')))
   const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
   check(`[${width}] 신청서 크로스체크: 합계가 같으면 ✓ 같아요`, cmp.includes('신청서와 전표 금액이 같아요'), cmp)
-  check(`[${width}] ② 최종 정산 단계 표시`, (await text(p)).includes('② 최종 정산 전표'))
+  check(`[${width}] ② 최종 정산 친근한 제목`, (await text(p)).includes('② 최종 정산은 이렇게 해볼까요?'))
   if (width >= 1280) {
     const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-ledger').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])
     check(`[${width}] 넓은 화면: 비교 패널은 전표 오른쪽, 가로 넘침 없음`, pos[0] > pos[1] || width < 1480, JSON.stringify(pos))
