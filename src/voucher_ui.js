@@ -184,8 +184,7 @@ function renderVoucher() {
   if (!list.some(([id]) => id === vg.screen)) vg.screen = list[0][0]
   const idx = list.findIndex(([id]) => id === vg.screen)
   const group = list[idx][1]
-  document.getElementById('vg-progress').innerHTML = VG_GROUPS.map((g, i) =>
-    `<span class="vg-step${i < group ? ' is-done' : i === group ? ' is-on' : ''}"><i>${i < group ? '✓' : i + 1}</i>${g}</span>`).join('<b class="vg-step-line"></b>')
+  renderVoucherTrail(list, group)
   const r = vgResult()
   vgSyncChecks(r)
   const html = (VG_SCREEN[vg.screen] || (() => ''))(r)
@@ -197,6 +196,31 @@ function renderVoucher() {
   next.textContent = typeof nextLabel === 'function' ? nextLabel(r) : (nextLabel || '다음')
   next.disabled = !vgCanNext(r)
   next.classList.toggle('hidden', vg.screen === 'done')
+}
+
+// 본 흐름(renderTrails)과 같은 모양의 단계 트레일 — 지난 묶음은 눌러서 그 묶음 첫 화면으로 돌아간다
+function renderVoucherTrail(list, group) {
+  const trail = document.getElementById('vg-progress')
+  const info = document.getElementById('vg-progress-info')
+  if (!trail || !info) return
+  const check = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  trail.innerHTML = VG_GROUPS.map((label, i) => {
+    const status = i < group ? 'done' : i === group ? 'current' : 'future'
+    const first = list.find(([, g]) => g === i)
+    const conn = i ? `<div class="trail-connector${i <= group ? ' done' : ''}"></div>` : ''
+    return conn + `<button class="trail-item ${status}" ${status === 'done' && first ? `onclick="vgJump('${first[0]}')"` : 'disabled'} aria-label="${label}"><div class="trail-dot">${status === 'done' ? check : i + 1}</div></button>`
+  }).join('')
+  const text = `${group + 1} / ${VG_GROUPS.length}단계`
+  info.innerHTML = window.innerWidth <= 480
+    ? `<span class="trail-mob-badge">${text}</span><span class="trail-mob-label">${VG_GROUPS[group]}</span>`
+    : `${text} · ${VG_GROUPS[group]}`
+}
+function vgJump(screen) {
+  vg.screen = screen
+  vgSave()
+  renderVoucher()
+  const cardEl = document.getElementById('card-12')
+  if (cardEl) cardEl.scrollTop = 0
 }
 
 // 금액·서류가 바뀌면 이전 확인 표시는 풀고 알린다

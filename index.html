@@ -767,10 +767,14 @@
              CARD 12: 전표 작성 안내 (선택)
         ══════════════════════════════════════ -->
         <section class="flow-card" id="card-12" data-step="12">
-          <button class="back-btn" onclick="vgGo(-1)" aria-label="뒤로">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
-          <div class="vg-progress" id="vg-progress"></div>
+          <!-- 본 흐름과 같은 단계 트레일, 색만 주황(2026-09-30 지석초이) -->
+          <div class="trail-sticky vg-sticky">
+            <button class="back-btn" onclick="vgGo(-1)" aria-label="뒤로">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+            <div class="step-trail" id="vg-progress"></div>
+            <div class="trail-current-info" id="vg-progress-info"></div>
+          </div>
           <div class="card-body">
             <div id="vg-screen"></div>
           </div>
