@@ -411,10 +411,7 @@ function voucherView(r, stage, memo, preview) {
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
       ${stage === 1 && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
       ${preview ? '' : `<button type="button" class="vg-link" onclick="vgJump('amounts')">금액이 달라요 · 고치기</button>`}
-      ${why('차변·대변이 뭐예요?', '한 건의 돈을 두 쪽에 나눠 적어요. <b>차변</b>은 돈이 쓰인 곳(비용, 먼저 보낸 돈), <b>대변</b>은 돈이 나간 곳(현금·병원 통장·법인카드)이에요. 두 쪽 합계는 늘 같아요.')}
-      ${why('원 자료 사례 보기', stage === 1
-        ? '등록비 800,000원을 먼저 보낸 전표: 차변 가지급금-기타 800,000 / 대변 보통예금 800,000 (경영지원팀 전표 실무길라잡이 p.6)'
-        : '선지급 뒤 최종 정산: 차변 여비교통비-국내출장비 1,339,700 / 대변 법인카드 7줄 382,200 · 현금 2명 157,500 · 가지급금-기타 800,000 (p.7). 법인카드는 매출전표 한 장마다 한 줄, 현금은 받는 직원마다 한 줄이에요.')}</div>`
+      ${why('차변·대변이 뭐예요?', '한 건의 돈을 두 쪽에 나눠 적어요. <b>차변</b>은 돈이 쓰인 곳(비용, 먼저 보낸 돈), <b>대변</b>은 돈이 나간 곳(현금·병원 통장·법인카드)이에요. 두 쪽 합계는 늘 같아요.')}</div>`
 }
 
 const VG_SCREEN = {
