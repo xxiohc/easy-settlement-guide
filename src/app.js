@@ -152,6 +152,7 @@ function goToCard(n) {
   if (n === 9)  prepareCard9()
   if (n === 10) { prefillProfileCard10(); prepareCard10() }
   if (n === 11) prepareCard11()
+  if (n === 2 && typeof renderVoucherResume === 'function') renderVoucherResume()
 
   if (n > state.currentCard) {
     current.classList.add('exit-left')
@@ -373,7 +374,8 @@ function goFromCard4() {
 function updateProgress() {
   const visibleSteps = getVisibleSteps()
   const idx = visibleSteps.findIndex(s => s.card === state.currentCard)
-  const pct = visibleSteps.length <= 1 ? 0 : (idx / (visibleSteps.length - 1)) * 100
+  // 카드12(전표 작성 안내)는 본 단계 밖의 선택 단계 — 진행바는 끝까지 찬 채로 둔다
+  const pct = state.currentCard === 12 ? 100 : visibleSteps.length <= 1 ? 0 : (idx / (visibleSteps.length - 1)) * 100
   document.getElementById('progressFill').style.width = `${pct}%`
   // 헤더 우측 진행률 텍스트
   const ptEl = document.getElementById('headerProgressText')
@@ -3843,47 +3845,13 @@ function setYN(field, val) {
 }
 
 // ── CARD 9: 예상 금액 계산 ───────────────────────────────────────────────────
-function prepareCard9() {
-  // 입력값 최신화
-  state.place  = document.getElementById('input-place')?.value?.trim()  || state.place
-  state.region = document.getElementById('input-region')?.value?.trim() || state.region
-  state.fee    = parseInt((document.getElementById('input-fee')?.value || '').replace(/,/g, '')) || state.fee
-  onTimeChange()
-
-  // 온라인 교육: 다음 버튼 텍스트 변경
-  const nextBtn = document.getElementById('card9-next-btn')
-  if (nextBtn) nextBtn.textContent = state.isOnline ? '구비서류 확인하기'
-    : state.tripStatus === 'done' ? '출장신청서 내용 확인하기' : '출장신청서 작성하기'
-
-  // 온라인 교육: 교통비·일당·숙박 없음 → 교육비만 계산
+// 예상 금액 항목 계산(카드9·전표 안내가 같이 쓴다 — 금액 기준을 두 벌로 두지 않는다, 2026-09-30).
+// kind: transport·air·shuttle·daily·meal·lodging·fee. amount가 숫자가 아니면 영수증 금액·확인 필요 같은 미확정 항목이다.
+function computeCostBreakdown() {
   if (state.isOnline) {
-    const breakdown = []
-    let total = 0
-    if (state.fee > 0) {
-      breakdown.push({ label: '교육비 / 등록비', amount: state.fee, note: '사전납입·회원병원 기준' })
-      total += state.fee
-    }
-    const breakdownEl = document.getElementById('amountBreakdown')
-    breakdownEl.innerHTML = breakdown.length
-      ? breakdown.map(item => `
-          <div class="breakdown-item">
-            <div class="breakdown-left">
-              <span class="breakdown-label">${item.label}</span>
-              ${item.note ? `<span class="breakdown-note">${item.note}</span>` : ''}
-            </div>
-            <span class="breakdown-amount">${item.amount.toLocaleString()}원</span>
-          </div>`).join('')
-      : `<div class="breakdown-item"><span class="breakdown-label" style="color:#8b95a1">교육비 없음</span></div>`
-    document.getElementById('totalAmount').textContent = `${total.toLocaleString()}원`
-    document.getElementById('prevDayHint')?.classList.add('hidden')
-    document.getElementById('routePanel')?.classList.add('hidden')
-    document.getElementById('amount-note-text').textContent = '실제 정산은 결재 후 확정돼요'
-    return
+    const breakdown = state.fee > 0 ? [{ kind: 'fee', label: '교육비 / 등록비', amount: state.fee, note: '사전납입·회원병원 기준' }] : []
+    return { breakdown, total: state.fee > 0 ? state.fee : 0, isJeju: false }
   }
-  document.getElementById('amount-note-text').textContent = state.isJeju
-    ? '실제 정산은 결재 후 확정돼요. 항공·셔틀은 낸 영수증 금액으로 정산돼요'
-    : '실제 정산은 결재 후 확정돼요'
-
   const isJeju  = state.isJeju
   const breakdown = []
   let total = 0
@@ -3894,9 +3862,9 @@ function prepareCard9() {
   const rf   = isJeju ? null : routeFare()
   if (isJeju) {
     // 항공·셔틀은 정액이 아니다 — 영수증(매출전표)을 내야 결제한 금액만큼 정산된다(2026-09-26 지석초이)
-    breakdown.push({ label: '항공료 (왕복)', amount: '영수증 금액', note: '법인카드로 결제하고 신용카드 매출전표를 내면 결제한 금액만큼 정산돼요' })
+    breakdown.push({ kind: 'air', label: '항공료 (왕복)', amount: '영수증 금액', note: '법인카드로 결제하고 신용카드 매출전표를 내면 결제한 금액만큼 정산돼요' })
     if (state.hasShuttle === true) {
-      breakdown.push({ label: '공항 셔틀버스', amount: '영수증 금액', note: '법인카드 결제 · 매출전표를 내면 그 금액만큼 정산돼요' })
+      breakdown.push({ kind: 'shuttle', label: '공항 셔틀버스', amount: '영수증 금액', note: '법인카드 결제 · 매출전표를 내면 그 금액만큼 정산돼요' })
     }
   } else if (rf) {
     const kind = rf.transfers ? `${rf.via.join('·')} 환승 ${rf.transfers}회` : '직통'
@@ -3904,14 +3872,14 @@ function prepareCard9() {
     const busNote = bf
       ? ` · 시외버스가 약 ${fmtDur(bf.savedMin)} 빠른 구간 — 버스로 다녀오셨다면 실제 버스 요금으로 정산`
       : ''
-    breakdown.push({
+    breakdown.push({ kind: 'transport',
       label: `KTX ${rf.grade} (${rf.station}역)`,
       amount: rf.roundTrip,
       note: `마산역 ${fmtTime(rf.dep)} 출발 · ${kind} · 편도 ${rf.oneWay.toLocaleString()}원 × 2회${busNote}`,
     })
     total += rf.roundTrip
   } else if (fare && fare.cityBus) {
-    breakdown.push({ label: '시내버스 (창원)', amount: cityBusRoundTrip(fare), note: cityBusNote(fare) })
+    breakdown.push({ kind: 'transport', label: '시내버스 (창원)', amount: cityBusRoundTrip(fare), note: cityBusNote(fare) })
     total += cityBusRoundTrip(fare)
   } else if (fare) {
     const useFirst = state.isMS && fare.ktxFirst
@@ -3931,30 +3899,30 @@ function prepareCard9() {
     const fareLabel = fare.bus
       ? `시외버스 (${fare.label})`
       : `KTX ${useFirst ? '특실' : '일반실'} (${fare.label})`
-    breakdown.push({ label: fareLabel, amount: fareAmt, note: routeNote })
+    breakdown.push({ kind: 'transport', label: fareLabel, amount: fareAmt, note: routeNote })
     total += fareAmt
   } else if (state.region || state.place) {
     const detour  = routeDetour()
     const busOnly = busOnlyRegion(state.region || state.place)
     if (busOnly) {
       const ref = busRoutesFor(`${state.place || ''} ${state.region || ''}`)[0]
-      breakdown.push({ label: '교통비 (시외버스)', amount: ref ? '영수증 금액' : '직접 확인 필요',
+      breakdown.push({ kind: 'transport', receipt: !!ref, label: '교통비 (시외버스)', amount: ref ? '영수증 금액' : '직접 확인 필요',
         note: ref
           ? `${busOnly.label}은 시외버스 고정 구간 · 터미널 고시 편도 ${ref.fare.toLocaleString()}원(왕복 ${(ref.fare * 2).toLocaleString()}원) — 실제 탄 버스 영수증 금액으로 정산`
           : `${busOnly.label}은 시외버스 고정 구간 · 철도는 오송 경유로 돌아가 제외 · ${ORIGIN_BUS} 왕복 요금 확인 필요` })
     } else {
       breakdown.push(detour
-        ? { label: '교통비 (시외버스)', amount: '직접 확인 필요',
+        ? { kind: 'transport', label: '교통비 (시외버스)', amount: '직접 확인 필요',
             note: `철도는 ${detour.hub}까지 올라갔다 되내려오는 우회 구간 · 시외버스 왕복 요금 확인 필요` }
-        : { label: '교통비', amount: '직접 확인 필요', note: '운임표에 없는 지역' })
+        : { kind: 'transport', label: '교통비', amount: '직접 확인 필요', note: '운임표에 없는 지역' })
     }
   }
 
   // 2. 일당 / 식사비 계산
   if (state.isShortDayTrip === true) {
     // ── 8시간 이하 당일 출장 예외 ──
-    breakdown.push({ label: '일당', amount: 0, note: '교육+이동 8시간 이하 당일 출장 → 해당없음' })
-    breakdown.push({ label: '식사비', amount: mealCapText(), emph: true, note: '법인카드 결제 필수 · 영수증 제출 · 한도 안 실비' })
+    breakdown.push({ kind: 'daily', label: '일당', amount: 0, note: '교육+이동 8시간 이하 당일 출장 → 해당없음' })
+    breakdown.push({ kind: 'meal', label: '식사비', amount: mealCapText(), emph: true, note: '법인카드 결제 필수 · 영수증 제출 · 한도 안 실비' })
     // 숙박비 없음 (당일)
   } else {
     let baseDays = Math.max(1, state.days || 1)
@@ -3982,11 +3950,11 @@ function prepareCard9() {
       dailyTotal = prevDayBonus * DAILY_RATE
                  + tripNormDays * DAILY_RATE
                  + middleDays * DAILY_RATE_25P
-      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus, days: dayList,
+      breakdown.push({ kind: 'daily', label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus, days: dayList,
         note: '가는 날·오는 날은 전액, 식사를 제공받는 끼인 날은 <x-nb>25%만</x-nb> 지급돼요' })
     } else {
       dailyTotal = totalDays * DAILY_RATE
-      breakdown.push({ label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus,
+      breakdown.push({ kind: 'daily', label: `일당 (${totalDays}일)`, amount: dailyTotal, prevDay: !!prevDayBonus,
         note: prevDayBonus
           ? `출장 ${baseDays}일 + 전날 이동 1일 · ${totalDays}일 × ${DAILY_RATE.toLocaleString()}원`
           : `${totalDays}일 × ${DAILY_RATE.toLocaleString()}원`,
@@ -3999,17 +3967,17 @@ function prepareCard9() {
       if (state.lodgingProvided) {
         if (prevDayBonus > 0) {
           const bonusLodging = prevDayBonus * LODGING_RATE
-          breakdown.push({ label: `숙박비 전날 이동 (${prevDayBonus}박)`, amount: bonusLodging, prevDay: true, note: '전날 밤 숙박은 숙소 제공 범위 밖이라 지급' })
+          breakdown.push({ kind: 'lodging', label: `숙박비 전날 이동 (${prevDayBonus}박)`, amount: bonusLodging, prevDay: true, note: '전날 밤 숙박은 숙소 제공 범위 밖이라 지급' })
           total += bonusLodging
         }
         if (tripNights > 0) {
-          breakdown.push({ label: `숙박비 (${tripNights}박)`, amount: 0, note: '숙소 제공으로 미지급' })
+          breakdown.push({ kind: 'lodging', label: `숙박비 (${tripNights}박)`, amount: 0, note: '숙소 제공으로 미지급' })
         }
       } else {
         const baseNights = tripNights + prevDayBonus
         if (baseNights > 0) {
           const lodgingTotal = baseNights * LODGING_RATE
-          breakdown.push({ label: `숙박비 (${baseNights}박)`, amount: lodgingTotal, prevDay: !!prevDayBonus,
+          breakdown.push({ kind: 'lodging', label: `숙박비 (${baseNights}박)`, amount: lodgingTotal, prevDay: !!prevDayBonus,
             note: prevDayBonus
               ? `${tripNights ? `출장 ${tripNights}박 + ` : ''}전날 이동 1박 · ${baseNights}박 × ${LODGING_RATE.toLocaleString()}원`
               : `${baseNights}박 × ${LODGING_RATE.toLocaleString()}원` })
@@ -4021,10 +3989,51 @@ function prepareCard9() {
 
   // 4. 등록비
   if (state.fee > 0 && (state.feeStatus === 'paid' || state.feeStatus === 'not-paid')) {
-    breakdown.push({ label: '교육비 / 등록비', amount: state.fee,
+    breakdown.push({ kind: 'fee', label: '교육비 / 등록비', amount: state.fee,
       note: state.feeStatus === 'not-paid' ? '사전납입·회원병원 기준 · 납부 예정' : '사전납입·회원병원 기준' })
     total += state.fee
   }
+
+  return { breakdown, total, isJeju }
+}
+
+function prepareCard9() {
+  // 입력값 최신화
+  state.place  = document.getElementById('input-place')?.value?.trim()  || state.place
+  state.region = document.getElementById('input-region')?.value?.trim() || state.region
+  state.fee    = parseInt((document.getElementById('input-fee')?.value || '').replace(/,/g, '')) || state.fee
+  onTimeChange()
+
+  // 온라인 교육: 다음 버튼 텍스트 변경
+  const nextBtn = document.getElementById('card9-next-btn')
+  if (nextBtn) nextBtn.textContent = state.isOnline ? '구비서류 확인하기'
+    : state.tripStatus === 'done' ? '출장신청서 내용 확인하기' : '출장신청서 작성하기'
+
+  // 온라인 교육: 교통비·일당·숙박 없음 → 교육비만 계산
+  if (state.isOnline) {
+    const { breakdown, total } = computeCostBreakdown()
+    const breakdownEl = document.getElementById('amountBreakdown')
+    breakdownEl.innerHTML = breakdown.length
+      ? breakdown.map(item => `
+          <div class="breakdown-item">
+            <div class="breakdown-left">
+              <span class="breakdown-label">${item.label}</span>
+              ${item.note ? `<span class="breakdown-note">${item.note}</span>` : ''}
+            </div>
+            <span class="breakdown-amount">${item.amount.toLocaleString()}원</span>
+          </div>`).join('')
+      : `<div class="breakdown-item"><span class="breakdown-label" style="color:#8b95a1">교육비 없음</span></div>`
+    document.getElementById('totalAmount').textContent = `${total.toLocaleString()}원`
+    document.getElementById('prevDayHint')?.classList.add('hidden')
+    document.getElementById('routePanel')?.classList.add('hidden')
+    document.getElementById('amount-note-text').textContent = '실제 정산은 결재 후 확정돼요'
+    return
+  }
+  document.getElementById('amount-note-text').textContent = state.isJeju
+    ? '실제 정산은 결재 후 확정돼요. 항공·셔틀은 낸 영수증 금액으로 정산돼요'
+    : '실제 정산은 결재 후 확정돼요'
+
+  const { breakdown, total, isJeju } = computeCostBreakdown()
 
   // 렌더
   const breakdownEl = document.getElementById('amountBreakdown')

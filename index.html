@@ -54,6 +54,7 @@
                 <path d="M21 21h14M21 26h14M21 31h10" stroke="#3182f6" stroke-width="1.5" stroke-linecap="round"/>
               </svg>
             </div>
+            <div id="voucher-resume" class="hidden"></div>
             <h1 class="card-question" id="card2-q">출장 관련 공문이 있나요?</h1>
             <p class="card-desc">공문(행사 안내문, 초청장 등)이 있으면 정보를 자동으로 불러올 수 있어요
               <br><span class="card-tip">💡 PDF 파일이면 가장 정확하게 읽어요</span>
@@ -745,9 +746,40 @@
               <div id="voucherItems"></div>
             </div>
 
+            <!-- 전표 작성 안내 진입(2026-09-30) — 원하는 사람만 -->
+            <div class="vg-entry" id="vg-entry">
+              <div class="vg-entry-title">이어서 전표도 작성하시겠어요?</div>
+              <p class="vg-entry-desc">앞에서 확인한 교육·출장 정보와 금액을 가져와서, 어떤 계정에 얼마를 적고 어떤 서류를 붙일지 안내해 드릴게요.</p>
+              <div class="vg-entry-btns">
+                <button type="button" class="cta-btn" onclick="startVoucherGuide()">전표 작성 안내 시작</button>
+                <button type="button" class="vg-btn" onclick="skipVoucherGuide()">서류만 준비하고 마치기</button>
+              </div>
+              <p class="vg-entry-closed">필요하면 언제든 위 버튼으로 다시 열 수 있어요.</p>
+            </div>
+
             <div class="card-actions">
               <button class="action-btn action-btn-primary" onclick="restartFlow()">처음부터 다시 시작</button>
             </div>
+          </div>
+        </section>
+
+        <!-- ══════════════════════════════════════
+             CARD 12: 전표 작성 안내 (선택)
+        ══════════════════════════════════════ -->
+        <section class="flow-card" id="card-12" data-step="12">
+          <button class="back-btn" onclick="vgGo(-1)" aria-label="뒤로">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#191f28" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="vg-progress" id="vg-progress"></div>
+          <div class="card-body">
+            <div id="vg-screen"></div>
+          </div>
+          <div class="card-footer">
+            <button class="back-footer-btn" onclick="vgGo(-1)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12l-4-4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              이전
+            </button>
+            <button class="cta-btn" id="vg-next" onclick="vgGo(1)">다음</button>
           </div>
         </section>
 
@@ -759,5 +791,7 @@
     <script src="./src/config.js"></script>
     <script src="./src/route.js"></script>
     <script src="./src/app.js"></script>
+    <script src="./src/voucher.js"></script>
+    <script src="./src/voucher_ui.js"></script>
   </body>
 </html>
