@@ -3,7 +3,8 @@
 // 계산·분기는 voucher.js, 계정·기준은 data/voucher_rules.json. 저장은 이 기기 브라우저에만 한다.
 
 const VG_KEY = 'expense_guide_voucher_v1'
-const VG_GROUPS = ['상황 확인', '전표 작성', '서류 확인', '제출 준비']
+// 2026-09-30 지석초이: 서류 확인·제출 준비가 겹쳐 한 화면으로 합침
+const VG_GROUPS = ['상황 확인', '전표 작성', '제출 준비']
 let VG_RULES = null
 let vg = null            // 지금 작성 중인 전표 안내 답
 let vgFrom = 11          // 어디서 들어왔는지(뒤로 가기)
@@ -174,7 +175,7 @@ function vgScreens() {
     // 2회 정산(원 자료 p.4 Case②): ① 지금 선지급 전표, ② 영수증(적격증빙) 발급 후 최종 정산 전표를 미리 보여 준다
     list.push(['advEv', 0], ['voucher', 1], ['purpose', 1])
     if (vg.purpose === 'edu') list.push(['job', 1])
-    list.push(['voucher2', 1], ['docs', 2], ['done', 3])
+    list.push(['voucher2', 1], ['done', 2])
   } else if (vg.task === 'final') {
     if (vgFee() && !vg.resumed && !vgFeePaidByCardBefore()) list.push(['feePay', 0])
     // 선지급 때 이미 고른 목적·직종은 다시 묻지 않는다
@@ -186,7 +187,7 @@ function vgScreens() {
     const needEv = (vg.costs || []).some(c => ['air', 'shuttle', 'meal'].includes(c.kind) || (c.kind === 'fee' && c.amount && vg.feePay !== 'expensed'))
     if (needEv) list.push(['evidence', 0])
     if (vgReceiptKinds().length) list.push(['receipts', 1])
-    list.push(['voucher', 1], ['docs', 2], ['done', 3])
+    list.push(['voucher', 1], ['done', 2])
   }
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
@@ -242,7 +243,7 @@ function renderVoucher() {
   document.getElementById('card-12')?.classList.toggle('has-aside', vg.screen === 'voucher' || vg.screen === 'voucher2')
   const next = document.getElementById('vg-next')
   const isChoice = VG_CHOICE_SCREENS.includes(vg.screen)
-  next.textContent = { receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? '다음 · 영수증 발급 후 최종 정산 보기' : '서류 챙기기', voucher2: '서류 챙기기', docs: '제출 준비 보기' }[vg.screen] || '다음'
+  next.textContent = { receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? '다음 · 영수증 발급 후 최종 정산 보기' : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
   next.classList.toggle('hidden', isChoice || vg.screen === 'done')
   next.disabled = vg.screen === 'receipts' && vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
 }
@@ -503,8 +504,13 @@ const VG_SCREEN = {
   // ② 영수증 발급 후 최종 정산 전표(선지급 건 미리보기)
   voucher2() { const r2 = vgFinalPreview(); return voucherView(r2, 2, r2.memo, true) },
 
-  docs(r) {
+  // 제출 준비 — 서류 체크리스트가 곧 남은 일 목록이다(체크하면 위 상태가 바로 바뀐다). 전표 요약은 앞 화면과 겹쳐 싣지 않는다.
+  done(r) {
     const c = vg.checks || {}
+    const left = vgLeft(r)
+    const ready = !left.length
+    const adv = vg.task === 'advance'
+    if (ready && adv && !vg.pendingFinal) { vg.pendingFinal = true; vg.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; vgSave() }
     const item = (key, title, sub, optional) => `<label class="final-check-item${optional ? ' pending' : ''}">
       <input type="checkbox" class="doc-checkbox" data-check="${key}" ${c[key] ? 'checked' : ''}/>
       <span class="doc-checkmark"><svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5l2.5 2.5 4.5-5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -513,35 +519,25 @@ const VG_SCREEN = {
       notice: vg.task === 'final' ? '앞서 냈어도 다시 첨부' : '등록비·입금 계좌 확인', bankCopy: '공문에 입금 계좌가 없을 때만',
       settlement: '신청서 금액과 달라졌어요 · S-portal 양식함', feeEvidence: '기관·금액이 맞는지', airEvidence: '법인카드 결제 왕복 전표',
       shuttleEvidence: '법인카드 결제 전표', mealEvidence: '법인카드 결제 전표' }
-    const docs = r.docs.map(d => item(`doc-${d.key}`, d.title, short[d.key] || d.check, d.optional)).join('')
-    const mine = vgUserChecks(r).map(([k, l]) => item(k, l, '', false)).join('')
-    return q('붙일 서류를<br>챙겨 주세요', '챙긴 것에 체크하세요') + `<div class="final-checklist">${docs}</div>
-      <div class="vg-box-title">마지막으로 확인</div><div class="final-checklist">${mine}</div>
-      ${vg.task === 'advance' && vg.trip.isJeju ? '<p class="vg-hint">✈️ 항공권·셔틀을 아직 예매 전이면 신청서에 공란 + ‘사후 실비 정산’이라고 적어 두세요.</p>' : ''}
-      ${vg.task === 'advance' ? `<div class="vg-box vs-later"><div class="vg-box-title">② 최종 정산 때 챙길 서류 <small>(미리 보기)</small></div><ul>${vgFinalPreview().docs.map(d => `<li>${escapeHtml(d.title)}</li>`).join('')}</ul></div>` : ''}`
-  },
-
-  done(r) {
-    const left = vgLeft(r)
-    const ready = !left.length
-    const adv = vg.task === 'advance'
-    if (ready && adv && !vg.pendingFinal) { vg.pendingFinal = true; vg.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null; vgSave() }
-    const D = r.lines.filter(l => l.side === 'D'), C = r.lines.filter(l => l.side === 'C')
-    const row = l => `<div class="vd-row"><span class="vd-code">${escapeHtml(l.code || '—')}</span><span class="vd-name">${escapeHtml(l.name)}</span><b>${Voucher.won(l.amount)}</b></div>`
-    return `<div class="vg-print">
-      <div class="vd-status ${ready ? 'is-ok' : 'is-left'}"><span>${ready ? '✅' : '⚠️'}</span><div><b>${ready ? (adv ? '① 선지급 전표 제출 준비 끝' : '전표 제출 준비 끝') : `남은 일 ${left.length}가지`}</b>
-        <small>${ready ? (adv ? '영수증이 발급되면 최종 정산을 이어서 해요' : '내부 절차에 따라 제출하세요') : '아래를 마친 뒤 제출하세요'}</small></div></div>
-      ${left.length ? `<ul class="vd-left">${left.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
-      ${adv ? `<div class="vd-next"><span class="vd-next-num">2</span><div><b>영수증이 발급되면 최종 정산</b><small>등록비 영수증(세금계산서·현금영수증 등)을 받으면 첫 화면의 ‘영수증 받았어요 · 최종 정산 시작’을 누르면 ② 전표를 이어서 써요</small></div></div>` : ''}
-      <div class="vd-voucher"><div class="vd-side"><em>차변</em>${D.map(row).join('')}</div><div class="vd-side"><em>대변</em>${C.map(row).join('')}</div>
-        <div class="vd-memo">적요 · ${escapeHtml(vg.memo || '')}</div></div>
+    const checks = [...r.docs.map(d => item(`doc-${d.key}`, d.title, short[d.key] || d.check, d.optional)),
+      ...vgUserChecks(r).map(([k, l]) => item(k, l, '', false))].join('')
+    // 체크리스트에 없는 남은 일(확인 필요·못 받은 영수증)만 따로 적는다
+    const extra = vgLeft(r, true)
+    const status = ready
+      ? `<div class="vd-status is-ok"><span>✅</span><div><b>${adv ? '① 선지급 전표 제출 준비 끝' : '전표 제출 준비 끝'}</b><small>${adv ? '영수증이 발급되면 ②로 최종 정산해요' : '내부 절차에 따라 제출하세요'}</small></div></div>`
+      : `<div class="vd-status is-left"><span>📋</span><div><b>남은 일 ${left.length}가지</b><small>아래 체크리스트를 채우면 제출 준비가 끝나요</small></div></div>`
+    return `<div class="vg-print">${q('서류 챙기고<br>제출해요')}
+      ${status}
+      ${extra.length ? `<ul class="vd-left">${extra.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
+      <div class="final-checklist vd-checks">${checks}</div>
+      ${adv && vg.trip.isJeju ? '<p class="vg-hint">✈️ 항공권·셔틀을 아직 예매 전이면 신청서에 공란 + ‘사후 실비 정산’이라고 적어 두세요.</p>' : ''}
+      ${adv ? `<div class="vd-next"><span class="vd-next-num">2</span><div><b>영수증이 발급되면 최종 정산</b><small>첫 화면의 ‘영수증 받았어요 · 최종 정산 시작’에서 이어서 써요 · 그때 챙길 서류: ${vgFinalPreview().docs.map(d => escapeHtml(d.title)).join(', ')}</small></div></div>` : ''}
       ${r.usesCashOrBank ? `<p class="vg-warn">⏰ 현금·보통예금 지급 전표는 <b>지급일 1~2일 전</b>까지 경영지원팀에 내요</p>` : ''}
-      <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요.</p></div>
+      <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요 · 이 기기에 저장돼 있어요.</p></div>
       <div class="vg-actions">
         <button type="button" class="vg-btn" onclick="window.print()">🖨 인쇄</button>
         <button type="button" class="vg-btn" onclick="if (confirm('저장된 전표 안내를 지울까요?')) { vgDelete(); goToCard(2) }">🗑 삭제</button>
-      </div>
-      ${adv && ready ? '<p class="vg-hint">영수증을 받으면 첫 화면의 <b>‘영수증 받았어요 · 최종 정산 시작’</b>을 누르세요 (이 기기에 저장됨)</p>' : '<p class="vg-hint">이 기기에 저장돼 있어요. 첫 화면에서 이어서 할 수 있어요.</p>'}`
+      </div>`
   },
 }
 
@@ -551,9 +547,10 @@ function vgUserChecks(r) {
   if (r.usesCashOrBank) out.push(['user-payee', '받는 곳·계좌가 맞아요', '받는 곳·계좌 확인'])
   return out
 }
-function vgLeft(r) {
+function vgLeft(r, extraOnly) {
   const left = r.issues.filter(i => i.level === 'block').map(i => i.msg)
   if (vg.task === 'final' && vg.evAll === 'after') left.push('못 받은 영수증 받기')
+  if (extraOnly) return [...new Set(left)]
   const c = vg.checks || {}
   const docsLeft = (r.docs || []).filter(d => !d.optional && !c[`doc-${d.key}`]).map(d => `${d.title} 챙기기`)
   const userLeft = vgUserChecks(r).filter(([k]) => !c[k]).map(([, , left]) => left)

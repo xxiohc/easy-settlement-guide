@@ -3344,13 +3344,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vd-status b { display: block; font-size: 20px; font-weight: 800; }
 .vd-status small { font-size: 14px; color: var(--subtle); }
 .vd-left { margin: 12px 0 0; padding-left: 20px; font-size: 14.5px; line-height: 1.8; color: #9a3412; }
-.vd-voucher { margin-top: 16px; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--line); display: grid; gap: 10px; }
-.vd-side em { display: block; font-style: normal; font-size: 13px; font-weight: 800; color: var(--primary); margin-bottom: 4px; }
-.vd-side + .vd-side em { color: #d9722a; }
-.vd-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: baseline; padding: 4px 0; font-size: 15px; }
-.vd-code { font-weight: 700; color: var(--subtle); font-variant-numeric: tabular-nums; }
-.vd-row b { font-variant-numeric: tabular-nums; }
-.vd-memo { padding-top: 8px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--subtle); }
 .rc-later { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #ecfdf3; color: #047857; font-size: 12px; font-weight: 700; }
 
 /* 전표 화면 오른쪽 '내가 쓴 출장신청서와 비교'(2026-09-30 지석초이) — 넓은 화면은 카드4 여정 패널처럼 오른쪽, 좁으면 합계 아래 */
@@ -3392,8 +3385,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vs-one small { font-size: 13px; color: var(--muted); }
 .vs-note { margin: 4px 0 6px; font-size: 13.5px; color: var(--subtle); line-height: 1.55; word-break: keep-all; }
 .vt-total.is-wait { background: var(--surface); color: var(--subtle); }
-.vs-later ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.7; color: var(--subtle); }
-.vs-later small { font-weight: 400; color: var(--muted); }
 .vd-next { display: flex; gap: 12px; align-items: flex-start; margin-top: 12px; padding: 14px 18px; border-radius: 14px; border: 1.5px dashed #f8b877; background: #fffaf5; }
 .vd-next-num { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #f0913f; color: #fff; font-weight: 800; font-size: 13px; }
 .vd-next b { display: block; font-size: 15.5px; }
@@ -3480,3 +3471,5 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 /* 신청서 꼬리표도 한 가지 색으로 — 형광펜(노랑)만 강조색으로 남긴다 */
 .hl-tag, .hl-tag.t-cash, .hl-tag.t-card, .hl-tag.t-adv, .hl-tag.t-bank, .hl-tag.t-memo { background: rgba(25,31,40,0.07); color: var(--ink); }
 .hl-tag.t-now { background: var(--ink); color: #fff; }
+.vd-checks { margin-top: 14px; }
+.vd-status + .final-checklist, .vd-status + .vd-left { margin-top: 14px; }
