@@ -248,20 +248,33 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   }
 }
 
-// ── G. 2026-09-30 지석초이: 대안 여정 카드에도 도착역→현장 대중교통·택시 길찾기 링크 ──
+// ── G. 2026-09-30 지석초이: 대안 여정은 '마산에서 더 늦게 타고 동대구·대전에서 갈아타는 편'만. 같은 시각 출발 환승(광명 등)은 싣지 않는다.
+//       대안 카드마다 그 도착역→현장 대중교통·택시 링크 ──
 {
-  const [ctx,p] = await newPage()
-  await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
-  await p.fill('#input-place', '여의도 태영빌딩'); await p.dispatchEvent('#input-place', 'input')
-  await p.fill('#input-region', '서울'); await p.dispatchEvent('#input-region', 'input')
-  await p.fill('#input-start', '2026-10-22'); await p.fill('#input-end', '2026-10-22'); await p.dispatchEvent('#input-start','change')
-  await p.selectOption('#input-starthour', '09'); await p.selectOption('#input-startmin', '30'); await p.waitForTimeout(800)
-  await p.evaluate(() => { state.placeLat = 37.5256; state.placeLon = 126.9255; state.placeNeedsPick = false; renderPrevDayVerdict() }); await p.waitForTimeout(800)
-  const r = await p.evaluate(() => [...document.querySelectorAll('#route-aside .rc-group')].filter(g => /대안 여정/.test(g.textContent))
-    .flatMap(g => [...g.querySelectorAll('.rc')].map(c => ({ st: c.querySelector('.rc-head b')?.textContent, links: [...c.querySelectorAll('.ra-link')].map(a => a.href) }))))
-  check('G 대안 여정 카드가 있다', r.length > 0, `${r.length}장`)
-  check('G 카드마다 그 역에서 출발하는 대중교통·택시 링크', r.length > 0 && r.every(c => c.links.length === 2 && c.links.every(h => decodeURIComponent(h).includes(c.st.replace(/역$/, '') + '역,'))), JSON.stringify(r.map(c => c.st + ':' + c.links.length)))
-  await ctx.close()
+  const altCards = p => p.evaluate(() => [...document.querySelectorAll('#route-aside .rc-group')].filter(g => /대안 여정/.test(g.textContent))
+    .flatMap(g => [...g.querySelectorAll('.rc')].map(c => ({ head: c.querySelector('.rc-head')?.textContent.replace(/\s+/g, ' '),
+      st: [...c.querySelectorAll('.rs-node:not(.is-goal) b')].at(-1)?.textContent, links: [...c.querySelectorAll('.ra-link')].map(a => a.href) }))))
+  const setup = async (p, place, region, hh, lat, lon) => {
+    await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
+    await p.fill('#input-place', place); await p.dispatchEvent('#input-place', 'input')
+    await p.fill('#input-region', region); await p.dispatchEvent('#input-region', 'input')
+    await p.fill('#input-start', '2026-10-22'); await p.fill('#input-end', '2026-10-22'); await p.dispatchEvent('#input-start','change')
+    await p.selectOption('#input-starthour', hh); await p.selectOption('#input-startmin', hh === '09' ? '30' : '00'); await p.waitForTimeout(800)
+    await p.evaluate(([la, lo]) => { state.placeLat = la; state.placeLon = lo; state.placeNeedsPick = false; renderPrevDayVerdict() }, [lat, lon]); await p.waitForTimeout(800)
+  }
+  { const [ctx,p] = await newPage()
+    await setup(p, '여의도 태영빌딩', '서울', '09', 37.5256, 126.9255)
+    const r = await altCards(p)
+    check('G 같은 시각 출발 환승(광명 등)만 있으면 대안 여정을 싣지 않는다', r.length === 0, JSON.stringify(r.map(c => c.head)))
+    await ctx.close() }
+  { const [ctx,p] = await newPage()
+    await setup(p, '삼성전자 서천연수원', '수원', '14', 37.2215, 127.0735)
+    const best = await p.evaluate(() => computeRoutePlan().plan.best.dep)
+    const r = await altCards(p)
+    const deps = r.map(c => (c.head.match(/마산 (\d\d):(\d\d) 출발/) || []).slice(1).map(Number)).map(([h, m]) => h * 60 + m)
+    check('G 더 늦게 떠나는 동대구·대전 환승 대안을 싣는다', r.length > 0 && deps.every(d => d > best) && r.every(c => /동대구|대전/.test(c.head)), JSON.stringify(r.map(c => c.head)))
+    check('G 카드마다 그 도착역에서 출발하는 대중교통·택시 링크', r.length > 0 && r.every(c => c.links.length === 2 && c.links.every(h => decodeURIComponent(h).includes(c.st + '역,'))), JSON.stringify(r.map(c => c.st + ':' + c.links.length)))
+    await ctx.close() }
 }
 
 // ── H. 2026-09-30 지석초이: 공문에 연도가 없으면 추정 연도를 화면에 쓰지 않는다('(연도는 추정)' 문구도 없음) ──
