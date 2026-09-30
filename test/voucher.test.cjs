@@ -117,7 +117,10 @@ test('⑨ 이미 비용 처리된 등록비는 다시 비용으로 잡지 않는
 })
 
 test('⑩ 개인 선납·취소 환불·선지급 초과·부족·중복은 확인 필요로 멈춘다', () => {
-  assert.ok(blocks(V.buildFinal(base({ task: 'final', paid: { personal: true } }), R)).includes('personalPrepay'))
+  // 본인 돈으로 낸 등록비는 현금으로 돌려받는다(2026-10-01 지석초이) — 확인 필요가 아니라 현금 줄에 합친다
+  const own = V.buildFinal(base({ task: 'final', paid: { personal: true }, evidence: { fee: 'received' } }), R)
+  assert.deepEqual(own.lines.filter(l => l.side === 'C').map(l => [l.name, l.amount]), [['현금', 589600]])
+  assert.ok(own.ready && own.lines.find(l => l.key === 'cash').kinds.includes('fee'))
   assert.ok(blocks(V.buildFinal(base({ task: 'final', paid: { none: true }, refund: true }), R)).includes('refund'))
   const over = V.buildFinal(base({ task: 'final', paid: { bank: true }, bankPay: { amount: 400000, status: 'advance' }, evidence: { fee: 'received' } }), R)
   assert.ok(blocks(over).includes('overAdvance') && !over.ready)

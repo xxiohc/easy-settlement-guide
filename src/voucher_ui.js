@@ -174,7 +174,9 @@ function vgModel(opts = {}) {
     else if (pay === 'personal') m.paid.personal = true
     else m.paid.none = true
   } else m.paid.none = true
-  if (vg.evAll) for (const c of vg.costs || []) if (['fee', 'air', 'shuttle', 'meal'].includes(c.kind)) m.evidence[c.kind] = vg.evAll
+  // 한 번에 정산이면 영수증은 모두 받은 상태로 본다
+  const evAll = vg.task === 'final' && !vg.resumed ? 'received' : vg.evAll
+  if (evAll) for (const c of vg.costs || []) if (['fee', 'air', 'shuttle', 'meal'].includes(c.kind)) m.evidence[c.kind] = evAll
   if (m.evidence.fee && m.bankPay?.status === 'expensed') delete m.evidence.fee
   return m
 }
@@ -220,15 +222,17 @@ function vgScreens() {
       list.push(['purpose', 0])
       if (vg.purpose === 'edu') list.push(['job', 0])
     }
-    const needEv = (vg.costs || []).some(c => ['air', 'shuttle', 'meal'].includes(c.kind) || (c.kind === 'fee' && c.amount && vg.feePay !== 'expensed'))
-    if (needEv) list.push(['evidence', 0])
+    if (vg.resumed) {
+      const needEv = (vg.costs || []).some(c => ['air', 'shuttle', 'meal'].includes(c.kind) || (c.kind === 'fee' && c.amount && vg.feePay !== 'expensed'))
+      if (needEv) list.push(['evidence', 0])
+    } else if (vgFee() && vg.feePay === 'personal') list.push(['evType', 0])
     if (vgReceiptKinds().length) list.push(['receipts', 1])
     list.push(['voucher', 1], ['done', 2])
   }
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
 }
-const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'advEv', 'feePay', 'purpose', 'job', 'evidence']
+const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'evType', 'advEv', 'feePay', 'purpose', 'job', 'evidence']
 
 function vgGo(delta) {
   const list = vgScreens()
@@ -422,7 +426,7 @@ function twoStepWhy() {
     <ul class="ts-reasons">
       <li><span>💰</span><p>등록비가 커서 <b>병원 돈으로 먼저 보내야</b> 할 때</p></li>
       <li><span>🧳</span><p>일당·숙박비·교통비를 <b>출장 전에 먼저 받아야</b> 할 때</p></li>
-      <li><span>🧾</span><p>영수증 같은 <b>증빙이 아직 없을</b> 때</p></li>
+      <li><span>🧾</span><p>등록비·항공권·리무진(공항버스)처럼 <b>영수증이 나중에 나오는</b> 비용이 있을 때</p></li>
     </ul>
     <div class="ts-flow"><div><b>① 지금 먼저 받기</b><small>가지급금으로 잠시 적어 둬요</small></div><i>→</i>
       <div><b>② 다녀와서 서류가 갖춰지면</b><small>실제 비용으로 최종 정산해요</small></div></div></div>`
@@ -482,11 +486,11 @@ const VG_SCREEN = {
     const opts = vgAdvOptions()
     const on = (task, kinds) => vg.task === task && (task === 'final' || JSON.stringify(vgAdvKinds()) === JSON.stringify(kinds))
     const card = (task, kinds, icon, title, now, later, n) => choice(on(task, kinds), `onclick="vgPickCase('${task}', ${kinds ? `['${kinds.join("','")}']` : 'null'})"`, icon, title,
-      `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span><span class="pc-n${n === 1 ? ' is-one' : ''}">${n === 1 ? '전표를 한 번 작성하면 끝나요' : '번거롭지만 전표를 두 번 작성해야 해요'}</span>`)
+      `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span>${n === 1 ? '<span class="pc-n is-one">전표를 한 번 작성하면 끝나요</span>' : ''}`)
     const all = opts.includes('fee') && opts.includes('travel')
     return tripChip() + q('어떻게<br>정산받을까요?', '특별한 사정이 없으면 다녀와서 한 번에 정산하는 게 가장 간단해요') + `<div class="choice-list pc-list">
       <div class="pc-best"><span class="pc-badge">추천</span>${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}</div>
-      ${opts.length ? '<div class="pc-sep">꼭 먼저 받아야 할 때만</div>' : ''}
+      ${opts.length ? '<div class="pc-sep">꼭 먼저 받아야 할 때만 <span class="pc-n">번거롭지만 전표를 두 번 작성해야 해요</span></div>' : ''}
       ${opts.includes('fee') ? card('advance', ['fee'], '🏦', '등록비만 먼저 회사 돈으로 보낼게요', `지금 등록비 ${fee.toLocaleString()}원`, tr ? `다녀와서 일당·숙박·교통비 ${tr.toLocaleString()}원` : '영수증이 나오면 최종 정산', 2) : ''}
       ${opts.includes('travel') ? card('advance', all ? ['fee', 'travel'] : ['travel'], '📦', all ? '모든 비용을 먼저 받아 둘게요' : '여비를 먼저 받아 둘게요',
         `지금 ${all ? `${(fee + tr).toLocaleString()}원 모두` : `일당·숙박·교통비 ${tr.toLocaleString()}원`}`, '교육 수료 후 최종 정산', 2) : ''}
@@ -514,11 +518,17 @@ const VG_SCREEN = {
   feePay() {
     const fee = vgFee()
     return q('등록비는<br>어떻게 냈나요?', `${fee.amount.toLocaleString()}원`) + `<div class="choice-list">
-      ${pick('feePay', 'advance', '📤', '병원이 먼저 보냈어요', '가지급금(선지급)')}
       ${pick('feePay', 'card', '💳', '법인카드로 결제했어요')}
-      ${pick('feePay', 'none', '🏦', '아직 안 냈어요', '이번 정산 때 병원 계좌로 보내요')}
-      ${pick('feePay', 'personal', '👛', '제 돈으로 냈어요')}
-      ${pick('feePay', 'unknown', '❓', '잘 모르겠어요')}
+      ${pick('feePay', 'personal', '👛', '제 돈으로 냈어요', '다녀와서 현금으로 돌려받아요')}
+      </div>`
+  },
+
+  // 한 번에 정산은 이미 다 내고 영수증도 받은 상태 — 받았는지가 아니라 어떤 영수증인지 묻는다(2026-10-01 지석초이)
+  evType() {
+    return q('등록비 영수증은<br>어떤 형태인가요?', `${vgFee().amount.toLocaleString()}원`) + `<div class="choice-list">
+      ${pick('evType', 'card-receipt', '💳', '신용카드 매출전표')}
+      ${pick('evType', 'tax-invoice', '📋', '세금계산서')}
+      ${pick('evType', 'cash-receipt', '🧾', '현금영수증', '병원 사업자번호로 발급')}
       </div>`
   },
 
@@ -586,7 +596,8 @@ const VG_SCREEN = {
       <div class="final-check-text"><strong>${escapeHtml(title)}${optional ? ' <small>(필요할 때만)</small>' : ''}</strong>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</div></label>`
     // 2026-09-30 지석초이: 전표 / 증빙(마지막 확인 칸은 지석초이 요청으로 뺌) — 큰 칸으로 먼저 나누고 그 안에 세부 서류. '다시 첨부'는 2회 정산의 ② 전표에서만.
     const again = vg.task === 'final' && (vg.resumed || vgModel().bankPay?.status === 'advance')
-    const name = { notice: '교육·출장 공문', feeEvidence: '등록비 영수증' }
+    const evName = { 'card-receipt': '신용카드 매출전표', 'tax-invoice': '세금계산서', 'cash-receipt': '현금영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
+    const name = { notice: '교육·출장 공문', feeEvidence: evName ? `등록비 영수증 (${evName})` : '등록비 영수증' }
     const sub = {
       application: again ? '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : vg.task === 'advance' ? '등록비 금액이 전표와 같은지 · 결재·합의 확인' : '결재·인사지원팀 합의 확인',
       notice: again ? '① 때 냈어도 다시 첨부' : vg.task === 'advance' ? '등록비·입금 계좌 확인' : '신청서 금액 기준이 공문과 같은지',

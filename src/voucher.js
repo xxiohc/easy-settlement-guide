@@ -115,7 +115,8 @@
 
     const feeItem = items.find(i => i.kind === 'fee')
     const feePaidByCard = num(cardAmt.fee) != null && cardAmt.fee > 0
-    if (paid.personal) issues.push({ level: 'block', key: 'personalPrepay', msg: rules.unconfirmed.personalPrepay })
+    // 본인 돈으로 낸 등록비는 현금(1101)으로 돌려받는다(2026-10-01 지석초이 확인)
+    const personalFee = paid.personal && feeItem && !(bp && bp.status) && !feePaidByCard ? feeItem : null
     if (paid.unknown) issues.push({ level: 'block', key: 'paidUnknown', msg: '이미 결제·지급한 내역이 있는지 확인해 주세요. 모르면 같은 금액을 두 번 지급할 수 있어요' })
     if (v.refund) issues.push({ level: 'block', key: 'refund', msg: rules.unconfirmed.refund })
 
@@ -161,6 +162,14 @@
       } else {
         credits.push(line(rules, 'cash', 'C', cashAmt, `직원에게 지급(${cashItems.map(i => KIND_LABEL[i.kind]).join('·')})`, '받는 직원 사번', ck))
       }
+    }
+    if (personalFee) {
+      const cashLine = credits.find(c => c.key === 'cash' && !/차액/.test(c.plain))
+      if (cashLine) {
+        cashLine.amount = cashLine.amount == null || personalFee.amount == null ? null : cashLine.amount + personalFee.amount
+        cashLine.kinds = [...cashLine.kinds, 'fee']
+        cashLine.plain = cashLine.plain.replace(/\)$/, '·본인이 낸 등록비)')
+      } else credits.push(line(rules, 'cash', 'C', personalFee.amount, '본인이 먼저 낸 등록비 돌려받기', '받는 직원 사번', ['fee']))
     }
     // 가지급금 정리는 한 줄로(원 전표 하나) — 등록비·여비를 함께 받았으면 합친다
     const advs = credits.filter(c => c.key === 'advance')
