@@ -82,7 +82,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 첫 화면은 바로 '무엇을 하려고 하나요?'(확인 화면 없음)`, (await screen(p)) === 'task' && (await text(p)).includes('예상 567,200원'))
   check(`[${width}] 선택 화면은 다음 버튼 없이 고르면 넘어간다`, await p.isHidden('#vg-next'))
   await shot(p, `${width}-task`)
-  { const tt = await text(p); check(`[${width}] 처음에 정산 방법 3가지(한 번에 / 등록비만 먼저 / 모두 먼저)`, tt.includes('다녀와서 한 번에 정산받을게요') && tt.includes('등록비만 먼저 회사 돈으로 보낼게요') && tt.includes('모든 비용을 먼저 받아 둘게요') && tt.includes('전표를 한 번 작성하면 끝나요') && tt.includes('번거롭지만 전표를 두 번 작성해야 해요') && tt.includes('추천') && tt.includes('왜 두 번 정산하나요?'), tt.slice(0, 200)) }
+  { const tt = await text(p); check(`[${width}] 처음에 정산 방법 3가지(한 번에 / 등록비만 먼저 / 모두 먼저)`, tt.includes('다녀와서 한 번에 정산받을게요') && tt.includes('등록비만 먼저 회사 돈으로 보낼게요') && tt.includes('모든 비용을 먼저 받아 둘게요') && tt.includes('전표를 한 번 작성하면 끝나요') && tt.split('번거롭지만 전표를 두 번 작성해야 해요').length === 2 && tt.includes('영수증이 나중에 나오는') && tt.includes('추천') && tt.includes('왜 두 번 정산하나요?'), tt.slice(0, 200)) }
   await tap(p, '등록비만 먼저 회사 돈으로 보낼게요')
   check(`[${width}] 등록비만 고르면 영수증 시점 질문`, (await screen(p)) === 'advEv')
   await shot(p, `${width}-advEv`)
@@ -206,6 +206,21 @@ for (const width of [1280, 390]) {
   await ctx.close()
 }
 
+// ── 1-d. 등록비를 본인 돈으로 냈으면 현금으로 돌려받는다(2026-10-01 지석초이) ──
+{
+  const [ctx, p] = await page(1280)
+  await toCard11(p)
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  await tap(p, '다녀와서 한 번에 정산받을게요')
+  check('한 번 정산: 등록비 낸 방법은 법인카드·본인 결제 2가지만', (await screen(p)) === 'feePay' && (await p.locator('#vg-screen .choice-btn').count()) === 2 && !(await text(p)).includes('병원이 먼저'))
+  await tap(p, '제 돈으로 냈어요'); await tap(p, '회의·업무 출장')
+  check('한 번 정산·본인 결제: 등록비 낸 방법은 2가지뿐, 영수증은 받았는지 대신 종류를 묻는다', (await screen(p)) === 'evType' && (await text(p)).includes('어떤 형태인가요'))
+  await tap(p, '세금계산서')
+  const ln = await lines(p)
+  check('본인이 낸 등록비: 확인 필요 없이 현금 한 줄 567,200(여비+등록비)', JSON.stringify(ln.filter(l => l[2] === 'C').map(l => [l[0], l[3]])) === JSON.stringify([['현금', 567200]]) && !(await text(p)).includes('확인할 것'), JSON.stringify(ln))
+  await ctx.close()
+}
+
 // ── 2. 등록비 카드 결제 → 선지급·납부 방법 질문 생략, 카드 줄 ──
 {
   const [ctx, p] = await page(1280)
@@ -214,7 +229,8 @@ for (const width of [1280, 390]) {
   check('카드로 낸 등록비는 선지급 대상에서 빠지고 여비만 먼저 받을 수 있다', (await text(p)).includes('여비를 먼저 받아 둘게요'))
   await tap(p, '다녀와서 한 번에 정산받을게요')
   check('카드 결제는 납부 방법을 다시 묻지 않고 목적으로', (await screen(p)) === 'purpose')
-  await tap(p, '회의·업무 출장'); await tap(p, '네, 다 받았어요')
+  await tap(p, '회의·업무 출장')
+  check('카드 결제면 영수증 종류도 묻지 않고 바로 전표', (await screen(p)) === 'voucher')
   const ln = await lines(p)
   check('최종: 여비교통비-국내출장비 / 법인카드 300,000 + 현금, 보통예금 없음',
     ln[0][0] === '여비교통비-국내출장비' && ln.some(([n, , s, a]) => n === '미지급비용-법인개인카드' && s === 'C' && a === 300000) && !ln.some(([n]) => n === '보통예금'), JSON.stringify(ln))

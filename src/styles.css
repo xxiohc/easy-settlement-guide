@@ -3503,3 +3503,5 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .pc-list .choice-btn span.pc-n.is-one { background: #ecfdf3; color: #047857; }
 .pc-list .pc-sep ~ .choice-btn strong { font-weight: 700; }
 .pc-list + .ts-why { max-width: 680px; margin-top: 20px; }
+.pc-sep { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pc-sep .pc-n { margin: 0; padding: 1px 8px; border-radius: 999px; background: rgba(25,31,40,0.07); color: var(--ink); font-size: 12px; font-weight: 700; }
