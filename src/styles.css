@@ -3374,35 +3374,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 
 /* 전표 카드(보기 전용) — 계정명·금액 한 줄, 칸마다 합계, 차변·대변 합계 줄을 가로로 맞춤(2026-09-30 지석초이) */
-.vt-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 8px; margin-top: 18px;
-  grid-template-areas: "dt ct" "dc cc" "ds cs"; }
-.vt-dt { grid-area: dt; } .vt-ct { grid-area: ct; } .vt-dc { grid-area: dc; } .vt-cc { grid-area: cc; } .vt-ds { grid-area: ds; } .vt-cs { grid-area: cs; }
-@media (max-width: 640px) { .vt-grid { grid-template-columns: 1fr; grid-template-areas: "dt" "dc" "ds" "ct" "cc" "cs"; } .vt-ct { margin-top: 14px; } }
-.vt-col-title { display: flex; align-items: baseline; gap: 8px; }
-.vt-col-title b { font-size: 18px; font-weight: 800; }
-.vt-col-title span { font-size: 13px; color: var(--muted); }
-.vt-dt b { color: var(--primary); } .vt-ct b { color: #d9722a; }
-.vt-cards { display: grid; gap: 10px; align-content: start; }
-.vt-card { display: grid; gap: 6px; padding: 16px 18px; border-radius: 16px; border: 1.5px solid var(--line); background: #fff; }
-.vt-code { justify-self: start; padding: 2px 10px; border-radius: 8px; background: rgba(49,130,246,0.1); color: var(--primary); font-size: 14px; font-weight: 800; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
-.vt-c .vt-code { background: rgba(240,145,63,0.13); color: #d9722a; }
-.vt-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.vt-name { font-size: 18px; font-weight: 800; color: var(--ink); line-height: 1.3; word-break: keep-all; }
-.vt-amt { flex: none; font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.vt-amt.is-need { font-size: 15px; color: #c2410c; }
-.vt-plain { font-size: 13px; color: var(--subtle); line-height: 1.5; word-break: keep-all; }
-.vt-memo { font-size: 12.5px; color: var(--primary); }
-.vt-sum { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 18px; border-radius: 14px; background: #eef6ff; }
-.vt-cs .vt-sum { background: #fff1e3; }
-.vt-sum span { font-size: 14px; font-weight: 700; color: var(--subtle); }
-.vt-sum b { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .vt-total { margin-top: 10px; padding: 12px 16px; border-radius: 12px; text-align: center; font-size: 14.5px; font-weight: 700; background: #fff7ed; color: #9a3412; }
 .vt-total.is-ok { background: #ecfdf3; color: #047857; }
 .vt-memo-row { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; padding: 12px 16px; border-radius: 12px; background: var(--surface); }
 .vt-memo-row span { flex: none; font-size: 13.5px; font-weight: 700; color: var(--subtle); }
 .vt-memo-row b { font-size: 15px; font-weight: 600; word-break: keep-all; }
-.vt-d { border-color: #cfe3ff; background: #f7fbff; }
-.vt-c { border-color: #fde2c8; background: #fffaf5; }
 
 /* 2회 정산 단계 표시 · 출장신청서 원본 크로스체크(2026-09-30 지석초이) */
 .vs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -3434,3 +3410,58 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vx-row span { display: block; font-size: 11.5px; color: var(--muted); }
 .vx-row b { font-size: 15px; }
 .vx-row > i { font-style: normal; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+
+/* 출장신청서 형광펜(2026-09-30 지석초이) — 지금 전표에 쓰는 칸만 칠하고 나머지는 흐리게 */
+.vx-legend { margin: -4px 0 10px; font-size: 12.5px; color: var(--subtle); line-height: 1.55; word-break: keep-all; }
+.vx-legend mark { padding: 0 4px; border-radius: 3px; background: #fff08a; color: var(--ink); font-weight: 700; }
+.vx-form tr, .vx-form .tf-total-row { transition: opacity .2s, background-color .2s; }
+.vx-form tr.hl-dim, .vx-form .tf-total-row.hl-dim { opacity: .38; }
+.vx-form tr.hl-main > th, .vx-form tr.hl-main > td,
+.vx-form .tf-total-row.hl-main { background: linear-gradient(180deg, #fff6b0 0%, #fff08a 100%) !important; }
+.vx-form tr.hl-main > td { font-weight: 700; color: var(--ink); }
+.vx-form tr.hl-soft > td { background: #fffbe3 !important; }
+.vx-form tr.is-focus > th, .vx-form tr.is-focus > td, .vx-form .tf-total-row.is-focus { background: #fff08a !important; opacity: 1; }
+.vx-form tr.is-focus { opacity: 1; }
+.hl-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 800; vertical-align: 1px; white-space: nowrap; background: #eef1f4; color: var(--subtle); }
+.hl-tag.t-now { background: #f0913f; color: #fff; }
+.hl-tag.t-memo { background: #fff1c2; color: #8a6d00; }
+.hl-tag.t-cash { background: #fff1e3; color: #d9722a; }
+.hl-tag.t-card { background: #eef2ff; color: #4f46e5; }
+.hl-tag.t-adv { background: #f3edff; color: #6d28d9; }
+.hl-tag.t-bank { background: #e0f2fe; color: #0369a1; }
+
+/* 전표 = 장부 한 장(2026-09-30 개편) — 코드·계정과목·금액을 한 줄 격자로, 카드·칩 없이 */
+.vt-ledger { display: grid; grid-template-columns: 1fr 1fr; margin-top: 18px; border: 1.5px solid #dfe3e8; border-radius: 16px; overflow: hidden; background: #fff; }
+.vt-half { display: flex; flex-direction: column; min-width: 0; }
+.vt-half + .vt-half { border-left: 1.5px solid #dfe3e8; }
+.vt-head-row { display: flex; align-items: baseline; gap: 8px; padding: 12px 18px; border-bottom: 1.5px solid #dfe3e8; background: #fafbfc; }
+.vt-head-row b { font-size: 17px; font-weight: 800; }
+.vt-head-row span { font-size: 13px; color: var(--muted); }
+.vt-d .vt-head-row b { color: var(--primary); }
+.vt-c .vt-head-row b { color: #d9722a; }
+.vt-rows { flex: 1; }
+.vt-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: baseline; padding: 14px 18px; border-bottom: 1px solid #eef0f3; cursor: pointer; transition: background-color .15s; }
+.vt-row:last-child { border-bottom: 0; }
+.vt-row:hover, .vt-row:focus { outline: none; background: #fffbe0; }
+.vt-code { font-size: 14px; font-weight: 700; color: var(--subtle); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; white-space: nowrap; }
+.vt-name { font-size: 16px; font-weight: 800; color: var(--ink); word-break: keep-all; overflow-wrap: normal; }
+.vt-amt { font-size: 18px; font-weight: 800; color: var(--ink); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vt-amt.is-need { font-size: 14px; color: #c2410c; }
+.vt-plain { grid-column: 2 / -1; font-size: 13px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
+.vt-plain em { display: block; font-style: normal; color: var(--primary); }
+.vt-sum { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 18px; border-top: 1.5px solid #dfe3e8; background: #fafbfc; }
+.vt-sum span { font-size: 14px; font-weight: 700; color: var(--subtle); }
+.vt-sum b { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vt-d .vt-sum b { color: var(--primary); }
+.vt-c .vt-sum b { color: #d9722a; }
+@media (max-width: 640px) {
+  .vt-ledger { grid-template-columns: 1fr; }
+  .vt-half + .vt-half { border-left: 0; border-top: 1.5px solid #dfe3e8; }
+  /* 폰: 코드는 계정과목 위 작은 줄로 — 같은 왼쪽 선에서 시작해 정렬이 흐트러지지 않게 */
+  .vt-row { grid-template-columns: minmax(0, 1fr) auto; padding: 12px 14px; column-gap: 10px; }
+  .vt-code { grid-column: 1 / -1; font-size: 12.5px; }
+  .vt-plain { grid-column: 1 / -1; }
+  .vt-head-row, .vt-sum { padding-left: 14px; padding-right: 14px; }
+  .vt-name { font-size: 15.5px; }
+  .vt-amt { font-size: 16.5px; }
+}
