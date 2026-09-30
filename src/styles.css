@@ -3293,13 +3293,10 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vg-why { margin-top: 16px; font-size: 13.5px; color: var(--subtle); }
 .vg-why summary { cursor: pointer; font-weight: 600; color: var(--primary); }
 .vg-why div { margin-top: 8px; line-height: 1.6; word-break: keep-all; }
-.vg-copy { flex: none; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--subtle); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-.vg-copy:hover { border-color: var(--primary); color: var(--primary); }
 .vg-amt { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .vg-amt small { display: block; font-size: 12px; color: var(--muted); }
 .vg-amt .vg-link { grid-column: 2; margin: 0; font-size: 12.5px; justify-self: end; }
 .vg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.vg-actions .vg-copy { min-height: 44px; padding: 10px 16px; border-radius: 12px; font-size: 14px; color: var(--ink); }
 @media (max-width: 480px) {
   .vg-money .info-input { width: 130px; }
 }
@@ -3339,35 +3336,6 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
 .vt-kind { padding: 4px 12px; border-radius: 999px; background: #fff1e3; color: #d9722a; font-size: 13px; font-weight: 700; }
 .vt-flow { font-size: 13px; color: var(--subtle); }
-.vt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
-@media (max-width: 640px) { .vt-grid { grid-template-columns: 1fr; } }
-.vt-col-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
-.vt-col-title b { font-size: 18px; font-weight: 800; }
-.vt-col-title span { font-size: 13px; color: var(--muted); }
-.vt-col:first-child .vt-col-title b { color: var(--primary); }
-.vt-col:last-child .vt-col-title b { color: #d9722a; }
-.vt-card { display: grid; gap: 4px; padding: 16px 18px; border-radius: 16px; border: 1.5px solid var(--line); background: #fff; }
-.vt-card + .vt-card { margin-top: 10px; }
-.vt-d { border-color: #cfe3ff; background: #f7fbff; }
-.vt-c { border-color: #fde2c8; background: #fffaf5; }
-.vt-c .vt-code { background: rgba(240,145,63,0.13); color: #d9722a; }
-.vt-code { justify-self: start; padding: 3px 10px; border-radius: 8px; border: 0; background: rgba(49,130,246,0.1); color: var(--primary); font: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.02em; cursor: pointer; font-variant-numeric: tabular-nums; }
-.vt-name { font-size: 19px; font-weight: 800; color: var(--ink); line-height: 1.3; word-break: keep-all; }
-.vt-amt { justify-self: start; padding: 0; border: 0; background: none; font: inherit; font-size: 24px; font-weight: 800; color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
-.vt-amt:disabled { color: #c2410c; font-size: 16px; cursor: default; }
-.vt-code.is-copied, .vt-amt.is-copied { color: #047857; }
-.vt-plain { font-size: 13px; color: var(--subtle); line-height: 1.5; word-break: keep-all; }
-.vt-memo { color: var(--primary); }
-.vt-total { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 6px 12px; margin-top: 14px; padding: 14px; border-radius: 14px; background: var(--surface); font-variant-numeric: tabular-nums; }
-.vt-total span { font-size: 14px; color: var(--subtle); }
-.vt-total b { font-size: 20px; font-weight: 800; }
-.vt-total i { font-style: normal; font-size: 18px; color: var(--muted); }
-.vt-total em { font-style: normal; font-size: 14px; font-weight: 700; color: #c2410c; }
-.vt-total.is-ok { background: #ecfdf3; }
-.vt-total.is-ok em { color: #047857; }
-.vt-memo-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; margin-top: 14px; }
-.vt-memo-row label { font-size: 14px; font-weight: 700; color: var(--subtle); }
-.vt-memo-row .vg-textarea { margin: 0; }
 .vg-amt b small { font-weight: 400; color: var(--muted); }
 #card-12 .vg-ref { width: 200px; }
 .vd-status { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border-radius: 16px; background: #fff7ed; }
@@ -3384,3 +3352,64 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vd-row b { font-variant-numeric: tabular-nums; }
 .vd-memo { padding-top: 8px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--subtle); }
 .rc-later { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #ecfdf3; color: #047857; font-size: 12px; font-weight: 700; }
+
+/* 전표 화면 오른쪽 '내가 쓴 출장신청서와 비교'(2026-09-30 지석초이) — 넓은 화면은 카드4 여정 패널처럼 오른쪽, 좁으면 합계 아래 */
+.vg-wrap { position: relative; }
+.vg-aside { margin-top: 16px; }
+.vc-card { padding: 18px 20px; border-radius: 16px; border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow-sm); font-variant-numeric: tabular-nums; }
+.vc-title { margin-bottom: 12px; font-size: 15px; font-weight: 800; color: var(--ink); }
+.vc-grid { display: grid; grid-template-columns: 1fr 88px 88px 64px; align-items: baseline; gap: 6px; padding: 8px 0; }
+.vc-grid > span:nth-child(2), .vc-grid > span:nth-child(3) { text-align: right; }
+.vc-grid > i { text-align: right; font-style: normal; font-size: 12.5px; font-weight: 700; }
+.vc-head { padding-top: 0; font-size: 12px; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--line); }
+.vc-row { font-size: 14px; border-bottom: 1px solid var(--line); }
+.vc-row > span:first-child { color: var(--subtle); word-break: keep-all; }
+.vc-row small { display: block; font-size: 11.5px; color: var(--muted); }
+.vc-total { font-size: 15.5px; font-weight: 800; }
+.vc-ok { color: #047857; }
+.vc-diff { color: #c2410c; }
+.vc-need { color: #c2410c; }
+.vc-new { color: var(--muted); }
+.vc-status { margin-top: 10px; padding: 12px 14px; border-radius: 12px; font-size: 14.5px; font-weight: 700; }
+.vc-status small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 500; }
+.vc-status.is-ok { background: #ecfdf3; color: #047857; }
+.vc-status.is-diff { background: #fff7ed; color: #9a3412; }
+.vc-status.is-wait { background: var(--surface); color: var(--subtle); }
+.vc-foot { margin-top: 8px; font-size: 12px; color: var(--muted); }
+@media (max-width: 480px) { .vc-grid { grid-template-columns: 1fr 76px 76px 52px; gap: 4px; } .vc-row { font-size: 13.5px; } }
+@media (min-width: 1480px) {
+  #card-12.has-aside .card-body, #card-12.has-aside .card-footer { position: relative; left: -236px; }
+  #card-12.has-aside .vg-aside { position: absolute; top: 0; bottom: 0; left: calc(100% + 32px); width: 440px; margin-top: 0; }
+  #card-12.has-aside .vc-card { position: sticky; top: 140px; }
+}
+
+/* 전표 카드(보기 전용) — 계정명·금액 한 줄, 칸마다 합계, 차변·대변 합계 줄을 가로로 맞춤(2026-09-30 지석초이) */
+.vt-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 8px; margin-top: 18px;
+  grid-template-areas: "dt ct" "dc cc" "ds cs"; }
+.vt-dt { grid-area: dt; } .vt-ct { grid-area: ct; } .vt-dc { grid-area: dc; } .vt-cc { grid-area: cc; } .vt-ds { grid-area: ds; } .vt-cs { grid-area: cs; }
+@media (max-width: 640px) { .vt-grid { grid-template-columns: 1fr; grid-template-areas: "dt" "dc" "ds" "ct" "cc" "cs"; } .vt-ct { margin-top: 14px; } }
+.vt-col-title { display: flex; align-items: baseline; gap: 8px; }
+.vt-col-title b { font-size: 18px; font-weight: 800; }
+.vt-col-title span { font-size: 13px; color: var(--muted); }
+.vt-dt b { color: var(--primary); } .vt-ct b { color: #d9722a; }
+.vt-cards { display: grid; gap: 10px; align-content: start; }
+.vt-card { display: grid; gap: 6px; padding: 16px 18px; border-radius: 16px; border: 1.5px solid var(--line); background: #fff; }
+.vt-code { justify-self: start; padding: 2px 10px; border-radius: 8px; background: rgba(49,130,246,0.1); color: var(--primary); font-size: 14px; font-weight: 800; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.vt-c .vt-code { background: rgba(240,145,63,0.13); color: #d9722a; }
+.vt-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.vt-name { font-size: 18px; font-weight: 800; color: var(--ink); line-height: 1.3; word-break: keep-all; }
+.vt-amt { flex: none; font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vt-amt.is-need { font-size: 15px; color: #c2410c; }
+.vt-plain { font-size: 13px; color: var(--subtle); line-height: 1.5; word-break: keep-all; }
+.vt-memo { font-size: 12.5px; color: var(--primary); }
+.vt-sum { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 18px; border-radius: 14px; background: #eef6ff; }
+.vt-cs .vt-sum { background: #fff1e3; }
+.vt-sum span { font-size: 14px; font-weight: 700; color: var(--subtle); }
+.vt-sum b { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vt-total { margin-top: 10px; padding: 12px 16px; border-radius: 12px; text-align: center; font-size: 14.5px; font-weight: 700; background: #fff7ed; color: #9a3412; }
+.vt-total.is-ok { background: #ecfdf3; color: #047857; }
+.vt-memo-row { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; padding: 12px 16px; border-radius: 12px; background: var(--surface); }
+.vt-memo-row span { flex: none; font-size: 13.5px; font-weight: 700; color: var(--subtle); }
+.vt-memo-row b { font-size: 15px; font-weight: 600; word-break: keep-all; }
+.vt-d { border-color: #cfe3ff; background: #f7fbff; }
+.vt-c { border-color: #fde2c8; background: #fffaf5; }
