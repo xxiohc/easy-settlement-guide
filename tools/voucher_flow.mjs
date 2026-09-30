@@ -117,6 +117,12 @@ for (const width of [1280, 390]) {
   const ln2 = await lines(p)
   check(`[${width}] 최종 전표: 차 교육훈련비-간호사교육 567,200 / 대 가지급금-기타 300,000 + 현금 267,200`,
     JSON.stringify(ln2) === JSON.stringify([['교육훈련비-간호사교육', '5301-16-03', 'D', 567200], ['가지급금-기타', '1114-99', 'C', 300000], ['현금', '1101', 'C', 267200]]), JSON.stringify(ln2))
+  const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
+  check(`[${width}] 신청서 비교: 금액이 같으면 ✓ 같아요`, cmp.includes('신청서와 전표 금액이 같아요'), cmp)
+  if (width >= 1280) {
+    const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-grid').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])
+    check(`[${width}] 넓은 화면: 비교 패널은 전표 오른쪽, 가로 넘침 없음`, pos[0] > pos[1] || width < 1480, JSON.stringify(pos))
+  }
   await shot(p, `${width}-voucher-final`)
   await p.click('#vg-screen .vg-link'); await p.waitForTimeout(250)
   check(`[${width}] '금액이 달라요' → 고치기 화면`, (await screen(p)) === 'amounts')
@@ -191,6 +197,8 @@ for (const width of [1280, 390]) {
   const ln = await lines(p)
   check('제주: 가지급금 400,000 + 카드 145,000·15,900 + 현금 105,000 (p.7 구조)',
     JSON.stringify(ln.map(l => [l[0], l[3]])) === JSON.stringify([['여비교통비-국내출장비', 665900], ['가지급금-기타', 400000], ['미지급비용-법인개인카드', 145000], ['미지급비용-법인개인카드', 15900], ['현금', 105000]]), JSON.stringify(ln))
+  const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
+  check('제주: 신청서 공란(항공·셔틀) → +160,900원 달라요 · 출장여비 정산서', cmp.includes('+160,900원 달라요') && cmp.includes('출장여비 정산서'), cmp)
   await shot(p, 'jeju-voucher')
   await ctx.close()
 }
