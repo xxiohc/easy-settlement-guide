@@ -3621,3 +3621,10 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .prev-day-hint .pd-why { color: #cbd5e1; }
 .prev-day-hint .pd-why b { color: #fff; }
 .prev-day-hint .pd-sum { color: #94a3b8; }
+
+.day-chip.is-night { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); }
+.day-chip.is-night .day-chip-date { color: #fff; }
+.day-chip.is-night .day-chip-label { color: #cbd5e1; }
+.day-chip.is-night b { color: #fde68a; }
+.pc-pre p { margin: 6px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--ink); word-break: keep-all; }
+.pc-pre .va-title { margin-bottom: 0; font-weight: 700; }

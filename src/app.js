@@ -4043,7 +4043,7 @@ function prepareCard9() {
           <span class="breakdown-label">${item.label}${item.prevDay ? ' <span class="pd-badge">전날 이동 포함</span>' : ''}</span>
           ${item.note ? `<span class="breakdown-note">${item.note}</span>` : ''}
           ${item.days ? `<div class="day-chips">${item.days.map(d => `
-            <div class="day-chip${d.quarter ? ' is-quarter' : ''}">
+            <div class="day-chip${d.quarter ? ' is-quarter' : ''}${d.label === '전날 이동' ? ' is-night' : ''}">
               <span class="day-chip-date">${d.date}</span><span class="day-chip-label">${d.label}${d.quarter ? ' 25%' : ''}</span>
               <b>${d.amt.toLocaleString()}원</b>
             </div>`).join('')}</div>` : ''}

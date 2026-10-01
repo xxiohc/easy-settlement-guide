@@ -616,12 +616,23 @@ const VG_SCREEN = {
   task() {
     const fee = vgFee()?.amount, tr = Voucher.travelSum(vg)
     const opts = vgAdvOptions()
-    const on = (task, kinds) => vg.task === task && (task === 'final' || JSON.stringify(vgAdvKinds()) === JSON.stringify(kinds))
+    // 앞 단계 등록비 납부 답으로 기본값을 잡는다(2026-10-01 지석초이): 법인카드 → 한 번에 / 계좌로 보냄 → 등록비만 먼저(병원이 먼저 보냄)
+    const t = vg.trip
+    const pre = !opts.includes('fee') && vgFeePaidByCardBefore() ? 'final'
+      : opts.includes('fee') && t.feeStatus === 'paid' && t.receiptType && t.receiptType !== 'card-receipt' ? 'fee' : null
+    const cur = vg.task ? (vg.task === 'final' ? 'final' : JSON.stringify(vgAdvKinds())) : pre === 'fee' ? '["fee"]' : pre
+    const on = (task, kinds) => cur === (task === 'final' ? 'final' : JSON.stringify(kinds))
+    const rName = { 'cash-receipt': '현금영수증', 'tax-invoice': '세금계산서', transfer: '계좌이체내역서·이수증' }[t.receiptType] || ''
+    const preBox = pre === 'final'
+      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>법인카드로 결제</b>한다고 하셨어요</div><p>카드로 내면 병원이 먼저 보낼 돈이 없어서 <b>다녀와서 한 번에 정산</b>하면 돼요. 아래에 미리 골라 뒀어요.</p></div>`
+      : pre === 'fee'
+      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>계좌로 보낸다</b>고 하셨어요${rName ? ` (${rName})` : ''}</div><p>병원 계좌에서 주최기관에 먼저 보내는 거라 <b>등록비만 먼저 회사 돈으로</b> 처리해요. 아래에 미리 골라 뒀어요 — 다르면 다른 칸을 눌러 주세요.</p></div>`
+      : ''
     const card = (task, kinds, icon, title, now, later, n) => choice(on(task, kinds), `onclick="vgPickCase('${task}', ${kinds ? `['${kinds.join("','")}']` : 'null'})"`, icon, title,
       `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span>${n === 1 ? '<span class="pc-n is-one">전표를 한 번 작성하면 끝나요</span>' : ''}`)
     const all = opts.includes('fee') && opts.includes('travel')
-    return tripChip() + q('어떻게<br>정산받을까요?', '특별한 사정이 없으면 다녀와서 한 번에 정산하는 게 가장 간단해요') + `<div class="choice-list pc-list">
-      <div class="pc-best"><span class="pc-badge">추천</span>${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}</div>
+    return tripChip() + q('어떻게<br>정산받을까요?', pre ? '' : '특별한 사정이 없으면 다녀와서 한 번에 정산하는 게 가장 간단해요') + preBox + `<div class="choice-list pc-list">
+      <div class="${pre === 'fee' ? '' : 'pc-best'}">${pre === 'fee' ? '' : '<span class="pc-badge">추천</span>'}${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}</div>
       ${opts.length ? '<div class="pc-sep">꼭 먼저 받아야 할 때만 <span class="pc-n">번거롭지만 전표를 두 번 작성해야 해요</span></div>' : ''}
       ${opts.includes('fee') ? card('advance', ['fee'], '🏦', '등록비만 먼저 회사 돈으로 보낼게요', `지금 등록비 ${fee.toLocaleString()}원`, tr ? `다녀와서 일당·숙박·교통비 ${tr.toLocaleString()}원` : '영수증이 나오면 최종 정산', 2) : ''}
       ${opts.includes('travel') ? card('advance', all ? ['fee', 'travel'] : ['travel'], '📦', all ? '모든 비용을 먼저 받아 둘게요' : '여비를 먼저 받아 둘게요',
