@@ -55,7 +55,7 @@ function vgFromState() {
       formTotal = Number.isFinite(n) ? n : null
     }
   }
-  return { version: 2, trip, costs, planTotal: formTotal ?? total, formHtml, formTotal, screen: 'task', checks: {}, tripKey: Voucher.tripKey(trip), fromFlow: true }
+  return { version: 2, trip, costs, planTotal: formTotal ?? total, formHtml, formTotal, screen: 'purpose', checks: {}, tripKey: Voucher.tripKey(trip), fromFlow: true }
 }
 
 function startVoucherGuide() {
@@ -70,7 +70,7 @@ function startVoucherGuide() {
     }
     vg.trip = { ...saved.trip, ...fresh.trip }
     // 카드11에서 다시 들어오면 새로 고르는 것 — 이어하기(②)용 흔적이 남아 흐름이 섞이지 않게 비운다(2026-10-01)
-    Object.assign(vg, { resumed: false, feePay: null, evAll: null, checks: {}, pendingFinal: false, screen: 'task' })
+    Object.assign(vg, { resumed: false, feePay: null, evAll: null, checks: {}, pendingFinal: false, screen: 'purpose' })
     if (fresh.formHtml) { vg.formHtml = fresh.formHtml; vg.formTotal = fresh.formTotal; vg.planTotal = fresh.planTotal }
     vg.fromFlow = true
   } else {
@@ -206,22 +206,20 @@ function vgFinalPreview() {
 // [화면 id, 묶음] — 답에 따라 필요 없는 화면은 뺀다. 선택지 화면은 고르면 바로 넘어간다.
 function vgScreens() {
   const list = []
+  // 2026-10-01 지석초이: 비용 목적(·직종)을 제일 먼저 묻는다 — 이어하기(②)는 앞서 답했으면 건너뛴다
+  const askPurpose = !(vg.resumed && Voucher.expenseAccountKey(vg.purpose, vg.job))
   if (vg.resumed) list.push(['resumeQ', 0])
-  else list.push(['task', 0])
+  if (askPurpose) {
+    list.push(['purpose', 0])
+    if (vg.purpose === 'edu') list.push(['job', 0])
+  }
+  if (!vg.resumed) list.push(['task', 0])
   if (vg.task === 'advance') {
     // 2회 정산(원 자료 p.4 Case②): ① 지금 선지급 전표, ② 영수증(적격증빙) 발급 후 최종 정산 전표를 미리 보여 준다
     if (vgAdvKinds().includes('fee')) list.push(['advEv', 0])
-    list.push(['voucher', 1], ['purpose', 1])
-    if (vg.purpose === 'edu') list.push(['job', 1])
-    list.push(['voucher2', 1], ['done', 2])
+    list.push(['voucher', 1], ['voucher2', 1], ['done', 2])
   } else if (vg.task === 'final') {
     if (vgFee() && !vg.resumed && !vgFeePaidByCardBefore()) list.push(['feePay', 0])
-    // 선지급 때 이미 고른 목적·직종은 다시 묻지 않는다
-    const known = vg.resumed && Voucher.expenseAccountKey(vg.purpose, vg.job)
-    if (!known) {
-      list.push(['purpose', 0])
-      if (vg.purpose === 'edu') list.push(['job', 0])
-    }
     if (vg.resumed) {
       const needEv = (vg.costs || []).some(c => ['air', 'shuttle', 'meal'].includes(c.kind) || (c.kind === 'fee' && c.amount && vg.feePay !== 'expensed'))
       if (needEv) list.push(['evidence', 0])
@@ -533,7 +531,7 @@ const VG_SCREEN = {
   },
 
   purpose() {
-    return q('어떤 목적의<br>비용인가요?') + `<div class="choice-list">
+    return (vg.resumed ? '' : tripChip()) + q('어떤 목적의<br>비용인가요?') + `<div class="choice-list">
       ${pick('purpose', 'edu', '🎓', '교육·학회 참석', '배우러 간 경우')}
       ${pick('purpose', 'trip', '🧳', '회의·업무 출장', '협의회·세미나·업무 협조 등')}
       </div>` + why('헷갈리면?', '배우러 가면 교육훈련비, 일을 보러 가면 국내출장비예요. 협의회 세미나처럼 애매하면 전표 처리자에게 한 번 확인해 주세요.')
