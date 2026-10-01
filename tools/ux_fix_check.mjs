@@ -306,6 +306,28 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await ctx.close()
 }
 
+// ── J. 2026-10-01 지석초이: 제주는 전날 이동(전날 일당·숙박)을 인정하지 않는다 — 묻지 않고, 카드9에 안내 한 줄 ──
+{
+  const [ctx, p] = await newPage()
+  await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(700)
+  await p.fill('#input-title', '재무부서장협의회 세미나')
+  await p.fill('#input-start', '2026-11-19'); await p.fill('#input-end', '2026-11-21'); await p.dispatchEvent('#input-start', 'change')
+  await p.fill('#input-region', '제주'); await p.waitForTimeout(300)
+  await p.click('#feeBtn-no'); await p.waitForTimeout(200)
+  await p.click('#ctaNext4'); await p.waitForTimeout(700)
+  check('J 제주 → 카드8', await active(p) === 'card-8', await active(p))
+  check('J 제주는 전날 이동을 묻지 않고 "아니요"로 고정', !(await vis(p, '#field-daytrip')) && (await p.evaluate(() => state.prevDayMove)) === false)
+  for (let i = 0; i < 3 && (await active(p)) === 'card-8'; i++) {
+    await p.evaluate(() => document.querySelectorAll('#card-8 [id^="field-"]').forEach(f => {
+      if (f.classList.contains('hidden') || !f.getBoundingClientRect().height) return
+      const bs = [...f.querySelectorAll('.yn-btn')]; if (bs.length && !bs.some(x => x.classList.contains('selected'))) bs[bs.length - 1].click() }))
+    await p.click('#ctaNext8'); await p.waitForTimeout(700)
+  }
+  const h = await p.evaluate(() => { const e = document.getElementById('prevDayHint'); return [!e.classList.contains('hidden'), e.innerText] })
+  check('J 카드9: 제주는 전날 이동 불인정 안내(밤색 전날 이동 상자 아님)', (await active(p)) === 'card-9' && h[0] && h[1].includes('전날 이동(전날 일당·숙박)을 인정하지 않아요') && !h[1].includes('135,000'), JSON.stringify(h))
+  await ctx.close()
+}
+
 await b.close()
 console.log('\n── 요약 ──')
 console.log(`총 ${out.length}건 · FAIL ${out.filter(l=>l.startsWith('FAIL')).length}건`)

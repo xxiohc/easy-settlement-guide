@@ -3236,7 +3236,8 @@ const WORK_START_MIN = 8 * 60 + 30
 function judgePrevDayMove() {
   if (state.isOnline) return { auto: true, move: false, kind: 'na' }
   // 제주는 항공편이라 기차 역산을 하지 않는다 — 전날 이동 여부는 사람에게 묻는다
-  if (state.isJeju) return { auto: false, kind: 'jeju' }
+  // 제주는 전날 이동(전날 일당·숙박)을 인정하지 않는다(2026-10-01 지석초이) — 묻지 않고 '아니요'로 고정
+  if (state.isJeju) return { auto: true, move: false, kind: 'jeju' }
   const r = computeRoutePlan()
   if (!r) return { auto: false, kind: 'unknown' }
   if (r.skip === 'notime') return { auto: false, kind: 'notime' }
@@ -3649,7 +3650,7 @@ function applyPrevDayMove() {
   if (j.auto) {
     state.prevDayMove = j.kind === 'na' ? null : j.move
     state.prevDayAuto = true
-    return { mode: j.kind === 'near' || j.kind === 'citybus' ? 'skip' : j.kind === 'no-train' ? 'forced' : 'auto', judgment: j }
+    return { mode: j.kind === 'near' || j.kind === 'citybus' || j.kind === 'jeju' ? 'skip' : j.kind === 'no-train' ? 'forced' : 'auto', judgment: j }
   }
 
   // 자동으로 골라 뒀던 답이 남아 있으면 사람이 새로 답하게 비운다
@@ -3660,8 +3661,7 @@ function applyPrevDayMove() {
   }
   if (autoEl && state.startTime) {
     autoEl.innerHTML = `입력하신 첫날 교육 시작시각은 <strong>${escapeHtml(state.startTime)}</strong>이에요. ` +
-      (j.kind === 'jeju' ? '제주는 항공편이라 자동 역산을 못 해요 — '
-        : '장소 좌표를 몰라 자동 역산을 못 해요 — ') +
+      '장소 좌표를 몰라 자동 역산을 못 해요 — ' +
       '여기에 맞추려면 08:30 전에 나서야 했는지 골라주세요.'
     autoEl.classList.remove('hidden')
   }
@@ -4066,8 +4066,11 @@ function prepareCard9() {
   const prevDayHintEl = document.getElementById('prevDayHint')
   if (prevDayHintEl) {
     const show = state.prevDayMove === true
-    prevDayHintEl.classList.toggle('hidden', !show)
+    const jeju = !show && state.isJeju && !state.isOnline
+    prevDayHintEl.classList.toggle('hidden', !show && !jeju)
+    prevDayHintEl.classList.toggle('is-jeju', jeju)
     if (show) prevDayHintEl.innerHTML = prevDayHintHtml()
+    else if (jeju) prevDayHintEl.innerHTML = '<div class="pd-jeju">✈️ 제주 출장은 <b>전날 이동(전날 일당·숙박)을 인정하지 않아요</b></div>'
   }
 }
 
