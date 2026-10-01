@@ -71,8 +71,8 @@
     if (missingEv.length) return { code: 'D', title: '아직 받지 못한 증빙이 있어요',
       why: `${missingEv.join('·')} 증빙을 받아야 최종 정산을 마칠 수 있어요. 지금까지 적은 내용은 이 기기에 저장해 두고 이어서 할 수 있어요.`,
       now: '부족한 증빙 받기', later: '증빙을 받으면 이어서 작성' }
-    if ((adv && v.bankPay.status === 'advance') || num(v.travelAdv) != null) return { code: 'C', title: '먼저 받은 돈까지 포함해 최종 정산해요',
-      why: '먼저 받은 금액은 다시 받지 않고, 이번 전표에서 가지급금을 정리해요.', now: '최종 정산 전표 작성', later: '' }
+    if ((adv && v.bankPay.status === 'advance') || num(v.travelAdv) != null) return { code: 'C', title: '먼저 지급한 돈까지 포함해 최종 정산해요',
+      why: '먼저 지급한 금액은 다시 지급하지 않고, 이번 전표에서 가지급금을 정리해요.', now: '최종 정산 전표 작성', later: '' }
     return { code: 'A', title: '지금 최종 정산을 준비할 수 있어요',
       why: '전체 비용과 이미 결제한 내역을 확인한 뒤, 이번에 지급할 금액을 정리할게요.', now: '최종 정산 전표 작성', later: '' }
   }
@@ -81,7 +81,8 @@
   function line(rules, key, side, amount, plain, memo, kinds = []) {
     const a = rules.accounts[key] || { name: key, code: '' }
     // 현금·보통예금 줄의 보조 설명(적요에 넣을 것)은 규칙 파일에서 — 현금은 펌뱅킹 사번, 보통예금은 은행코드(2026-10-01 지석초이)
-    return { key, name: a.name, code: a.code, side, amount: num(amount), plain, memo: memo || (rules.memoHint || {})[key] || '', kinds }
+    // 2026-10-01 지석초이: '적요 ·' 머리말 없이 그냥 안내 — 적요 칸과 헷갈리지 않게 memo가 아닌 hint로 둔다
+    return { key, name: a.name, code: a.code, side, amount: num(amount), plain, memo: memo || '', hint: memo ? '' : (rules.memoHint || {})[key] || '', kinds }
   }
 
   // 선지급 전표(p.6): 차 가지급금-기타 / 대 보통예금(등록비, 병원→주최기관) · 현금(여비, 병원→직원)
@@ -190,7 +191,7 @@
     const advs = credits.filter(c => c.key === 'advance')
     if (advs.length > 1) {
       const merged = { ...advs[0], amount: advs.some(a => a.amount == null) ? null : sum(advs.map(a => a.amount)),
-        plain: '먼저 받은 등록비·여비 정리', kinds: [...new Set(advs.flatMap(a => a.kinds))], memo: advs.find(a => a.memo)?.memo || '' }
+        plain: '먼저 지급한 등록비·여비 정리', kinds: [...new Set(advs.flatMap(a => a.kinds))], memo: advs.find(a => a.memo)?.memo || '' }
       credits.splice(credits.indexOf(advs[0]), 1, merged)
       for (const a of advs.slice(1)) credits.splice(credits.indexOf(a), 1)
     }

@@ -98,7 +98,7 @@ for (const width of [1280, 390]) {
   await tap(p, '등록비만 먼저 보내고')
   check(`[${width}] 두 번 정산은 영수증 시점을 다시 묻지 않고 바로 ① 전표`, (await screen(p)) === 'voucher')
   const ln = await lines(p)
-  check(`[${width}] 보통예금 줄 보조 설명은 은행코드 AC001(지석초이)`, (await text(p)).includes('적요 · 은행코드 AC001을 적어 주세요'))
+  check(`[${width}] 보통예금 줄 보조 설명은 은행코드 AC001(지석초이)`, (await text(p)).includes('은행코드 AC001을 적어 주세요') && !(await text(p)).includes('적요 · 은행코드'))
   check(`[${width}] 선지급 전표: 차 가지급금-기타 1114-99 / 대 보통예금 1102-02 · 300,000`,
     JSON.stringify(ln) === JSON.stringify([['가지급금-기타', '1114-99', 'D', 300000], ['보통예금', '1102-02', 'C', 300000]]), JSON.stringify(ln))
   check(`[${width}] 차변·대변 장부 한 줄씩 + 칸마다 합계 + 일치 표시`, (await p.locator('.vt-row').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.textContent('.vt-total')).includes('같아요'))
@@ -115,6 +115,8 @@ for (const width of [1280, 390]) {
   }
   // 2026-10-01 지석초이: 등록비는 '먼저 받는' 돈이 아니라 병원 통장에서 먼저 지급하는 돈
   check(`[${width}] ① 제목: 병원 통장에서 먼저 지급하는 등록비 → 가지급금 처리`, (await text(p)).includes('① 병원 통장에서 먼저 지급하는 등록비는 가지급금으로 처리해요') && !(await text(p)).includes('먼저 받는 등록비'))
+  { const all = await p.evaluate(() => document.getElementById('card-12').innerText.replace(/\s+/g, ' '))
+    check(`[${width}] 등록비만 먼저: 형광펜 안내는 '병원 통장에서 기관(업체)으로 먼저 지급', 화면 어디에도 '먼저 받' 없음(지석초이)`, all.includes('병원 통장에서 기관(업체)으로 먼저 지급하는 금액') && !all.includes('먼저 받'), (all.match(/.{20}먼저 받.{20}/) || [''])[0]) }
   check(`[${width}] 2회 정산 단계 표시(① 지금 등록비 먼저 지급 → ② 영수증 발급 후)`, /지금 · 등록비 먼저 지급.*영수증 발급 후 · 최종 정산/.test(await text(p)) && (await text(p)).includes('왜 두 번 정산하나요?'))
   // 2026-10-01 지석초이: 크로스체크는 금액이 다를 때만 보인다
   check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본, 금액이 같으면 크로스체크 숨김`, (await p.locator('.vx-form .tf-box').count()) === 1 && (await p.locator('.vx-check').count()) === 0)
@@ -143,11 +145,11 @@ for (const width of [1280, 390]) {
   check(`[${width}] 이 기기에 저장·최종 정산 남음`, saved && saved.pendingFinal === true && saved.advanceAmount === 300000)
   await p.reload({ waitUntil: 'networkidle' }); await p.waitForTimeout(400)
   const rs = await p.evaluate(() => document.getElementById('voucher-resume').innerText.replace(/\s+/g, ' '))
-  check(`[${width}] 첫 화면에 '최종 정산이 남아 있어요'`, rs.includes('최종 정산이 남아 있어요') && rs.includes('300,000원') && rs.includes('영수증 받았어요 · 최종 정산 시작'), rs.slice(0, 80))
+  check(`[${width}] 첫 화면에 '최종 정산이 남아 있어요'(먼저 지급한 등록비)`, rs.includes('최종 정산이 남아 있어요') && rs.includes('먼저 지급한 등록비 300,000원') && rs.includes('영수증 받았어요 · 최종 정산 시작'), rs.slice(0, 80))
   await shot(p, `${width}-resume-banner`)
   clicks = 0
   clicks++; await p.click('#voucher-resume .vg-btn-primary'); await p.waitForTimeout(400)
-  check(`[${width}] 재개: 처리됐는지 다시 묻는다`, (await screen(p)) === 'resumeQ')
+  check(`[${width}] 재개: 처리됐는지 다시 묻는다(병원 통장에서 먼저 지급하기로 한 등록비)`, (await screen(p)) === 'resumeQ' && (await text(p)).includes('병원 통장에서 먼저 지급하기로 한 등록비는 처리됐나요?'))
   await shot(p, `${width}-resumeQ`)
   await tap(p, '네, 처리됐어요')
   check(`[${width}] 재개: 선지급 때 고른 목적·직종은 다시 묻지 않는다`, (await screen(p)) === 'evidence')
@@ -164,7 +166,7 @@ for (const width of [1280, 390]) {
   await p.hover('.vt-row >> nth=0'); await p.waitForTimeout(150)
   check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계 줄만 칠한다(항목 행은 안 칠함)`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && !document.querySelector('.vx-form tr[data-kind].is-focus')))
   check(`[${width}] 신청서 크로스체크: 합계가 같으면 숨김`, (await p.locator('.vx-check').count()) === 0)
-  check(`[${width}] 현금 줄 보조 설명은 펌뱅킹 사번(지석초이)`, (await text(p)).includes('적요 · 펌뱅킹 사번을 입력해 주세요') && !(await text(p)).includes('받는 직원 사번'))
+  check(`[${width}] 현금 줄 보조 설명은 펌뱅킹 사번(지석초이)`, (await text(p)).includes('펌뱅킹 직원 사번을 입력해 주세요') && !(await text(p)).includes('적요 · 펌뱅킹') && !(await text(p)).includes('받는 직원 사번'))
   check(`[${width}] ② 최종 정산 친근한 제목`, (await text(p)).includes('② 최종 정산은 이렇게 해볼까요?'))
   if (width >= 1280) {
     const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-ledger').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])

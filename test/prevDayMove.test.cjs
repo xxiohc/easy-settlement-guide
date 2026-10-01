@@ -126,10 +126,11 @@ test('비서울 출장도 판정 대상이다 — 지역 게이트가 남아 있
   assert.equal(app.el('field-daytrip').classList.contains('hidden'), true)
 })
 
-test('제주는 항공편이라 역산하지 않고 직접 묻는다', () => {
+// 2026-10-01 지석초이: 제주는 전날 이동(전날 일당·숙박)을 인정하지 않는다 — 전엔 직접 물었다(규칙 변경)
+test('제주는 전날 이동을 인정하지 않는다 — 묻지 않고 아니요로 고정', () => {
   const app = run({ skip: 'jeju' }, { region: '제주', place: '제주시', isJeju: true })
-  assert.equal(app.state.prevDayMove, null)
-  assert.equal(app.el('field-daytrip').classList.contains('hidden'), false)
+  assert.equal(app.state.prevDayMove, false)
+  assert.equal(app.el('field-daytrip').classList.contains('hidden'), true)
 })
 
 test('자동 판정 뒤 역산이 안 되는 장소로 바뀌면 자동 답을 비우고 다시 묻는다', () => {

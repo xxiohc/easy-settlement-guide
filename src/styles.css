@@ -3667,3 +3667,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vd-picked-row b { flex: 1; color: var(--ink); font-weight: 600; }
 /* 신청서 꼬리표는 항목 이름 칸 아래에 한 번(여러 줄 묶음 전체에 해당, 2026-10-01 지석초이) */
 .vx-form th.hl-th .hl-tag { display: block; width: fit-content; margin: 6px auto 0; font-size: 11.5px; padding: 2px 8px; }
+/* 제주: 전날 이동 불인정 안내(2026-10-01 지석초이) — 밤색 전날 이동 상자가 아니라 담백한 한 줄 */
+.prev-day-hint.is-jeju { background: var(--surface) !important; border-color: var(--line) !important; color: var(--ink); }
+.pd-jeju { font-size: 14px; color: var(--subtle); }
+.pd-jeju b { color: var(--ink); }
