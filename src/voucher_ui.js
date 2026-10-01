@@ -144,9 +144,13 @@ function vgAdvKinds(src = vg) {
 function vgWord(src = vg) {
   const k = vgAdvKinds(src)
   const what = k.includes('fee') && k.includes('travel') ? '등록비·여비' : k.includes('travel') ? '여비' : '등록비'
-  return k.includes('travel')
-    ? { what, later: '다녀와서', when: '다녀와서 서류가 갖춰지면', btn: '다녀왔어요 · 최종 정산 시작' }
-    : { what, later: '영수증 발급 후', when: '영수증이 발급되면', btn: '영수증 받았어요 · 최종 정산 시작' }
+  // 등록비는 직원이 받는 돈이 아니라 병원 통장에서 먼저 지급하는 돈이다(2026-10-01 지석초이)
+  const fee = k.includes('fee'), tr = k.includes('travel')
+  const adv = fee && tr ? '먼저 지급하는 등록비·여비' : fee ? '병원 통장에서 먼저 지급하는 등록비' : '먼저 받는 여비'
+  const step = fee && tr ? '등록비·여비 먼저 지급' : fee ? '등록비 먼저 지급' : '여비 먼저 받기'
+  return tr
+    ? { what, adv, step, lead: '다녀와서', later: '다녀와서', when: '다녀와서 서류가 갖춰지면', btn: '다녀왔어요 · 최종 정산 시작' }
+    : { what, adv, step, lead: '영수증이 발급되면', later: '영수증 발급 후', when: '영수증이 발급되면', btn: '영수증 받았어요 · 최종 정산 시작' }
 }
 function vgAdvTotal(src = vg) {
   const k = vgAdvKinds(src)
@@ -595,7 +599,7 @@ function twoStepWhy(feeOnly) {
 function stageBar(stage) {
   if (!stage) return `<div class="vs-bar vs-one"><span class="vs-step is-on"><i>1</i>한 번에 정산</span><small>영수증을 모두 받은 뒤 전표 한 장으로 끝나요</small></div>`
   const W = vgWord()
-  return `<div class="vs-bar"><span class="vs-step${stage === 1 ? ' is-on' : ' is-done'}"><i>${stage === 1 ? '1' : '✓'}</i><em>지금 · ${W.what} 먼저 받기</em></span><b class="vs-arrow">→</b>
+  return `<div class="vs-bar"><span class="vs-step${stage === 1 ? ' is-on' : ' is-done'}"><i>${stage === 1 ? '1' : '✓'}</i><em>지금 · ${W.step}</em></span><b class="vs-arrow">→</b>
     <span class="vs-step${stage === 2 ? ' is-on' : ''}"><i>2</i><em>${W.later} · 최종 정산</em></span></div>
     ${stage === 1 ? twoStepWhy() : `<p class="vs-note">${W.when} 이 전표로 마무리해요. 먼저 받은 ${W.what}(가지급금)를 여기서 정리해요.</p>`}`
 }
@@ -634,7 +638,7 @@ function voucherView(r, stage, memo, preview) {
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
   // 2026-09-30 지석초이: 딱딱한 '전표에 이렇게 적으세요' 대신 친근한 말투로
   const W = vgWord()
-  const title = stage === 1 ? `① 먼저 받는 ${W.what}는<br>가지급금으로 처리해요` : stage === 2 && preview ? `② ${W.later} ① 전표와 이어서<br>최종 정산 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
+  const title = stage === 1 ? `① ${W.adv}는<br>가지급금으로 처리해요` : stage === 2 && preview ? `② ${W.lead} ① 전표와 이어서<br>최종 정산 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
   const total = r.balanced ? '<div class="vt-total is-ok">✓ 차변 합계와 대변 합계가 같아요</div>'
     : preview && r.sumD == null ? '<div class="vt-total is-wait">영수증 금액이 정해지면 두 합계가 같아져요</div>'
     : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'

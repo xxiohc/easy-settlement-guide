@@ -3371,6 +3371,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   #card-12.has-aside .vg-aside { position: absolute; top: 0; bottom: 0; left: calc(100% + 32px); width: 440px; margin-top: 0; }
   #card-12.has-aside .vc-card { position: sticky; top: 140px; }
 }
+/* 넓은 화면은 신청서를 더 넓게 — 440px에선 교통비 줄 '(KTX(특실) 편)'이 다음 줄로 넘어갔다(2026-10-01 지석초이) */
+@media (min-width: 1600px) {
+  #card-12.has-aside .card-body, #card-12.has-aside .card-footer { left: -316px; }
+  #card-12.has-aside .vg-aside { width: 600px; }
+}
 
 /* 전표 카드(보기 전용) — 계정명·금액 한 줄, 칸마다 합계, 차변·대변 합계 줄을 가로로 맞춤(2026-09-30 지석초이) */
 .vt-total { margin-top: 10px; padding: 12px 16px; border-radius: 12px; text-align: center; font-size: 14.5px; font-weight: 700; background: #fff7ed; color: #9a3412; }

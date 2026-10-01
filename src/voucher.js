@@ -93,7 +93,7 @@
     const travKinds = (v.costs || []).filter(c => FIXED_CASH.includes(c.kind) && num(c.amount) > 0).map(c => c.kind)
     const debitKinds = [...(ak.includes('fee') ? ['fee'] : []), ...(ak.includes('travel') ? travKinds : [])]
     const total = fee == null || trav == null ? null : fee + trav
-    const lines = [line(rules, 'advance', 'D', total, `먼저 받는 ${ADV_NAME(ak)}를 잠시 적어 두는 금액`, '', debitKinds)]
+    const lines = [line(rules, 'advance', 'D', total, `${ak.includes('fee') && !ak.includes('travel') ? '병원 통장에서 먼저 지급하는 등록비' : `먼저 지급하는 ${ADV_NAME(ak)}`}를 잠시 적어 두는 금액`, '', debitKinds)]
     if (ak.includes('fee')) lines.push(line(rules, 'bank', 'C', fee, '병원 계좌에서 주최기관으로 보내는 등록비', '', ['fee']))
     if (ak.includes('travel')) lines.push(line(rules, 'cash', 'C', trav, `직원에게 먼저 주는 여비(${travKinds.map(k => KIND_LABEL[k]).join('·')})`, '', travKinds))
     const issues = []
