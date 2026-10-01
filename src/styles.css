@@ -40,11 +40,13 @@ html, body {
   -moz-osx-font-smoothing: auto;
   font-synthesis: none;
 }
-/* Windows 1x DPR: 맑은 고딕 (ClearType 전용 힌팅, Naver 수준 선예도) */
-@media (max-resolution: 1dppx) {
-  body {
-    font-family: "맑은 고딕", "Malgun Gothic", "Dotum", sans-serif;
-    font-weight: 400;
+/* 윈도우 글자 선명도(2026-10-01 지석초이 "윈도우는 폰트 끝이 흐릿하다"):
+   Pretendard 웹폰트는 힌팅이 없어 윈도우(ClearType)에서 글자 끝이 번진다. 맥은 레티나라 티가 안 난다.
+   예전엔 배율 100%(1dppx)에만 맑은 고딕을 썼는데, 회사 노트북은 대개 125·150%라 그대로 흐렸다.
+   → 윈도우(index.html 머리의 is-win)이고 배율 200% 미만이면 맑은 고딕(ClearType 힌팅)으로 그린다. */
+@media (max-resolution: 1.99dppx) {
+  html.is-win body, html.is-win input, html.is-win select, html.is-win textarea, html.is-win button {
+    font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
     letter-spacing: -0.01em;
   }
 }
@@ -232,7 +234,8 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 
 .flow-card.active {
-  transform: translateX(0);
+  /* translateX(0)이 남아 있으면 크롬이 카드를 별도 층으로 그려 윈도우에서 ClearType이 꺼지고 글자가 흐려진다 — 멈춘 카드는 none */
+  transform: none;
   pointer-events: auto;
 }
 
@@ -3631,3 +3634,21 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .day-chip.is-night b { color: #fde68a; }
 .pc-pre p { margin: 6px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--ink); word-break: keep-all; }
 .pc-pre .va-title { margin-bottom: 0; font-weight: 700; }
+
+/* 등록비 영수증으로 정산 방법 고르기(2026-10-01 지석초이 "이런 영수증이면 바로 정산해도 되겠다를 초보자도 알게") */
+.ev-guide { max-width: 680px; margin: 4px 0 14px; padding: 14px 16px; border-radius: 14px; background: #f0faf5; border: 1px solid #c8ecd9; }
+.eg-title { font-size: 14.5px; font-weight: 800; color: #087443; margin-bottom: 8px; }
+.eg-title small { margin-left: 4px; font-size: 12px; font-weight: 700; color: #3a9a6c; }
+.eg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.eg-chips span { padding: 6px 10px; border-radius: 999px; background: #fff; border: 1px solid #c8ecd9; font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.eg-chips small { font-size: 11.5px; font-weight: 600; color: var(--subtle); }
+.eg-no { margin: 9px 0 0; font-size: 13px; color: var(--subtle); }
+.pc-sep.pc-sep-ok { color: #087443; margin-top: 4px; }
+.pc-list + .vg-why { max-width: 680px; margin-top: 14px; }
+.ts-ok { margin: 0 0 12px; font-size: 13.5px; color: #087443; }
+.ts-ok b { color: #087443; }
+/* 카드6: 고른 증빙이면 바로 정산되는지 한눈에(2026-10-01 지석초이) */
+.choice-btn em.c6-verdict { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; font-style: normal; font-size: 12.5px; font-weight: 700; line-height: 1.5; }
+.c6-verdict.is-ok { background: #ecfdf3; color: #047857; }
+.c6-verdict.is-mid { background: #eef6ff; color: #1b64da; }
+.c6-verdict.is-late { background: #fff4e5; color: #9a3412; }

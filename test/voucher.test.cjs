@@ -130,7 +130,16 @@ test('⑩ 개인 선납·취소 환불·선지급 초과·부족·중복은 확�
   assert.ok(blocks(dup).includes('dupFee'))
   const ev = V.buildAdvance(base({ task: 'advance', feeEvidence: 'received' }), R)
   assert.equal(ev.plan.code, 'E')
-  assert.ok(!ev.ready && blocks(ev).includes('prepayWithEvidence'))
+  // 2026-10-01 지석초이 확인: 적격증빙이 이미 있으면 가지급금이 아니라 바로 정산 — 선지급 전표는 막고 한 번에 정산으로 돌린다
+  assert.ok(!ev.ready && blocks(ev).includes('evidenceNow') && !R.unconfirmed.prepayWithEvidence)
+})
+
+test('한 번에 정산 — 병원 계좌로 보내고 영수증이 바로 나오면 차 비용 / 대 보통예금(등록비)·현금(여비), 통장 사본은 필요할 때만', () => {
+  const r = V.buildFinal(base({ task: 'final', paid: { none: true }, evidence: { fee: 'received' } }), R)
+  const bank = r.lines.find(l => l.key === 'bank')
+  assert.equal(bank && bank.amount, 300000)
+  assert.ok(!r.lines.some(l => l.key === 'advance'))
+  assert.ok(r.docs.some(d => d.key === 'bankCopy' && d.optional))
 })
 
 test('미입력 금액은 0원으로 확정하지 않는다 — 입력 필요로 남고 합계도 비운다', () => {

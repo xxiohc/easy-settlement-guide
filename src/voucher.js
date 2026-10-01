@@ -55,9 +55,10 @@
       if (v.feeEvidence === 'after') return { code: 'B', title: '등록비를 먼저 보내고, 영수증이 발급되면 정산을 마무리해요',
         why: '돈은 지금 보내야 하지만 정산에 필요한 증빙은 나중에 나오기 때문이에요. 먼저 보낸 돈을 ‘가지급금’으로 적어 두고, 증빙을 받은 뒤 실제 비용으로 정리해요.',
         now: '등록비 선지급 전표 작성', later: '영수증(증빙)이 발급되면 최종 정산 전표 작성' }
-      if (v.feeEvidence === 'received') return { code: 'E', title: '처리 기준 확인이 필요해요',
-        why: '돈을 먼저 보내지만 증빙은 이미 받은 경우예요. 이때 가지급금으로 할지 바로 비용으로 할지는 받은 자료에 나와 있지 않아요.',
-        now: '경영지원팀에 처리 방법 확인', later: '확인한 방법대로 전표 작성', unconfirmed: 'prepayWithEvidence' }
+      // 2026-10-01 지석초이: 적격증빙이 나오는 기관이면 출장 전이라도 바로 정산 — 가지급금(두 번 정산)으로 하지 않는다
+      if (v.feeEvidence === 'received') return { code: 'E', title: '영수증이 이미 있으면 바로 정산해요',
+        why: '적격증빙(카드 매출전표·세금계산서·병원 사업자번호 현금영수증)이 나와 있으면 가지급금 없이 바로 비용으로 정산해요. 출장 전이라도 괜찮아요.',
+        now: '한 번에 정산 전표 작성', later: '' }
       return { code: 'D', title: '증빙을 언제 받는지 먼저 확인해요',
         why: '증빙 발급 시점에 따라 처리 방법이 달라져요. 주최기관에 발급 시점을 물어본 뒤 이어서 진행하면 돼요.',
         now: '주최기관에 증빙 발급 시점 문의', later: '답을 받으면 이어서 작성' }
@@ -98,7 +99,7 @@
     if (ak.includes('fee') && fee == null) issues.push({ level: 'block', key: 'fee', msg: '먼저 보낼 등록비 금액을 넣어 주세요' })
     if (ak.includes('travel') && trav == null) issues.push({ level: 'block', key: 'travel', msg: '먼저 받을 여비 금액을 넣어 주세요' })
     const plan = decidePlan(v)
-    if (plan.code === 'E') issues.push({ level: 'block', key: 'prepayWithEvidence', msg: rules.unconfirmed.prepayWithEvidence })
+    if (plan.code === 'E') issues.push({ level: 'block', key: 'evidenceNow', msg: rules.evidenceNow })
     if (plan.code === 'D') issues.push({ level: 'block', key: 'feeEvidence', msg: '등록비 증빙을 언제 받는지 주최기관에 확인해 주세요' })
     return finish({ kind: 'advance', lines, issues, plan, advKinds: ak, advFee: fee, advTravel: trav }, v, rules)
   }
@@ -244,6 +245,8 @@
     if (t.hasDoc) add('notice', { check: '앞서 냈더라도 이번 전표에 다시 첨부해요. 신청서의 기준 금액이 공문과 맞는지 확인해 주세요' })
     const kinds = new Set((r.items || []).filter(i => !i.excluded).map(i => i.kind))
     if (kinds.has('fee')) add('feeEvidence')
+    // 병원 계좌에서 주최기관으로 보내는 등록비가 이 전표에 있으면 통장 사본(공문에 계좌가 없을 때만)
+    if (r.lines.some(l => l.key === 'bank' && l.side === 'C')) add('bankCopy', { optional: true })
     if (kinds.has('air')) add('airEvidence')
     if (kinds.has('shuttle')) add('shuttleEvidence')
     if (kinds.has('meal')) add('mealEvidence')
