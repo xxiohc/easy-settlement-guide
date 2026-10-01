@@ -490,7 +490,7 @@ function stageBar(stage) {
 function autoApplied(stage) {
   const out = []
   const fee = vgFee()
-  if (fee && vgFeePaidByCardBefore() && stage !== 1) out.push(['💳', '등록비', `앞 단계에서 <b>법인카드로 결제</b>했다고 하셔서 등록비 ${fee.amount.toLocaleString()}원은 <b>법인카드</b>로 처리했어요`])
+  if (fee && vgFeePaidByCardBefore() && stage !== 1) out.push(['💳', '등록비', `앞 단계에서 <b>법인카드로 결제</b>한다고 하셔서 등록비 ${fee.amount.toLocaleString()}원은 <b>법인카드</b>로 처리했어요`])
   if (vg.resumed && Voucher.expenseAccountKey(vg.purpose, vg.job)) {
     const p = vg.purpose === 'trip' ? '회의·업무 출장' : `교육·학회 참석 · ${{ nurse: '간호사', tech: '의료기사', etc: '그 외 직원' }[vg.job] || ''}`
     out.push(['📌', '비용 목적', `①을 쓸 때 고른 <b>${p}</b>로 처리했어요`])

@@ -3195,9 +3195,10 @@ function resetCard6() {
   ;['c6-btn-card', 'c6-btn-bank', 'c6-btn-pending', 'c6-pend-card', 'c6-pend-bank']
     .forEach(id => document.getElementById(id)?.classList.remove('selected'))
   const q = document.getElementById('card6-q')
-  if (q) q.innerHTML = state.tripStatus === 'planned'
-    ? '교육비 / 등록비를<br>이미 납부하셨나요?'
-    : '교육비 / 등록비를<br>어떻게 납부하셨나요?'
+  // 2026-10-01 지석초이: 갈 예정(계획 단계)이니 '이미 냈나요'가 아니라 '어떻게 낼 건가요'로 묻는다
+  if (q) q.innerHTML = state.tripStatus === 'done'
+    ? '교육비 / 등록비를<br>어떻게 납부하셨나요?'
+    : '교육비 / 등록비는<br>어떻게 내실 건가요?'
   renderC6Aside()
 }
 
