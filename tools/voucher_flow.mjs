@@ -58,7 +58,7 @@ async function answerVisible(p) {
     })
   })
 }
-// bankOpt: 카드6 계좌 증빙 칸 순서 — 0 현금영수증 · 1 세금계산서 · 2 둘 다 받기 어려워요(이체내역서+이수증)
+// bankOpt: 카드6 계좌 증빙 칸 순서 — 0 현금영수증 · 1 세금계산서 · 2 둘 다 받기 어려워요(기관 영수증·이수증)
 async function toCard11(p, { fee = 300000, feeMode = 'bank', bankOpt = 0, region = '서울', title = '의료기관 회계기준 연수' } = {}) {
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
   await p.fill('#input-title', title)
@@ -127,6 +127,12 @@ for (const width of [1280, 390]) {
   await shot(p, `${width}-voucher2-preview`)
   await next(p)
   check(`[${width}] 서류: 출장신청서 + 통장 사본(필요할 때만)`, /출장신청서.*통장 사본/.test(await text(p)))
+  // 2026-10-01 지석초이: 병원 계좌로 냈으면 계좌이체내역서는 필요 없다(본인 이체만) · 적격증빙이 없으면 기관이 주는 별도 영수증·이수증
+  { const td = await text(p)
+    check(`[${width}] 병원 계좌 + 적격증빙 없음: 증빙은 '기관 영수증 또는 이수증', 계좌이체내역서 없음, 정산 방법 '등록비 먼저 지급'`,
+      td.includes('등록비 영수증 (기관 영수증 또는 이수증)') && !td.includes('이체내역서') && td.includes('두 번 정산 · ① 등록비 먼저 지급'), td.slice(0, 300))
+    const self = await p.evaluate(() => { const k = [vg.task, vg.evType]; vg.task = 'final'; vg.evType = 'personal'; const n = vgReceiptName(); [vg.task, vg.evType] = k; return n })
+    check(`[${width}] 본인이 이체했을 때만 계좌이체내역서를 함께`, self === '기관 영수증 또는 이수증 + 계좌이체내역서', self) }
   check(`[${width}] 제출 준비 한 화면: 체크 전엔 '남은 일', 전표 요약 반복 없음`, (await screen(p)) === 'done' && (await text(p)).includes('남은 일') && (await p.locator('.vd-voucher').count()) === 0)
   await checkAll(p)
   const td = await text(p)
@@ -331,7 +337,7 @@ for (const width of [1280, 390]) {
   const [ctx, p] = await page(390)
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(400)
   const v = await p.evaluate(() => [...document.querySelectorAll('#card-6 .c6-verdict')].map(e => e.textContent))
-  check('카드6: 카드·현금영수증 = 바로 정산 / 세금계산서 = 시점에 따라 / 이체내역서 = 두 번 정산', v.length === 4 && v[0].includes('바로 정산') && v[1].includes('바로 정산') && v[2].includes('교육 뒤') && v[3].includes('두 번 정산'), JSON.stringify(v))
+  check('카드6: 카드·현금영수증 = 바로 정산 / 세금계산서 = 시점에 따라 / 기관 영수증·이수증 = 두 번 정산', v.length === 4 && v[0].includes('바로 정산') && v[1].includes('바로 정산') && v[2].includes('교육 뒤') && v[3].includes('두 번 정산'), JSON.stringify(v))
   await ctx.close()
 }
 
