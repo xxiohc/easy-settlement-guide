@@ -296,6 +296,16 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   }
 }
 
+// ── I. 2026-10-01 지석초이: 윈도우 '애니메이션 효과 끔'(reduced-motion)에서도 현재 단계 빛이 은은하게 난다 ──
+{
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' })
+  const p = await ctx.newPage()
+  await p.goto(BASE, { waitUntil: 'networkidle' }); await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(500)
+  const a = await p.evaluate(() => getComputedStyle(document.querySelector('.flow-card.active .trail-item.current .trail-dot')).animationName)
+  check('I 움직임 줄이기 설정에서도 현재 단계 빛 효과 유지', a === 'trailGlow', a)
+  await ctx.close()
+}
+
 await b.close()
 console.log('\n── 요약 ──')
 console.log(`총 ${out.length}건 · FAIL ${out.filter(l=>l.startsWith('FAIL')).length}건`)
