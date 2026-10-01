@@ -423,27 +423,38 @@ function markForm(stage, r, src) {
   const pay = {}
   for (const l of r.lines.filter(l => l.side === 'C')) for (const k of l.kinds || []) pay[k] = PAY_TAG[l.key]
   const tag = (el, text, cls = '') => { const t = document.createElement('span'); t.className = `hl-tag ${cls}`; t.textContent = text; el.appendChild(t) }
+  // 2026-10-01 지석초이: 작은 글자 옆에 꼬리표를 붙이면 안 읽히고, 교통비처럼 여러 줄인 항목은 한 줄에만 붙어 헷갈린다
+  // → 꼬리표는 항목 이름 칸(th, 여러 줄을 묶는 칸)에 한 번만 단다. 같은 묶음 안에서 처리가 갈리면(제주 항공·셔틀) 그 줄 끝에 단다
+  const groups = []   // [{ th, rows: [[tr, tag]] }]
   let cur = null
   tpl.content.querySelectorAll('tr').forEach(tr => {
     const th = tr.querySelector('th')
-    if (th) cur = th.textContent.replace(/\s+/g, '')
+    if (th) { cur = th.textContent.replace(/\s+/g, ''); groups.push({ th, rows: [] }) }
     let kind = FORM_KIND[cur] || null
     if (kind === 'transport' && /셔틀/.test(tr.textContent)) kind = 'shuttle'
     else if (kind === 'transport' && /항공/.test(tr.textContent)) kind = 'air'
-    const last = tr.querySelector('td:last-child')
     const memoRow = cur === '사유' || cur === '출장기간'
     if (kind) tr.dataset.kind = kind
+    let t = null
     if (stage === 1) {
       const advK = (r.lines.find(l => l.side === 'D')?.kinds) || []
-      if (kind && advK.includes(kind)) { tr.classList.add('hl-main'); if (th || tr.previousElementSibling?.dataset.kind !== kind) tag(last, kind === 'fee' ? '① 지금 보내는 금액' : '① 지금 받는 금액', 't-now') }
-      else if (memoRow) { tr.classList.add('hl-soft'); if (cur === '사유') tag(last, '적요에 써요', 't-memo') }
+      if (kind && advK.includes(kind)) { tr.classList.add('hl-main'); t = [kind === 'fee' ? '① 지금 보냄' : '① 지금 받음', 't-now'] }
+      else if (memoRow) { tr.classList.add('hl-soft'); if (cur === '사유') t = ['적요에 써요', 't-memo'] }
       else tr.classList.add('hl-dim')
     } else {
-      if (kind && pay[kind]) { tr.classList.add('hl-pay'); if (th || !tr.previousElementSibling?.dataset.kind || tr.previousElementSibling.dataset.kind !== kind) tag(last, pay[kind][0], pay[kind][1]) }
+      if (kind && pay[kind]) { tr.classList.add('hl-pay'); t = pay[kind] }
       else if (kind) tr.classList.add('hl-dim')
-      else if (memoRow && cur === '사유') { tr.classList.add('hl-soft'); tag(last, '적요에 써요', 't-memo') }
+      else if (memoRow && cur === '사유') { tr.classList.add('hl-soft'); t = ['적요에 써요', 't-memo'] }
     }
+    groups.at(-1)?.rows.push([tr, t])
   })
+  for (const g of groups) {
+    const tagged = g.rows.filter(([, t]) => t)
+    if (!tagged.length) continue
+    const same = tagged.length === g.rows.length && tagged.every(([, t]) => t[0] === tagged[0][1][0])
+    if (same) { g.th.classList.add('hl-th'); tag(g.th, tagged[0][1][0], tagged[0][1][1]) }
+    else for (const [tr, t] of tagged) if (t) tag(tr.querySelector('td:last-child'), t[0], t[1])
+  }
   const total = tpl.content.querySelector('.tf-total-row')
   if (total) {
     if (stage === 1) total.classList.add('hl-dim')
