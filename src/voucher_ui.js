@@ -167,6 +167,12 @@ function vgModel(opts = {}) {
   if (ak.includes('travel') && advState === 'advance') m.travelAdv = vg.advanceTravel ?? Voucher.travelSum(vg)
   if (ak.includes('travel') && advState === 'unknown') m.travelAdvUnknown = true
   m.advKinds = ak
+  if (vg.task === 'final' && vg.amtChanged !== 'yes') {
+    const keep = {}
+    for (const k of vgReceiptKinds()) if (vg.finalAmounts?.[k] != null) keep[k] = vg.finalAmounts[k]
+    m.finalAmounts = keep
+    m.extras = []
+  }
   if (fee) {
     const amt = vg.advanceAmount ?? fee.amount
     if (pay === 'advance') { m.paid.bank = true; m.bankPay = { amount: amt, status: 'advance', ref: vg.advanceRef || '' } }
@@ -225,13 +231,16 @@ function vgScreens() {
       const needEv = (vg.costs || []).some(c => ['air', 'shuttle', 'meal'].includes(c.kind) || (c.kind === 'fee' && c.amount && vg.feePay !== 'expensed'))
       if (needEv) list.push(['evidence', 0])
     } else if (vgFee() && !vgFeePaidByCardBefore()) list.push(['evType', 0])
-    if (vgReceiptKinds().length) list.push(['receipts', 1])
+    // 2026-10-01 지석초이: 금액이 바뀌었는지 먼저 묻고, 바뀌었으면 출장정산서를 만든다(영수증 금액 칸도 정산서 안에)
+    list.push(['changed', 0])
+    if (vg.amtChanged === 'yes') list.push(['settle', 1])
+    else if (vgReceiptKinds().length) list.push(['receipts', 1])
     list.push(['voucher', 1], ['done', 2])
   }
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
 }
-const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'evType', 'advEv', 'purpose', 'job', 'evidence']
+const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'evType', 'changed', 'advEv', 'purpose', 'job', 'evidence']
 
 function vgGo(delta) {
   const list = vgScreens()
@@ -289,9 +298,9 @@ function renderVoucher() {
   document.getElementById('card-12')?.classList.toggle('has-aside', vg.screen === 'voucher' || vg.screen === 'voucher2')
   const next = document.getElementById('vg-next')
   const isChoice = VG_CHOICE_SCREENS.includes(vg.screen)
-  next.textContent = { receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
+  next.textContent = { settle: '이 금액으로 전표 보기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
   next.classList.toggle('hidden', isChoice || vg.screen === 'done')
-  next.disabled = vg.screen === 'receipts' && vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
+  next.disabled = (vg.screen === 'receipts' || vg.screen === 'settle') && vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
 }
 
 // 본 흐름(renderTrails)과 같은 모양의 단계 트레일 — 지난 묶음은 눌러서 그 묶음 첫 화면으로 돌아간다
@@ -340,7 +349,7 @@ function tripChip() {
 }
 
 // 내가 쓴 출장신청서(앞 단계 예상 금액 = 신청서 금액)와 이번 전표 금액을 나란히 — 원 자료 p.5 ①②
-// "전표 금액과 출장신청서 금액이 일치하는지 확인, 다르면 출장여비 정산서"를 화면에서 바로 보이게(2026-09-30 지석초이)
+// "전표 금액과 출장신청서 금액이 일치하는지 확인, 다르면 출장정산서"를 화면에서 바로 보이게(2026-09-30 지석초이)
 // 출장신청서 원본에 형광펜 — 지금 전표에 쓰이는 칸만 칠하고 나머지는 흐리게(2026-09-30 지석초이 "사용자가 한번에 알 수 있도록").
 // ① 선지급: 등록비 행만 / ②·한 번 정산: 항목마다 '어떻게 나가는 돈인지'(현금·법인카드·가지급금 정리) 꼬리표 + 출장비 합계 = 차변 합계
 const PAY_TAG = { advance: ['가지급금 정리', 't-adv'], bank: ['보통예금', 't-bank'], card: ['법인카드', 't-card'], cash: ['현금 지급', 't-cash'] }
@@ -402,20 +411,59 @@ function compareAside(r, kind) {
   const main = checks[0]
   const diff = main[1] != null && main[3] != null && main[1] !== main[3]
   const status = main[3] == null ? '<div class="vc-status is-wait">영수증 금액이 정해지면 비교해요</div>'
-    : diff ? `<div class="vc-status is-diff">신청서와 ${main[3] - main[1] > 0 ? '+' : ''}${(main[3] - main[1]).toLocaleString()}원 달라요<small>출장여비 정산서를 함께 내요 (S-portal 양식함)</small></div>`
+    : diff ? `<div class="vc-status is-diff">신청서와 ${main[3] - main[1] > 0 ? '+' : ''}${(main[3] - main[1]).toLocaleString()}원 달라요<small>출장정산서를 함께 내요</small></div>`
     : '<div class="vc-status is-ok">✓ 신청서와 전표 금액이 같아요</div>'
   const stage = kind === 'advance' ? 1 : 2
   const legend = stage === 1
     ? `<div class="vx-legend"><mark>형광펜</mark> 칸이 지금 먼저 받는 금액이에요 · 나머지는 ${vgWord().when} ②에서 정산해요</div>`
     : '<div class="vx-legend"><mark>형광펜</mark> 합계가 차변 합계예요 · 항목마다 어떻게 나가는 돈인지 붙여 뒀어요 · 왼쪽 전표 칸을 누르면 해당 행이 칠해져요</div>'
-  const form = vg.formHtml
+  const settled = kind !== 'advance' && vg.amtChanged === 'yes' && vg.screen !== 'voucher2'
+  const form = settled
+    ? `<div class="vx-legend"><mark>노란 칸</mark>이 신청서와 달라졌거나 추가된 금액이에요</div><div class="vx-settle">${settleDoc(false)}</div>`
+    : vg.formHtml
     ? `${legend}<div class="vx-form">${markForm(stage, r)}</div>`
     : '<p class="vc-foot">온라인 교육 등 신청서를 쓰지 않은 건이라 예상 금액과 비교해요.</p>'
   return `<aside class="vg-aside"><div class="vc-card">
-    <div class="vc-title">📋 내가 쓴 출장신청서</div>
+    <div class="vc-title">${settled ? '📋 내가 쓴 출장정산서' : '📋 내가 쓴 출장신청서'}</div>
     ${form}
     <div class="vx-check"><div class="vx-check-title">크로스체크</div>${checks.map(row).join('')}${status}</div>
   </div></aside>`
+}
+
+// 출장정산서 — 신청서처럼 생긴 표에 신청 금액과 정산 금액을 나란히, 바뀐 칸·추가한 칸은 색칠(2026-10-01 지석초이)
+// 원 자료의 '출장여비 정산서'를 이 앱의 출장정산서로 대체한다.
+const EXTRA_PRESETS = ['리무진(공항버스)', '택시', '주차비']
+function settleDoc(editable) {
+  const t = vg.trip, fin = vg.finalAmounts || {}
+  const won = v => (v == null ? '공란' : `${Number(v).toLocaleString()}원`)
+  const rows = (vg.costs || []).map(c => {
+    const cur = fin[c.kind] ?? c.amount
+    const changed = cur != null && cur !== c.amount
+    const tag = c.amount == null && cur != null ? '<span class="st-tag is-add">실비</span>' : changed ? '<span class="st-tag">변경</span>' : ''
+    return `<tr class="${changed ? 'is-changed' : ''}"><th>${escapeHtml(c.label.replace(/\s*\(.*\)$/, ''))}</th><td class="st-plan">${won(c.amount)}</td>
+      <td class="st-now">${editable ? moneyInput(`finalAmounts.${c.kind}`, cur, c.amount == null ? '영수증 금액' : '') : won(cur)}${tag}</td></tr>`
+  }).join('')
+  const ex = (vg.extras || []).map((x, i) => `<tr class="is-added"><th>${editable ? `<input type="text" class="info-input st-label" data-text="extras.${i}.label" value="${escapeHtml(x.label || '')}" placeholder="항목 이름">` : escapeHtml(x.label || '추가 비용')}</th>
+      <td class="st-plan">—</td>
+      <td class="st-now">${editable ? moneyInput(`extras.${i}.amount`, x.amount, '영수증 금액') : won(x.amount)}<span class="st-tag is-add">추가</span>
+        ${editable ? `<span class="st-pay">${['cash', 'card'].map(v => `<button type="button" class="st-pay-btn${(x.pay || 'cash') === v ? ' is-on' : ''}" onclick="vgSet('extras.${i}.pay','${v}')">${v === 'card' ? '법인카드' : '개인 돈'}</button>`).join('')}
+        <button type="button" class="st-del" onclick="vgDelExtra(${i})" aria-label="삭제">✕</button></span>` : `<small class="st-paid">${x.pay === 'card' ? '법인카드' : '개인 돈 → 현금 환급'}</small>`}</td></tr>`).join('')
+  const plan = vg.planTotal ?? null
+  const all = [...(vg.costs || []).map(c => fin[c.kind] ?? c.amount), ...(vg.extras || []).map(x => x.amount)]
+  const now = all.some(v => v == null) ? null : all.reduce((a, b) => a + (b || 0), 0)
+  const diff = plan != null && now != null ? now - plan : null
+  return `<div class="st-doc"><div class="st-title">출 장 정 산 서</div>
+    <div class="st-meta"><span>사유</span><b>${escapeHtml(t.title || '')}</b><span>기간</span><b>${escapeHtml(t.startDate || '')}${t.endDate && t.endDate !== t.startDate ? ` ~ ${escapeHtml(t.endDate)}` : ''}</b></div>
+    <table class="st-table"><thead><tr><th>항목</th><th>신청 금액</th><th>정산 금액</th></tr></thead><tbody>${rows}${ex}</tbody>
+    <tfoot><tr><th>합계</th><td class="st-plan">${won(plan)}</td><td class="st-now"><b>${won(now)}</b>${diff ? `<span class="st-diff">${diff > 0 ? '+' : ''}${diff.toLocaleString()}원</span>` : ''}</td></tr></tfoot></table></div>`
+}
+function vgAddExtra(label) {
+  vg.extras = [...(vg.extras || []), { label: label || '', amount: null, pay: 'cash' }]
+  vgSave(); renderVoucher()
+}
+function vgDelExtra(i) {
+  vg.extras = (vg.extras || []).filter((_, j) => j !== i)
+  vgSave(); renderVoucher()
 }
 
 // 2회 정산 단계 표시 — ① 지금 선지급 → ② 영수증 발급 후 최종 정산(2026-09-30 지석초이: 기준은 '교육 종료'가 아니라 '영수증 발급')
@@ -489,7 +537,7 @@ function voucherView(r, stage, memo, preview) {
       ${preview ? `<p class="vg-hint">${W.when} 첫 화면의 <b>‘${W.btn}’</b>에서 실제 금액으로 이어서 써요.</p>` : ''}
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
       ${stage === 1 && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
-      ${preview ? '' : `<button type="button" class="vg-link" onclick="vgJump('amounts')">금액이 달라요 · 고치기</button>`}
+      ${preview ? '' : stage === 1 ? `<button type="button" class="vg-link" onclick="vgJump('amounts')">먼저 받을 금액 고치기</button>` : `<button type="button" class="vg-link" onclick="vg.amtChanged='yes'; vgJump('settle')">${vg.amtChanged === 'yes' ? '출장정산서 다시 고치기' : '금액이 바뀌었어요 · 출장정산서 만들기'}</button>`}
       ${why('차변·대변이 뭐예요?', '한 건의 돈을 두 쪽에 나눠 적어요. <b>차변</b>은 돈이 쓰인 곳(비용, 먼저 보낸 돈), <b>대변</b>은 돈이 나간 곳(현금·병원 통장·법인카드)이에요. 두 쪽 합계는 늘 같아요.')}</div>`
 }
 
@@ -565,6 +613,27 @@ const VG_SCREEN = {
       </div>`
   },
 
+  changed() {
+    return q('신청서와 금액이<br>바뀌었나요?', '다녀와서 생긴 리무진·택시·주차비 같은 비용도 여기서 넣어요') + `<div class="choice-list">
+      ${pick('amtChanged', 'no', '✅', '신청서 금액 그대로예요', '바로 전표로 넘어가요')}
+      ${pick('amtChanged', 'yes', '✏️', '바뀌었거나 추가된 비용이 있어요', '출장정산서를 만들어 바뀐 금액으로 정리해요')}
+      </div>`
+  },
+
+  settle() {
+    const adv = vgModel().bankPay
+    const extraAdv = vg.resumed ? `<div class="vg-box st-adv"><div class="vg-box-title">먼저 받은 돈</div>
+      ${vgModel().travelAdv != null ? `<div class="vg-amt"><b>먼저 받은 여비</b>${moneyInput('advanceTravel', vgModel().travelAdv)}</div>` : ''}
+      ${adv && adv.status !== 'unknown' ? `<div class="vg-amt"><b>먼저 보낸 등록비</b>${moneyInput('advanceAmount', adv.amount)}</div>` : ''}
+      <div class="vg-amt"><b>그때 전표번호 <small>(있으면)</small></b><input type="text" class="info-input vg-ref" data-text="advanceRef" value="${escapeHtml(vg.advanceRef || '')}" placeholder="예: 20261001-0001-001"></div></div>` : ''
+    return q('출장정산서를<br>만들어요', '바뀐 금액을 고치고, 다녀와서 생긴 비용은 추가해요. 바뀐 칸은 노랗게 표시돼요') +
+      `<div class="vg-print">${settleDoc(true)}</div>
+      <div class="st-add"><span>비용 추가</span>${EXTRA_PRESETS.map(l => `<button type="button" class="st-add-btn" onclick="vgAddExtra('${l}')">+ ${l}</button>`).join('')}<button type="button" class="st-add-btn" onclick="vgAddExtra('')">+ 직접 입력</button></div>
+      ${extraAdv}
+      <p class="vg-hint">이 출장정산서를 인쇄해 전표에 함께 첨부하세요.</p>
+      <button type="button" class="vg-btn" onclick="window.print()">🖨 출장정산서 인쇄</button>`
+  },
+
   // 영수증 금액(항공·셔틀·식사·시외버스처럼 앞 단계에서 금액을 정하지 못한 항목)
   receipts() {
     const rows = (vg.costs || []).filter(c => c.amount == null).map(c =>
@@ -579,7 +648,7 @@ const VG_SCREEN = {
       return `<div class="vg-amt"><b>${escapeHtml(c.label)}</b>${moneyInput(`finalAmounts.${c.kind}`, cur)}</div>`
     }).join('')
     const adv = vgModel().bankPay
-    return q('바뀐 금액을<br>고쳐 주세요', '신청서와 달라지면 출장여비 정산서를 함께 내요') + `<div class="vg-box">${rows}</div>
+    return q('먼저 받을 금액을<br>고쳐 주세요') + `<div class="vg-box">${rows}</div>
       ${vg.task === 'final' && vgModel().travelAdv != null ? `<div class="vg-box"><div class="vg-amt"><b>먼저 받은 여비</b>${moneyInput('advanceTravel', vgModel().travelAdv)}</div></div>` : ''}
       ${vg.task === 'final' && adv && adv.status !== 'unknown' ? `<div class="vg-box"><div class="vg-amt"><b>먼저 보낸 등록비</b>${moneyInput('advanceAmount', adv.amount)}</div>
         <div class="vg-amt"><b>그때 전표번호 <small>(있으면)</small></b><input type="text" class="info-input vg-ref" data-text="advanceRef" value="${escapeHtml(vg.advanceRef || '')}" placeholder="예: 20261001-0001-001"></div></div>` : ''}
@@ -692,7 +761,7 @@ function bindVoucherEvents() {
     const d = el.value.replace(/[^\d]/g, '')
     el.value = d ? Number(d).toLocaleString() : ''
     const [root, kind] = el.dataset.money.split('.')
-    if (vg.screen === 'receipts' && root === 'finalAmounts') {
+    if ((vg.screen === 'receipts' || vg.screen === 'settle') && root === 'finalAmounts') {
       // 다 넣었는지 바로 반영(다음 버튼 잠금 해제)
       vg.finalAmounts = { ...(vg.finalAmounts || {}), [kind]: d ? Number(d) : null }
       document.getElementById('vg-next').disabled = vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)

@@ -106,6 +106,7 @@
   // 최종 정산 전표(p.7): 차 비용 계정(전체 인정 비용 − 이미 비용 처리된 금액) / 대 가지급금 정리·카드·보통예금·현금
   function buildFinal(v, rules) {
     const items = costItems(v)
+    const extras = (v.extras || []).filter(x => x && (x.label || x.amount != null)).map(x => ({ label: x.label || '추가 비용', amount: num(x.amount), pay: x.pay === 'card' ? 'card' : 'cash' }))
     const issues = []
     const paid = v.paid || {}
     const bp = paid.bank ? (v.bankPay || {}) : null
@@ -171,6 +172,18 @@
         cashLine.plain = cashLine.plain.replace(/\)$/, '·본인이 낸 등록비)')
       } else credits.push(line(rules, 'cash', 'C', personalFee.amount, '본인이 먼저 낸 등록비 돌려받기', '받는 직원 사번', ['fee']))
     }
+    // 다녀와서 생긴 추가 비용(리무진·택시·주차비 등, 2026-10-01 지석초이) — 법인카드면 카드 줄, 개인 돈이면 현금으로 돌려받는다
+    for (const x of extras) {
+      if (x.pay === 'card') credits.push(line(rules, 'card', 'C', x.amount, `법인카드로 결제한 ${x.label}`, '카드번호·승인일(매출전표 보고)', ['extra']))
+      else {
+        const cashLine = credits.find(c => c.key === 'cash' && !/차액/.test(c.plain))
+        if (cashLine) {
+          cashLine.amount = cashLine.amount == null || x.amount == null ? null : cashLine.amount + x.amount
+          if (!cashLine.kinds.includes('extra')) cashLine.kinds = [...cashLine.kinds, 'extra']
+          cashLine.plain = cashLine.plain.replace(/\)$/, `·${x.label})`)
+        } else credits.push(line(rules, 'cash', 'C', x.amount, `직원에게 지급(${x.label})`, '받는 직원 사번', ['extra']))
+      }
+    }
     // 가지급금 정리는 한 줄로(원 전표 하나) — 등록비·여비를 함께 받았으면 합친다
     const advs = credits.filter(c => c.key === 'advance')
     if (advs.length > 1) {
@@ -180,7 +193,7 @@
       for (const a of advs.slice(1)) credits.splice(credits.indexOf(a), 1)
     }
 
-    const debitItems = items.filter(i => !i.excluded)
+    const debitItems = [...items.filter(i => !i.excluded), ...extras.map(x => ({ kind: 'extra', label: x.label, amount: x.amount }))]
     const missing = debitItems.filter(i => num(i.amount) == null)
     for (const m of missing) issues.push({ level: 'block', key: `amount-${m.kind}`, msg: `${m.label} 금액을 넣어 주세요` })
     const expTotal = missing.length ? null : sum(debitItems.map(i => i.amount))
@@ -191,11 +204,11 @@
       : { key: null, name: '비용 계정 선택 필요', code: '', side: 'D', amount: expTotal, plain: '이번 출장·교육에 든 전체 비용', memo: '', kinds: allKinds }
     const lines = [debit, ...credits]
 
-    // 신청서 금액(예상)과 최종 금액이 다르면 출장여비 정산서(p.3·p.7)
+    // 신청서 금액(예상)과 최종 금액이 다르면 출장정산서(원 자료의 출장여비 정산서를 이 앱에서 만든 출장정산서로 대체, 2026-10-01 지석초이)
     const planTotal = num(v.planTotal)
-    const finalTotal = missing.length ? null : sum(items.map(i => i.amount))
+    const finalTotal = missing.length ? null : sum([...items, ...extras].map(i => i.amount))
     const changed = planTotal != null && finalTotal != null && planTotal !== finalTotal
-    return finish({ kind: 'final', lines, issues, plan: decidePlan(v), items, expensedExcluded,
+    return finish({ kind: 'final', lines, issues, plan: decidePlan(v), items, extras, expensedExcluded,
                     planTotal, finalTotal, changed,
                     employeePay: credits.filter(c => c.key === 'cash').reduce((a, c) => (a == null || c.amount == null ? null : a + c.amount), 0) }, v, rules)
   }
@@ -234,6 +247,7 @@
     if (kinds.has('air')) add('airEvidence')
     if (kinds.has('shuttle')) add('shuttleEvidence')
     if (kinds.has('meal')) add('mealEvidence')
+    for (const x of r.extras || []) docs.push({ key: `extra-${x.label}`, title: `${x.label} 영수증`, check: x.pay === 'card' ? '법인카드로 결제한 매출전표' : '본인이 낸 영수증', optional: false })
     if (r.changed) add('settlement')
     return docs
   }
