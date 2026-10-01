@@ -634,7 +634,7 @@ function voucherView(r, stage, memo, preview) {
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
   // 2026-09-30 지석초이: 딱딱한 '전표에 이렇게 적으세요' 대신 친근한 말투로
   const W = vgWord()
-  const title = stage === 1 ? `① 먼저 받는 ${W.what}는<br>가지급금으로 처리해요` : stage === 2 && preview ? `② ${W.when}<br>이 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
+  const title = stage === 1 ? `① 먼저 받는 ${W.what}는<br>가지급금으로 처리해요` : stage === 2 && preview ? `② ${W.later} ① 전표와 이어서<br>최종 정산 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
   const total = r.balanced ? '<div class="vt-total is-ok">✓ 차변 합계와 대변 합계가 같아요</div>'
     : preview && r.sumD == null ? '<div class="vt-total is-wait">영수증 금액이 정해지면 두 합계가 같아져요</div>'
     : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
