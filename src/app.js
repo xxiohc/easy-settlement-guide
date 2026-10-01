@@ -4937,7 +4937,7 @@ const RECEIPT_LABELS = {
   'card-receipt': '신용카드 매출전표',
   'tax-invoice':  '세금계산서',
   'cash-receipt': '현금영수증',
-  'transfer':     '송금증(계좌이체내역서) + 이수증',
+  'transfer':     '기관 발급 영수증 또는 이수증',
 }
 
 function prepareCard11() {
@@ -4961,11 +4961,11 @@ function prepareCard11() {
   if (state.feeStatus === 'paid' && state.receiptType) {
     const rLabel = RECEIPT_LABELS[state.receiptType] || '영수증'
     const rDesc  = state.receiptType === 'transfer'
-      ? '송금증(계좌이체내역서)·이수증 등 대체 증빙 — 세법상 비용 인정을 위한 적격증빙 수취 여부 확인'
+      ? '적격증빙을 주지 않는 기관이면 그 기관이 발급한 별도 영수증이나 이수증 · 본인이 직접 이체했다면 계좌이체내역서도 함께'
       : '카드 매출전표·세금계산서·현금영수증 등 — 세법상 비용으로 인정받기 위한 적격증빙 수취 여부 확인'
     items.push({ icon: '🧾', title: rLabel, desc: rDesc })
   } else if (state.feeStatus === 'not-paid') {
-    items.push({ icon: '🧾', title: '교육비 / 등록비 영수증', desc: '카드 매출전표·세금계산서·현금영수증·송금증(계좌이체내역서) 등 — 적격증빙 수취 여부 확인', pending: true })
+    items.push({ icon: '🧾', title: '교육비 / 등록비 영수증', desc: '카드 매출전표·세금계산서·현금영수증 — 없으면 기관이 발급한 영수증이나 이수증 · 적격증빙 수취 여부 확인', pending: true })
   }
 
   if (state.isJeju) {
@@ -5019,7 +5019,7 @@ const RECEIPT_CHIP_LABELS = {
   'card-receipt': '💳 신용카드전표',
   'tax-invoice':  '🧾 세금계산서',
   'cash-receipt': '🏧 현금영수증',
-  'transfer':     '🏦 송금증(계좌이체)+이수증',
+  'transfer':     '🏦 기관 영수증·이수증',
 }
 
 function updateDocStrip() {
