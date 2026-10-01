@@ -536,6 +536,12 @@ function vgDelExtra(i) {
   vgSave(); renderVoucher()
 }
 
+// 계좌 이체 + 현금영수증 + 5만 원 이하 → 본인이 이체했을 가능성이 크다(지석초이 실무 기준)
+function vgSmallSelfPaid() {
+  const t = vg.trip, fee = vgFee()
+  return !!(fee && fee.amount <= 50000 && t.feeStatus === 'paid' && (t.receiptType === 'cash-receipt' || t.receiptType === 'transfer'))
+}
+
 // 2회 정산 단계 표시 — ① 지금 선지급 → ② 영수증 발급 후 최종 정산(2026-09-30 지석초이: 기준은 '교육 종료'가 아니라 '영수증 발급')
 // 왜 두 번 정산하나요? — 접지 않고 보여 준다(2026-09-30 지석초이 "왜 두 번 해야 하는지 알기 쉽게")
 function twoStepWhy() {
@@ -618,15 +624,21 @@ const VG_SCREEN = {
     const opts = vgAdvOptions()
     // 앞 단계 등록비 납부 답으로 기본값을 잡는다(2026-10-01 지석초이): 법인카드 → 한 번에 / 계좌로 보냄 → 등록비만 먼저(병원이 먼저 보냄)
     const t = vg.trip
+    // 계좌 이체라도 5만 원 이하 + 현금영수증은 보통 본인이 이체하고 병원 사업자번호로 영수증을 받는다 → 한 번에 정산(현금 환급)
+    // 5만 원 넘거나 세금계산서면 보통 병원 계좌에서 먼저 보낸다 → 등록비만 먼저(2026-10-01 지석초이)
+    const small = vgSmallSelfPaid()
     const pre = !opts.includes('fee') && vgFeePaidByCardBefore() ? 'final'
+      : small ? 'final'
       : opts.includes('fee') && t.feeStatus === 'paid' && t.receiptType && t.receiptType !== 'card-receipt' ? 'fee' : null
     const cur = vg.task ? (vg.task === 'final' ? 'final' : JSON.stringify(vgAdvKinds())) : pre === 'fee' ? '["fee"]' : pre
     const on = (task, kinds) => cur === (task === 'final' ? 'final' : JSON.stringify(kinds))
     const rName = { 'cash-receipt': '현금영수증', 'tax-invoice': '세금계산서', transfer: '계좌이체내역서·이수증' }[t.receiptType] || ''
-    const preBox = pre === 'final'
+    const preBox = small
+      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>계좌로 보내고 현금영수증</b>을 받는다고 하셨어요</div><p>${vgFee().amount.toLocaleString()}원처럼 5만 원 이하는 보통 <b>본인이 이체하고 병원 사업자번호로 현금영수증</b>을 받아요. 그래서 <b>다녀와서 한 번에 정산</b>하며 현금으로 돌려받는 걸로 미리 골라 뒀어요. 병원 계좌에서 보낸다면 ‘등록비만 먼저’를 눌러 주세요.</p></div>`
+      : pre === 'final'
       ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>법인카드로 결제</b>한다고 하셨어요</div><p>카드로 내면 병원이 먼저 보낼 돈이 없어서 <b>다녀와서 한 번에 정산</b>하면 돼요. 아래에 미리 골라 뒀어요.</p></div>`
       : pre === 'fee'
-      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>계좌로 보낸다</b>고 하셨어요${rName ? ` (${rName})` : ''}</div><p>병원 계좌에서 주최기관에 먼저 보내는 거라 <b>등록비만 먼저 회사 돈으로</b> 처리해요. 아래에 미리 골라 뒀어요 — 다르면 다른 칸을 눌러 주세요.</p></div>`
+      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>계좌로 보낸다</b>고 하셨어요${rName ? ` (${rName})` : ''}</div><p>${t.receiptType === 'tax-invoice' ? '세금계산서는 병원이 보낼 때 받아요.' : '5만 원이 넘는 등록비는 보통 병원 계좌에서 보내요.'} 주최기관에 먼저 보내는 거라 <b>등록비만 먼저 회사 돈으로</b> 처리해요. 아래에 미리 골라 뒀어요 — 다르면 다른 칸을 눌러 주세요.</p></div>`
       : ''
     const card = (task, kinds, icon, title, now, later, n) => choice(on(task, kinds), `onclick="vgPickCase('${task}', ${kinds ? `['${kinds.join("','")}']` : 'null'})"`, icon, title,
       `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span>${n === 1 ? '<span class="pc-n is-one">전표를 한 번 작성하면 끝나요</span>' : ''}`)
@@ -661,6 +673,7 @@ const VG_SCREEN = {
   // 한 번에 정산은 이미 다 내고 영수증도 받은 상태 — 받았는지가 아니라 어떤 영수증인지 묻는다(2026-10-01 지석초이)
   // 2026-10-01 지석초이: 한 번에 정산은 '어떻게 냈나요' 대신 영수증 종류를 바로 묻는다 — 종류로 결제 방법이 정해진다
   evType() {
+    if (vg.evType == null && vgSmallSelfPaid()) vg.evType = vg.trip.receiptType === 'transfer' ? 'other' : 'cash-receipt'
     return q('등록비 영수증은<br>어떤 종류인가요?', `${vgFee().amount.toLocaleString()}원`) + `<div class="choice-list">
       ${pick('evType', 'card-receipt', '💳', '법인개별카드 영수증', '법인카드로 결제한 매출전표')}
       ${pick('evType', 'cash-receipt', '🧾', '현금영수증', '병원 사업자번호로 발급 · 현금으로 돌려받아요')}

@@ -265,6 +265,18 @@ for (const width of [1280, 390]) {
   await ctx.close()
 }
 
+// ── 1-f. 계좌 이체 + 현금영수증 + 5만 원 이하 → 본인 이체로 보고 한 번에 정산을 미리 선택(2026-10-01 지석초이) ──
+{
+  const [ctx, p] = await page(1280)
+  await toCard11(p, { fee: 40000 })
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  await tap(p, '회의·업무 출장')
+  check('5만 원 이하 현금영수증: 한 번에 정산 미리 선택 + 본인 이체 안내', (await text(p)).includes('5만 원 이하는 보통') && (await p.locator('#vg-screen .choice-btn.is-on').innerText()).includes('한 번에 정산'))
+  await tap(p, '다녀와서 한 번에 정산받을게요')
+  check('영수증 종류도 현금영수증으로 미리 선택', (await screen(p)) === 'evType' && (await p.locator('#vg-screen .choice-btn.is-on').innerText()).includes('현금영수증'))
+  await ctx.close()
+}
+
 // ── 2. 등록비 카드 결제 → 선지급·납부 방법 질문 생략, 카드 줄 ──
 {
   const [ctx, p] = await page(1280)
