@@ -233,7 +233,7 @@ function vgScreens() {
     } else if (vgFee() && !vgFeePaidByCardBefore()) list.push(['evType', 0])
     // 2026-10-01 지석초이: 금액이 바뀌었는지 먼저 묻고, 바뀌었으면 출장정산서를 만든다(영수증 금액 칸도 정산서 안에)
     list.push(['changed', 0])
-    if (vg.amtChanged === 'yes') list.push(['settle', 1])
+    if (vg.amtChanged === 'yes') list.push(['settle', 1], ['settleView', 1])
     else if (vgReceiptKinds().length) list.push(['receipts', 1])
     list.push(['voucher', 1], ['done', 2])
   }
@@ -298,7 +298,7 @@ function renderVoucher() {
   document.getElementById('card-12')?.classList.toggle('has-aside', vg.screen === 'voucher' || vg.screen === 'voucher2')
   const next = document.getElementById('vg-next')
   const isChoice = VG_CHOICE_SCREENS.includes(vg.screen)
-  next.textContent = { settle: '이 금액으로 전표 보기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
+  next.textContent = { settle: '출장정산서 완성하기', settleView: '이 정산서로 회계처리하기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
   next.classList.toggle('hidden', isChoice || vg.screen === 'done')
   next.disabled = (vg.screen === 'receipts' || vg.screen === 'settle') && vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
 }
@@ -353,10 +353,67 @@ function tripChip() {
 // 출장신청서 원본에 형광펜 — 지금 전표에 쓰이는 칸만 칠하고 나머지는 흐리게(2026-09-30 지석초이 "사용자가 한번에 알 수 있도록").
 // ① 선지급: 등록비 행만 / ②·한 번 정산: 항목마다 '어떻게 나가는 돈인지'(현금·법인카드·가지급금 정리) 꼬리표 + 출장비 합계 = 차변 합계
 const PAY_TAG = { advance: ['가지급금 정리', 't-adv'], bank: ['보통예금', 't-bank'], card: ['법인카드', 't-card'], cash: ['현금 지급', 't-cash'] }
-const FORM_KIND = { '일당': 'daily', '숙박비': 'lodging', '교통비': 'transport', '등록비': 'fee' }
-function markForm(stage, r) {
+const FORM_KIND = { '일당': 'daily', '숙박비': 'lodging', '교통비': 'transport', '등록비': 'fee', '추가비용': 'extra' }
+// 출장신청서 양식 그대로 출장정산서를 만든다(2026-10-01 지석초이 '신청서 왼쪽·정산서 오른쪽 비교, 회계처리는 정산서로').
+// 바뀐 항목은 정산 금액으로 바꾸고 data-chg 표시, 추가 비용은 '추가 비용' 행으로 붙인다. mode: 'settle' | 'orig'(신청서에 바뀔 칸 표시)
+function rowKind(tr, cur) {
+  let kind = FORM_KIND[cur] || null
+  if (kind === 'transport' && /셔틀/.test(tr.textContent)) kind = 'shuttle'
+  else if (kind === 'transport' && /항공/.test(tr.textContent)) kind = 'air'
+  return kind
+}
+function changedKinds() {
+  const fin = vg.finalAmounts || {}
+  return new Set((vg.costs || []).filter(c => fin[c.kind] != null && fin[c.kind] !== c.amount).map(c => c.kind))
+}
+function buildSettleForm(mode) {
+  if (!vg.formHtml) return ''
   const tpl = document.createElement('template')
   tpl.innerHTML = vg.formHtml
+  const fin = vg.finalAmounts || {}
+  const chg = changedKinds()
+  const won = v => `₩ ${Number(v).toLocaleString()}`
+  const seen = new Set()
+  let cur = null
+  tpl.content.querySelectorAll('tr').forEach(tr => {
+    const th = tr.querySelector('th')
+    if (th) cur = th.textContent.replace(/\s+/g, '')
+    const kind = rowKind(tr, cur)
+    if (!kind || !chg.has(kind)) return
+    const td = tr.querySelector('td:last-child')
+    const c = vg.costs.find(x => x.kind === kind)
+    if (mode === 'orig') { tr.dataset.chg = '1'; return }
+    if (seen.has(kind)) { tr.remove(); return }
+    seen.add(kind)
+    td.innerHTML = `정산 ${won(fin[kind])}${c.amount != null ? ` <s class="sf-old">신청 ${won(c.amount)}</s>` : ' <small class="sf-old">사후 실비</small>'}`
+    tr.dataset.chg = '1'
+    if (th && th.rowSpan > 1) th.rowSpan = 1
+  })
+  if (mode === 'settle') {
+    const title = tpl.content.querySelector('.tf-title')
+    if (title) title.textContent = '출 장 정 산 서'
+    const sh = tpl.content.querySelector('.tf-settle-header')
+    if (sh) sh.textContent = '※ 최종 정산 내역'
+    const tbody = [...tpl.content.querySelectorAll('.tf-table tbody')].pop()
+    for (const x of vg.extras || []) {
+      if (x.amount == null && !x.label) continue
+      const tr = document.createElement('tr'); tr.dataset.chg = '1'; tr.dataset.kind = 'extra'
+      tr.innerHTML = `<th class="tf-th">추가 비용</th><td class="tf-td">${escapeHtml(x.label || '추가 비용')} ${x.amount != null ? won(x.amount) : '(금액 입력 필요)'} · ${x.pay === 'card' ? '법인카드' : '개인 돈'}</td>`
+      tbody?.appendChild(tr)
+    }
+    const all = [...vg.costs.map(c => fin[c.kind] ?? c.amount), ...(vg.extras || []).map(x => x.amount)]
+    const tot = all.some(v => v == null) ? null : all.reduce((a, b) => a + (b || 0), 0)
+    const totEl = tpl.content.querySelector('.tf-total-amount')
+    if (totEl && tot != null) totEl.innerHTML = `${won(tot)}${tot !== vg.planTotal ? ` <s class="sf-old">${won(vg.planTotal)}</s>` : ''}`
+    const totRow = tpl.content.querySelector('.tf-total-row')
+    if (totRow && tot !== vg.planTotal) totRow.dataset.chg = '1'
+  }
+  return tpl.innerHTML
+}
+
+function markForm(stage, r, src) {
+  const tpl = document.createElement('template')
+  tpl.innerHTML = src || vg.formHtml
   const pay = {}
   for (const l of r.lines.filter(l => l.side === 'C')) for (const k of l.kinds || []) pay[k] = PAY_TAG[l.key]
   const tag = (el, text, cls = '') => { const t = document.createElement('span'); t.className = `hl-tag ${cls}`; t.textContent = text; el.appendChild(t) }
@@ -398,8 +455,9 @@ function compareAside(r, kind) {
     const plan = (ak.includes('fee') ? planFee ?? 0 : 0) + (ak.includes('travel') ? Voucher.travelSum(vg) ?? 0 : 0)
     checks.push([ak.includes('travel') ? `신청서 ${vgWord().what}` : '신청서 등록비', plan, '전표 금액', r.sumD])
   } else {
-    const planTotal = vg.formTotal ?? vg.planTotal ?? null
-    checks.push(['신청서 출장비 합계', planTotal, '전표 전체 비용', r.finalTotal])
+    const settledNow = vg.amtChanged === 'yes'
+    const planTotal = settledNow ? r.finalTotal : vg.formTotal ?? vg.planTotal ?? null
+    checks.push([settledNow ? '정산서 출장비 합계' : '신청서 출장비 합계', planTotal, '전표 전체 비용', r.finalTotal])
     const feeNow = (r.items || []).find(i => i.kind === 'fee')
     if (planFee != null && feeNow) checks.push(['신청서 등록비', planFee, '전표 등록비', feeNow.amount])
   }
@@ -412,14 +470,14 @@ function compareAside(r, kind) {
   const diff = main[1] != null && main[3] != null && main[1] !== main[3]
   const status = main[3] == null ? '<div class="vc-status is-wait">영수증 금액이 정해지면 비교해요</div>'
     : diff ? `<div class="vc-status is-diff">신청서와 ${main[3] - main[1] > 0 ? '+' : ''}${(main[3] - main[1]).toLocaleString()}원 달라요<small>출장정산서를 함께 내요</small></div>`
-    : '<div class="vc-status is-ok">✓ 신청서와 전표 금액이 같아요</div>'
+    : `<div class="vc-status is-ok">✓ ${kind !== 'advance' && vg.amtChanged === 'yes' ? '정산서' : '신청서'}와 전표 금액이 같아요</div>`
   const stage = kind === 'advance' ? 1 : 2
   const legend = stage === 1
     ? `<div class="vx-legend"><mark>형광펜</mark> 칸이 지금 먼저 받는 금액이에요 · 나머지는 ${vgWord().when} ②에서 정산해요</div>`
     : '<div class="vx-legend"><mark>형광펜</mark> 합계가 차변 합계예요 · 항목마다 어떻게 나가는 돈인지 붙여 뒀어요 · 왼쪽 전표 칸을 누르면 해당 행이 칠해져요</div>'
   const settled = kind !== 'advance' && vg.amtChanged === 'yes' && vg.screen !== 'voucher2'
   const form = settled
-    ? `<div class="vx-legend"><mark>노란 칸</mark>이 신청서와 달라졌거나 추가된 금액이에요</div><div class="vx-settle">${settleDoc(false)}</div>`
+    ? `${legend}<div class="vx-form">${markForm(stage, r, buildSettleForm('settle'))}</div>`
     : vg.formHtml
     ? `${legend}<div class="vx-form">${markForm(stage, r)}</div>`
     : '<p class="vc-foot">온라인 교육 등 신청서를 쓰지 않은 건이라 예상 금액과 비교해요.</p>'
@@ -490,7 +548,7 @@ function stageBar(stage) {
 function autoApplied(stage) {
   const out = []
   const fee = vgFee()
-  if (fee && vgFeePaidByCardBefore() && stage !== 1) out.push(['💳', '등록비', `앞 단계에서 <b>법인카드로 결제</b>했다고 하셔서 등록비 ${fee.amount.toLocaleString()}원은 <b>법인카드</b>로 처리했어요`])
+  if (fee && vgFeePaidByCardBefore() && stage !== 1) out.push(['💳', '등록비', `앞 단계에서 <b>법인카드로 결제</b>한다고 하셔서 등록비 ${fee.amount.toLocaleString()}원은 <b>법인카드</b>로 처리했어요`])
   if (vg.resumed && Voucher.expenseAccountKey(vg.purpose, vg.job)) {
     const p = vg.purpose === 'trip' ? '회의·업무 출장' : `교육·학회 참석 · ${{ nurse: '간호사', tech: '의료기사', etc: '그 외 직원' }[vg.job] || ''}`
     out.push(['📌', '비용 목적', `①을 쓸 때 고른 <b>${p}</b>로 처리했어요`])
@@ -613,6 +671,14 @@ const VG_SCREEN = {
       </div>`
   },
 
+  // 완성된 출장정산서 확인 — 왼쪽 신청서, 오른쪽 정산서, 바뀐 칸은 형광펜
+  settleView() {
+    return q('출장정산서가<br>완성됐어요', '왼쪽 신청서와 비교해 보세요. 형광펜 칸이 바뀌었거나 추가된 금액이에요') +
+      `<div class="sv-grid"><div class="sv-col"><div class="sv-label">출장신청서 (처음)</div><div class="vx-form sv-orig">${buildSettleForm('orig')}</div></div>
+        <div class="sv-col"><div class="sv-label sv-label-new">출장정산서 (최종)</div><div class="vx-form sv-new vg-print">${buildSettleForm('settle')}</div></div></div>
+      <div class="vg-actions"><button type="button" class="vg-btn" onclick="vgJump('settle')">✏️ 금액 다시 고치기</button><button type="button" class="vg-btn" onclick="window.print()">🖨 출장정산서 인쇄</button></div>`
+  },
+
   changed() {
     return q('신청서와 금액이<br>바뀌었나요?', '다녀와서 생긴 리무진·택시·주차비 같은 비용도 여기서 넣어요') + `<div class="choice-list">
       ${pick('amtChanged', 'no', '✅', '신청서 금액 그대로예요', '바로 전표로 넘어가요')}
@@ -630,8 +696,7 @@ const VG_SCREEN = {
       `<div class="vg-print">${settleDoc(true)}</div>
       <div class="st-add"><span>비용 추가</span>${EXTRA_PRESETS.map(l => `<button type="button" class="st-add-btn" onclick="vgAddExtra('${l}')">+ ${l}</button>`).join('')}<button type="button" class="st-add-btn" onclick="vgAddExtra('')">+ 직접 입력</button></div>
       ${extraAdv}
-      <p class="vg-hint">이 출장정산서를 인쇄해 전표에 함께 첨부하세요.</p>
-      <button type="button" class="vg-btn" onclick="window.print()">🖨 출장정산서 인쇄</button>`
+      `
   },
 
   // 영수증 금액(항공·셔틀·식사·시외버스처럼 앞 단계에서 금액을 정하지 못한 항목)

@@ -388,23 +388,23 @@
                 <circle cx="21" cy="33" r="2" fill="#3182f6"/>
               </svg>
             </div>
-            <h1 class="card-question" id="card6-q">교육비 / 등록비를<br>어떻게 납부하셨나요?</h1>
-            <p class="card-desc">납부 방식에 따라 제출 서류가 달라져요</p>
+            <h1 class="card-question" id="card6-q">교육비 / 등록비는<br>어떻게 내실 건가요?</h1>
+            <p class="card-desc">내는 방법에 따라 챙길 서류가 달라져요</p>
 
             <div class="choice-list">
               <button class="choice-btn" id="c6-btn-card" onclick="select6Method('card')">
                 <span class="choice-icon">💳</span>
-                <div><strong>카드로 결제했어요</strong><span>법인카드 매출전표를 제출해요</span></div>
+                <div><strong>법인카드로 결제할게요</strong><span>결제하고 카드 매출전표를 챙겨요</span></div>
                 <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
               </button>
               <button class="choice-btn" id="c6-btn-bank" onclick="select6Method('bank')">
                 <span class="choice-icon">🏦</span>
-                <div><strong>계좌로 이체했어요</strong><span>현금영수증·세금계산서 중 무엇을 받았는지 확인할게요</span></div>
+                <div><strong>계좌로 보낼게요</strong><span>현금영수증·세금계산서 중 무엇을 받을지 골라요</span></div>
                 <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
               </button>
               <button class="choice-btn" id="c6-btn-pending" onclick="select6Method('pending')">
                 <span class="choice-icon">⏳</span>
-                <div><strong>아직 납부 전이에요</strong><span>현장 납부 예정이거나 아직 안 했어요</span></div>
+                <div><strong>아직 정하지 못했어요</strong><span>주최기관 안내를 보고 정할게요</span></div>
                 <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
               </button>
             </div>
@@ -412,20 +412,20 @@
             <!-- 카드 결제 -->
             <div class="c7-sub hidden" id="c6-card-note">
               <div class="c7-note-box">
-                💳 법인카드로 결제하신 거죠?<br>
-                <span style="font-size:13px;color:#6b7684;">카드 매출전표(영수증)를 반드시 제출하세요</span>
+                💳 반드시 <strong>법인카드</strong>로 결제하세요<br>
+                <span style="font-size:13px;color:#6b7684;">결제 후 카드 매출전표(영수증)를 꼭 챙기세요</span>
               </div>
               <button class="cta-btn" onclick="select6Receipt('card-receipt')">다음으로</button>
             </div>
 
             <!-- 계좌 이체: 증빙 종류 -->
             <div class="c7-sub hidden" id="c6-bank-opts">
-              <p class="c7-sub-title">어떤 증빙을 받으셨나요?</p>
+              <p class="c7-sub-title">어떤 증빙을 받을 건가요?</p>
               <div class="choice-list">
                 <button class="choice-btn" onclick="select6Receipt('cash-receipt')">
                   <span class="choice-icon">🧾</span>
                   <div>
-                    <strong>현금영수증 수취</strong>
+                    <strong>현금영수증을 받을게요</strong>
                     <span>사업자등록번호 608-82-14527로 발급된 현금영수증</span>
                   </div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -433,7 +433,7 @@
                 <button class="choice-btn" onclick="select6Receipt('tax-invoice')">
                   <span class="choice-icon">📋</span>
                   <div>
-                    <strong>세금계산서 수취</strong>
+                    <strong>세금계산서를 받을게요</strong>
                     <span>전자 또는 종이 세금계산서</span>
                   </div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -441,7 +441,7 @@
                 <button class="choice-btn choice-btn-alt" onclick="select6Receipt('transfer')">
                   <span class="choice-icon">📎</span>
                   <div>
-                    <strong>위 2가지 모두 어려운 경우</strong>
+                    <strong>둘 다 받기 어려워요</strong>
                     <span class="alt-tag">대체 증빙 — 계좌이체내역서 + 이수증</span>
                   </div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -461,16 +461,16 @@
 
             <!-- 아직 납부 전: 예정 방식 -->
             <div class="c7-sub hidden" id="c6-pending-sub">
-              <p class="c7-sub-title">납부 예정 방식을 선택하세요</p>
+              <p class="c7-sub-title">어느 쪽이 될 것 같나요?</p>
               <div class="choice-list">
                 <button class="choice-btn" id="c6-pend-card" onclick="select6PendingMethod('card')">
                   <span class="choice-icon">💳</span>
-                  <div><strong>카드 결제 예정이에요</strong></div>
+                  <div><strong>법인카드로 낼 것 같아요</strong></div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </button>
                 <button class="choice-btn" id="c6-pend-bank" onclick="select6PendingMethod('bank')">
                   <span class="choice-icon">🏦</span>
-                  <div><strong>계좌 이체 예정이에요</strong></div>
+                  <div><strong>계좌로 보낼 것 같아요</strong></div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </button>
               </div>
