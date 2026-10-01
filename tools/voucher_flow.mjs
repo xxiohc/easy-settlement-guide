@@ -129,10 +129,17 @@ for (const width of [1280, 390]) {
   await shot(p, `${width}-voucher2-preview`)
   await next(p)
   check(`[${width}] 서류: 출장신청서 + 통장 사본(필요할 때만)`, /출장신청서.*통장 사본/.test(await text(p)))
-  // 2026-10-01 지석초이: 두 번 정산이면 마지막 화면에서 ① 가지급금 전표 / ② 최종 정산 전표 준비물을 나눠 보인다
-  { const st = await p.evaluate(() => [[...document.querySelectorAll('#vg-screen .vd-stage-head b')].map(b => b.textContent), document.querySelector('#vg-screen .vd-ro')?.innerText.replace(/\s+/g, ' ') || ''])
-    check(`[${width}] 마지막 화면: ① 가지급금 전표 / ② 최종 정산 전표(전표·신청서 다시 첨부·등록비 증빙) 나눠 보기`,
-      JSON.stringify(st[0]) === JSON.stringify(['가지급금 전표', '최종 정산 전표']) && /^• 전표 .*출장신청서 ① 때 냈어도 다시 첨부.*등록비 영수증/.test(st[1]), JSON.stringify(st)) }
+  // 2026-10-02 지석초이: 두 번 정산이면 마지막 화면에서 ① 가지급금 전표 | ② 최종 정산 전표 준비물을 좌우로 — 같은 서류는 같은 줄, ②에서만 내는 건 '+ 추가'
+  { const st = await p.evaluate(() => {
+      const g = document.querySelector('#vg-screen .vd-cmp')
+      const kids = [...g.children].slice(2)
+      const pairs = []; for (let i = 0; i < kids.length; i += 2) pairs.push([kids[i].innerText.replace(/\s+/g, ' ').slice(0, 12), kids[i + 1].innerText.replace(/\s+/g, ' ').slice(0, 20), kids[i + 1].classList.contains('is-added')])
+      const lr = [...g.querySelectorAll('.vd-cmp-head')].map(h => h.getBoundingClientRect().left)
+      return { heads: [...g.querySelectorAll('.vd-cmp-head b')].map(b => b.textContent), pairs, sideBySide: lr[1] > lr[0] } })
+    check(`[${width}] 마지막 화면: ① 가지급금 전표 | ② 최종 정산 전표 좌우, 전표·신청서는 같은 줄, 등록비 증빙은 ②에 '+ 추가'`,
+      JSON.stringify(st.heads) === JSON.stringify(['가지급금 전표', '최종 정산 전표']) && st.sideBySide
+      && st.pairs[0][0].startsWith('전표') && st.pairs[0][1].startsWith('전표') && st.pairs[1][0].startsWith('출장신청서') && st.pairs[1][1].startsWith('출장신청서')
+      && st.pairs.some(([l, r, added]) => added && l === '' && r.includes('등록비 영수증')), JSON.stringify(st)) }
   // 2026-10-01 지석초이: 병원 계좌로 냈으면 계좌이체내역서는 필요 없다(본인 이체만) · 적격증빙이 없으면 기관이 주는 별도 영수증·이수증
   { const td = await text(p)
     check(`[${width}] 병원 계좌 + 적격증빙 없음: 증빙은 '기관 영수증 또는 이수증', 계좌이체내역서 없음, 정산 방법 '등록비 먼저 지급'`,

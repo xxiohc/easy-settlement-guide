@@ -258,14 +258,11 @@
   }
 
   // 적요 초안 — 사용자가 고칠 수 있다
+  // 적요는 교육·출장 이름(핵심)만 딱 끊어지게(2026-10-02 지석초이) — '선지급/최종 정산/교육일' 같은 꼬리말은 붙이지 않는다.
+  // 이름은 카드4의 tripTitle()이 공문 제목에서 행정 문구(개최 안내·참여 요청 등)를 이미 뗀 것이다
   function memoDraft(v) {
     const t = v.trip || {}
-    const title = t.title || '교육·출장'
-    const day = t.startDate ? `${+t.startDate.slice(5, 7)}월 ${+t.startDate.slice(8, 10)}일` : ''
-    if (v.task === 'advance') return `${title} ${ADV_NAME(advKindsOf(v))} 선지급${day ? ` / 교육일 ${day}` : ''}`
-    const advFee = v.paid && v.paid.bank && v.bankPay && v.bankPay.status === 'advance'
-    const advTrav = num(v.travelAdv) != null
-    return `${title} 최종 정산${advFee || advTrav ? ` / 선지급 ${ADV_NAME([...(advFee ? ['fee'] : []), ...(advTrav ? ['travel'] : [])])} 포함` : ''}`
+    return (t.title || '교육·출장').replace(/\s+/g, ' ').trim()
   }
 
   // 같은 교육·출장인지 가리는 열쇠 — 다른 건의 저장 내역이 섞이지 않게
