@@ -70,7 +70,9 @@ function startVoucherGuide() {
     }
     vg.trip = { ...saved.trip, ...fresh.trip }
     // 카드11에서 다시 들어오면 새로 고르는 것 — 이어하기(②)용 흔적이 남아 흐름이 섞이지 않게 비운다(2026-10-01)
-    Object.assign(vg, { resumed: false, feePay: null, evAll: null, checks: {}, pendingFinal: false, screen: 'purpose' })
+    // 지난번에 고른 정산 방법도 비운다 — 남아 있으면 카드6 답을 바꿔도 예전 칸이 골라진 채로 보였다(2026-10-01 지석초이 제보)
+    Object.assign(vg, { resumed: false, feePay: null, evAll: null, checks: {}, pendingFinal: false, screen: 'purpose',
+      task: null, advKinds: null, evType: null, feeEvidence: null, amtChanged: null })
     if (fresh.formHtml) { vg.formHtml = fresh.formHtml; vg.formTotal = fresh.formTotal; vg.planTotal = fresh.planTotal }
     vg.fromFlow = true
   } else {
@@ -684,7 +686,8 @@ const VG_SCREEN = {
         ${pre === 'late' ? twoStepWhy(true) : ''}${vgChangeLink()}`
     }
     if (pre === 'ask') {
-      return tripChip() + q('세금계산서는<br>언제 나오나요?', '나오는 때에 따라 바로 정산할지, 두 번 정산할지 갈려요') + `<div class="choice-list pc-list">
+      return tripChip() + q('세금계산서는<br>언제 나오나요?', '나오는 때에 따라 바로 정산할지, 두 번 정산할지 갈려요') + `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>계좌로 보내고 세금계산서</b>를 받는다고 하셨어요</div><p>세금계산서가 <b>입금하면 바로</b> 나오면 출장 전이라도 바로 정산하고, <b>교육이 끝난 뒤에</b> 나오면 등록비만 먼저 보내고 나중에 마무리해요. 해당하는 쪽을 골라 주세요.</p></div>
+        <div class="choice-list pc-list">
         ${ev('bankNow', "vgPickCase('final', null, 'bank-now')", '✅', '입금하면 바로 나와요', '바로 정산 · 전표를 한 번 작성하면 끝나요')}
         ${ev('late', "vgPickCase('advance', ['fee'])", '⏳', '교육이 끝난 뒤에 나와요', `등록비만 먼저 보내고 나중에 마무리 · 번거롭지만 전표를 두 번 작성해야 해요`)}
         </div>
