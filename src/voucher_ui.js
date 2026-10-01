@@ -161,6 +161,8 @@ function vgModel(opts = {}) {
   // 이어하기(②)에서 '먼저 받은 돈 처리됐나요?' 답(feePay)은 선지급한 항목에만 적용한다
   const advState = opts.preview ? 'advance' : vg.resumed ? vg.feePay : null
   let pay = vg.feePay || (vgFeePaidByCardBefore() ? 'card' : null)
+  // 한 번에 정산: 법인카드 영수증이면 카드, 그 밖의 영수증(계산서·현금영수증·기타)은 본인이 낸 것 → 현금으로 돌려받음
+  if (vg.task === 'final' && !vg.resumed && !opts.preview && !vgFeePaidByCardBefore()) pay = vg.evType === 'card-receipt' ? 'card' : vg.evType ? 'personal' : null
   if (opts.preview || vg.resumed) pay = ak.includes('fee') ? advState : (vgFeePaidByCardBefore() ? 'card' : 'none')
   if (ak.includes('travel') && advState === 'advance') m.travelAdv = vg.advanceTravel ?? Voucher.travelSum(vg)
   if (ak.includes('travel') && advState === 'unknown') m.travelAdvUnknown = true
@@ -219,18 +221,17 @@ function vgScreens() {
     if (vgAdvKinds().includes('fee')) list.push(['advEv', 0])
     list.push(['voucher', 1], ['voucher2', 1], ['done', 2])
   } else if (vg.task === 'final') {
-    if (vgFee() && !vg.resumed && !vgFeePaidByCardBefore()) list.push(['feePay', 0])
     if (vg.resumed) {
       const needEv = (vg.costs || []).some(c => ['air', 'shuttle', 'meal'].includes(c.kind) || (c.kind === 'fee' && c.amount && vg.feePay !== 'expensed'))
       if (needEv) list.push(['evidence', 0])
-    } else if (vgFee() && vg.feePay === 'personal') list.push(['evType', 0])
+    } else if (vgFee() && !vgFeePaidByCardBefore()) list.push(['evType', 0])
     if (vgReceiptKinds().length) list.push(['receipts', 1])
     list.push(['voucher', 1], ['done', 2])
   }
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
 }
-const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'evType', 'advEv', 'feePay', 'purpose', 'job', 'evidence']
+const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'evType', 'advEv', 'purpose', 'job', 'evidence']
 
 function vgGo(delta) {
   const list = vgScreens()
@@ -513,20 +514,14 @@ const VG_SCREEN = {
       </div>`
   },
 
-  feePay() {
-    const fee = vgFee()
-    return q('등록비는<br>어떻게 냈나요?', `${fee.amount.toLocaleString()}원`) + `<div class="choice-list">
-      ${pick('feePay', 'card', '💳', '법인카드로 결제했어요')}
-      ${pick('feePay', 'personal', '👛', '제 돈으로 냈어요', '다녀와서 현금으로 돌려받아요')}
-      </div>`
-  },
-
   // 한 번에 정산은 이미 다 내고 영수증도 받은 상태 — 받았는지가 아니라 어떤 영수증인지 묻는다(2026-10-01 지석초이)
+  // 2026-10-01 지석초이: 한 번에 정산은 '어떻게 냈나요' 대신 영수증 종류를 바로 묻는다 — 종류로 결제 방법이 정해진다
   evType() {
-    return q('등록비 영수증은<br>어떤 형태인가요?', `${vgFee().amount.toLocaleString()}원`) + `<div class="choice-list">
-      ${pick('evType', 'card-receipt', '💳', '신용카드 매출전표')}
-      ${pick('evType', 'tax-invoice', '📋', '세금계산서')}
-      ${pick('evType', 'cash-receipt', '🧾', '현금영수증', '병원 사업자번호로 발급')}
+    return q('등록비 영수증은<br>어떤 종류인가요?', `${vgFee().amount.toLocaleString()}원`) + `<div class="choice-list">
+      ${pick('evType', 'card-receipt', '💳', '법인개별카드 영수증', '법인카드로 결제한 매출전표')}
+      ${pick('evType', 'tax-invoice', '📋', '전자(세금)계산서', '제가 낸 등록비를 현금으로 돌려받아요')}
+      ${pick('evType', 'cash-receipt', '🧾', '현금영수증', '병원 사업자번호로 발급 · 현금으로 돌려받아요')}
+      ${pick('evType', 'other', '📄', '기타', '적격증빙을 받기 어려운 학회 등 — 학회 수료(참가) 영수증')}
       </div>`
   },
 
@@ -594,13 +589,13 @@ const VG_SCREEN = {
       <div class="final-check-text"><strong>${escapeHtml(title)}${optional ? ' <small>(필요할 때만)</small>' : ''}</strong>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</div></label>`
     // 2026-09-30 지석초이: 전표 / 증빙(마지막 확인 칸은 지석초이 요청으로 뺌) — 큰 칸으로 먼저 나누고 그 안에 세부 서류. '다시 첨부'는 2회 정산의 ② 전표에서만.
     const again = vg.task === 'final' && (vg.resumed || vgModel().bankPay?.status === 'advance')
-    const evName = { 'card-receipt': '신용카드 매출전표', 'tax-invoice': '세금계산서', 'cash-receipt': '현금영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
+    const evName = { 'card-receipt': '법인개별카드 영수증', 'tax-invoice': '전자(세금)계산서', 'cash-receipt': '현금영수증', other: '학회 수료 영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
     const name = { notice: '교육·출장 공문', feeEvidence: evName ? `등록비 영수증 (${evName})` : '등록비 영수증' }
     const sub = {
       application: again ? '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : vg.task === 'advance' ? '등록비 금액이 전표와 같은지 · 결재·합의 확인' : '결재·인사지원팀 합의 확인',
       notice: again ? '① 때 냈어도 다시 첨부' : vg.task === 'advance' ? '등록비·입금 계좌 확인' : '신청서 금액 기준이 공문과 같은지',
       bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서 금액과 달라졌어요 · S-portal 양식함',
-      feeEvidence: '세금계산서·현금영수증·카드 매출전표 중 하나 · 기관·금액 확인', airEvidence: '법인카드 결제 왕복 전표',
+      feeEvidence: vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인' : '기관·금액이 맞는지 확인', airEvidence: '법인카드 결제 왕복 전표',
       shuttleEvidence: '법인카드 결제 전표', mealEvidence: '법인카드 결제 전표' }
     const nLines = r.lines.length
     const groups = [
