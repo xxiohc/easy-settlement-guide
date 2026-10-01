@@ -3682,3 +3682,4 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vd-ro-item i { font-style: normal; color: #f0913f; font-weight: 800; }
 .vd-ro-item strong { display: block; font-size: 15px; }
 .vd-ro-item span { display: block; font-size: 13px; color: var(--subtle); margin-top: 2px; }
+.vg-wrap > .vs-bar { margin-bottom: 18px; }

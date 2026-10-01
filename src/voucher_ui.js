@@ -154,9 +154,11 @@ function vgWord(src = vg) {
   const amt = fee ? '먼저 지급할 금액' : '먼저 받을 금액'
   const legend = fee && tr ? '칸이 지금 먼저 지급하는 금액이에요(등록비는 병원 통장에서 기관으로, 여비는 직원에게)'
     : fee ? '칸이 지금 병원 통장에서 기관(업체)으로 먼저 지급하는 금액이에요' : '칸이 지금 먼저 받는 여비예요'
+  const s1 = fee && tr ? '등록비·여비 선지급' : fee ? '등록비 선지급' : '여비 선지급'
+  const s2 = tr ? '다녀와서 최종 출장비 정산' : '증빙 수취 후 최종 출장비 정산'
   return tr
-    ? { what, adv, step, past, plan, amt, legend, lead: '다녀와서', later: '다녀와서', when: '다녀와서 서류가 갖춰지면', btn: '다녀왔어요 · 최종 정산 시작' }
-    : { what, adv, step, past, plan, amt, legend, lead: '영수증이 발급되면', later: '영수증 발급 후', when: '영수증이 발급되면', btn: '영수증 받았어요 · 최종 정산 시작' }
+    ? { what, adv, step, past, plan, amt, legend, s1, s2, lead: '다녀와서', later: '다녀와서', when: '다녀와서 서류가 갖춰지면', btn: '다녀왔어요 · 최종 정산 시작' }
+    : { what, adv, step, past, plan, amt, legend, s1, s2, lead: '영수증이 발급되면', later: '영수증 발급 후', when: '영수증이 발급되면', btn: '영수증 받았어요 · 최종 정산 시작' }
 }
 function vgAdvTotal(src = vg) {
   const k = vgAdvKinds(src)
@@ -602,12 +604,12 @@ function twoStepWhy(feeOnly) {
     <div class="ts-flow"><div><b>${feeOnly ? '① 지금 등록비 먼저 지급' : '① 지금 먼저 지급·받기'}</b><small>가지급금으로 잠시 적어 둬요</small></div><i>→</i>
       <div><b>${feeOnly ? '② 영수증이 발급되면' : '② 다녀와서 서류가 갖춰지면'}</b><small>실제 비용으로 최종 정산해요</small></div></div></div>`
 }
+// 2026-10-02 지석초이 "너무 복잡하다, 아주 심플하게": 큰 제목·설명 없이 이 단계 표시 하나로 지금 어느 전표인지 알린다
 function stageBar(stage) {
-  if (!stage) return `<div class="vs-bar vs-one"><span class="vs-step is-on"><i>1</i>한 번에 정산</span><small>영수증을 모두 받은 뒤 전표 한 장으로 끝나요</small></div>`
+  if (!stage) return `<div class="vs-bar vs-one"><span class="vs-step is-on"><i>1</i>한 번에 정산</span></div>`
   const W = vgWord()
-  return `<div class="vs-bar"><span class="vs-step${stage === 1 ? ' is-on' : ' is-done'}"><i>${stage === 1 ? '1' : '✓'}</i><em>지금 · ${W.step}</em></span><b class="vs-arrow">→</b>
-    <span class="vs-step${stage === 2 ? ' is-on' : ''}"><i>2</i><em>${W.later} · 최종 정산</em></span></div>
-    ${stage === 1 ? twoStepWhy(!vgAdvKinds().includes('travel')) : `<p class="vs-note">${W.when} 이 전표로 마무리해요. ${W.past}(가지급금)를 여기서 정리해요.</p>`}`
+  return `<div class="vs-bar"><span class="vs-step${stage === 1 ? ' is-on' : ' is-done'}"><i>${stage === 1 ? '1' : '✓'}</i><em>${W.s1}</em></span><b class="vs-arrow">→</b>
+    <span class="vs-step${stage === 2 ? ' is-on' : ''}"><i>2</i><em>${W.s2}</em></span></div>`
 }
 
 // 묻지 않고 앞 답을 그대로 쓴 것 — 사용자가 잊었을 수 있어 전표 위에 크게 알린다(2026-10-01 지석초이)
@@ -644,12 +646,9 @@ function voucherView(r, stage, memo, preview) {
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
   // 2026-09-30 지석초이: 딱딱한 '전표에 이렇게 적으세요' 대신 친근한 말투로
   const W = vgWord()
-  const title = stage === 1 ? `① ${W.adv}는<br>가지급금으로 처리해요` : stage === 2 && preview ? `② ${W.lead} ① 전표와 이어서<br>최종 정산 전표를 써요` : stage === 2 ? '② 최종 정산은<br>이렇게 해볼까요?' : '회계처리는<br>이렇게 해볼까요?'
-  const total = r.balanced ? '<div class="vt-total is-ok">✓ 차변 합계와 대변 합계가 같아요</div>'
-    : preview && r.sumD == null ? '<div class="vt-total is-wait">영수증 금액이 정해지면 두 합계가 같아져요</div>'
-    : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
+  // 2026-10-02 지석초이: 합계가 맞으면 아무것도 띄우지 않는다 — 다를 때만
+  const total = r.balanced || (preview && r.sumD == null) ? '' : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
   return `<div class="vg-wrap">${stageBar(stage)}
-      ${q(title)}
       ${preview ? '' : autoApplied(stage)}
       <div class="vt-ledger">
         ${half('vt-d', '차변', '돈이 쓰인 곳', D, r.sumD)}
@@ -658,11 +657,9 @@ function voucherView(r, stage, memo, preview) {
       ${total}
       ${compareAside(r, stage === 1 ? 'advance' : 'final')}
       <div class="vt-memo-row"><span>적요</span><b>${escapeHtml(memo || '')}</b></div>
-      ${preview ? `<p class="vg-hint">${W.when} 첫 화면의 <b>‘${W.btn}’</b>에서 실제 금액으로 이어서 써요.</p>` : ''}
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
       ${stage === 1 && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
-      ${preview ? '' : stage === 1 ? `<button type="button" class="vg-link" onclick="vgJump('amounts')">${W.amt} 고치기</button>` : vg.amtChanged === 'yes' ? `<button type="button" class="vg-link" onclick="vgJump('settle')">출장정산서 다시 고치기</button>` : ''}
-      ${why('차변·대변이 뭐예요?', '한 건의 돈을 두 쪽에 나눠 적어요. <b>차변</b>은 돈이 쓰인 곳(비용, 먼저 보낸 돈), <b>대변</b>은 돈이 나간 곳(현금·병원 통장·법인카드)이에요. 두 쪽 합계는 늘 같아요.')}</div>`
+      ${preview ? '' : stage === 1 ? `<button type="button" class="vg-link" onclick="vgJump('amounts')">${W.amt} 고치기</button>` : vg.amtChanged === 'yes' ? `<button type="button" class="vg-link" onclick="vgJump('settle')">출장정산서 다시 고치기</button>` : ''}</div>`
 }
 
 const VG_SCREEN = {
