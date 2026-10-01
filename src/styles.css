@@ -3583,3 +3583,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vx-settle .st-doc { margin-top: 0; }
 .vx-settle .st-table th, .vx-settle .st-table td { padding: 8px 10px; font-size: 12.5px; }
 @media (max-width: 480px) { .st-table th, .st-table td { padding: 10px 8px; font-size: 13px; } .st-pay { display: flex; margin: 6px 0 0; } #card-12 .st-table .vg-money .info-input { width: 104px; } }
+
+/* 출장정산서 확인: 신청서(왼쪽) vs 정산서(오른쪽) */
+.sv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; }
+@media (max-width: 860px) { .sv-grid { grid-template-columns: 1fr; } }
+.sv-label { margin: 0 4px 8px; font-size: 14px; font-weight: 800; color: var(--muted); }
+.sv-label-new { color: var(--ink); }
+.sv-orig { opacity: .75; }
+.vx-form [data-chg] > th, .vx-form [data-chg] > td, .vx-form .tf-total-row[data-chg] { background: #fff08a !important; }
+.sv-orig [data-chg] > th, .sv-orig [data-chg] > td { background: #fffbe0 !important; }
+.sf-old { margin-left: 6px; color: var(--muted); font-weight: 400; font-size: .9em; }
+#card-12.has-aside .vx-form [data-chg].hl-dim { opacity: 1; }
