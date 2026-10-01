@@ -607,7 +607,7 @@ function voucherView(r, stage, memo, preview) {
       ${preview ? `<p class="vg-hint">${W.when} 첫 화면의 <b>‘${W.btn}’</b>에서 실제 금액으로 이어서 써요.</p>` : ''}
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
       ${stage === 1 && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
-      ${preview ? '' : stage === 1 ? `<button type="button" class="vg-link" onclick="vgJump('amounts')">먼저 받을 금액 고치기</button>` : `<button type="button" class="vg-link" onclick="vg.amtChanged='yes'; vgJump('settle')">${vg.amtChanged === 'yes' ? '출장정산서 다시 고치기' : '금액이 바뀌었어요 · 출장정산서 만들기'}</button>`}
+      ${preview ? '' : stage === 1 ? `<button type="button" class="vg-link" onclick="vgJump('amounts')">먼저 받을 금액 고치기</button>` : vg.amtChanged === 'yes' ? `<button type="button" class="vg-link" onclick="vgJump('settle')">출장정산서 다시 고치기</button>` : ''}
       ${why('차변·대변이 뭐예요?', '한 건의 돈을 두 쪽에 나눠 적어요. <b>차변</b>은 돈이 쓰인 곳(비용, 먼저 보낸 돈), <b>대변</b>은 돈이 나간 곳(현금·병원 통장·법인카드)이에요. 두 쪽 합계는 늘 같아요.')}</div>`
 }
 

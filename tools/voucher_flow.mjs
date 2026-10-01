@@ -58,7 +58,7 @@ async function answerVisible(p) {
     })
   })
 }
-async function toCard11(p, { fee = 300000, feeMode = 'pending-bank', region = '서울', title = '의료기관 회계기준 연수' } = {}) {
+async function toCard11(p, { fee = 300000, feeMode = 'bank', region = '서울', title = '의료기관 회계기준 연수' } = {}) {
   await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
   await p.fill('#input-title', title)
   await p.fill('#input-start', '2026-11-12'); await p.fill('#input-end', '2026-11-13'); await p.dispatchEvent('#input-start', 'change')
@@ -67,7 +67,7 @@ async function toCard11(p, { fee = 300000, feeMode = 'pending-bank', region = '�
   if (fee) { await p.click('#feeBtn-yes'); await p.fill('#input-fee', String(fee)) } else await p.click('#feeBtn-no')
   await p.waitForTimeout(200); await p.click('#ctaNext4'); await p.waitForTimeout(600)
   if (fee) {
-    if (feeMode === 'pending-bank') { await p.click('#c6-btn-pending'); await p.waitForTimeout(200); await p.click('#c6-pend-bank'); await p.waitForTimeout(500) }
+    if (feeMode === 'bank') { await p.click('#c6-btn-bank'); await p.waitForTimeout(200); await p.locator('#c6-bank-opts .choice-btn').first().click(); await p.waitForTimeout(500) }
     if (feeMode === 'card') { await p.click('#c6-btn-card'); await p.waitForTimeout(200); await p.click('#c6-card-note .cta-btn'); await p.waitForTimeout(500) }
     if ((await active(p)) === 'card-6') { await p.locator('#card-6 .cta-btn:visible').first().click().catch(() => {}); await p.waitForTimeout(400) }
   }

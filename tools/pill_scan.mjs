@@ -46,7 +46,7 @@ for (const width of [320, 390, 430]) {
 
   await p.evaluate(() => goToCard(6))
   await p.evaluate(() => select6Method('bank')); await scan(p, '카드6 계좌이체 증빙', out)
-  await p.evaluate(() => select6Method('pending'))
+  await p.evaluate(() => select6Method('bank'))
   await p.evaluate(() => select6PendingMethod('bank')); await scan(p, '카드6 납부전', out)
   await p.evaluate(() => select6Method('bank'))
   await p.evaluate(() => select6Receipt('transfer')); await p.waitForTimeout(500)
