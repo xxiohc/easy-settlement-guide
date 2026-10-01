@@ -71,7 +71,7 @@ test('④ 선지급 등록비 + 법인카드 항공·셔틀 — 카드분이 직
   assert.equal(r.sumD, 630900)
   assert.ok(r.balanced && r.ready)
   assert.ok(r.docs.some(d => d.key === 'airEvidence') && r.docs.some(d => d.key === 'shuttleEvidence'))
-  assert.ok(r.changed && r.docs.some(d => d.key === 'settlement'), '신청서 470,000 ≠ 최종 630,900 → 출장여비 정산서')
+  assert.ok(r.changed && r.docs.some(d => d.key === 'settlement'), '신청서 470,000 ≠ 최종 630,900 → 출장정산서')
 })
 
 test('⑤ 등록비 없는 출장 — 등록비 줄·등록비 증빙 없음', () => {
@@ -91,7 +91,7 @@ test('⑥ 온라인 교육 — 등록비만, 현금 줄 없음', () => {
   assert.ok(r.ready)
 })
 
-test('⑦ 신청서와 최종 금액이 다르면 출장여비 정산서', () => {
+test('⑦ 신청서와 최종 금액이 다르면 출장정산서', () => {
   const r = V.buildFinal(base({ task: 'final', paid: { none: true }, finalAmounts: { fee: 330000 }, evidence: { fee: 'received' } }), R)
   assert.equal(r.finalTotal, 619600)
   assert.ok(r.changed && r.docs.some(d => d.key === 'settlement'))
@@ -185,4 +185,16 @@ test('여비 선지급 뒤 최종 — 가지급금 정리, 같으면 현금 없�
   assert.deepEqual(more.lines.filter(l => l.side === 'C').map(l => [l.name, l.amount]), [['보통예금', 300000], ['가지급금-기타', 200000], ['현금', 89600]])
   const less = V.buildFinal(base({ task: 'final', paid: { none: true }, travelAdv: 400000 }), R)
   assert.ok(less.issues.some(i => i.key === 'overAdvance') && !less.ready)
+})
+
+// ── 2026-10-01 지석초이: 다녀와서 생긴 추가 비용(리무진 등) ──
+test('추가 비용: 개인 돈은 현금에 합치고, 법인카드는 카드 줄 + 영수증 서류, 금액 바뀌면 출장정산서', () => {
+  const r = V.buildFinal(base({ task: 'final', paid: { none: true }, evidence: { fee: 'received' },
+    extras: [{ label: '리무진(공항버스)', amount: 15000, pay: 'cash' }, { label: '주차비', amount: 8000, pay: 'card' }] }), R)
+  assert.equal(r.sumD, 589600 + 23000)
+  assert.deepEqual(r.lines.filter(l => l.side === 'C').map(l => [l.name, l.amount]), [['보통예금', 300000], ['현금', 304600], ['미지급비용-법인개인카드', 8000]])
+  assert.ok(r.balanced && r.ready && r.changed)
+  assert.ok(r.docs.some(d => d.title === '리무진(공항버스) 영수증') && r.docs.some(d => d.title === '출장정산서'))
+  const miss = V.buildFinal(base({ task: 'final', paid: { none: true }, extras: [{ label: '택시', amount: null, pay: 'cash' }] }), R)
+  assert.ok(!miss.ready && miss.issues.some(i => i.msg.includes('택시')))
 })

@@ -32,7 +32,12 @@ const shot = async (p, name) => {
   await p.setViewportSize(vp)
 }
 let clicks = 0
-const tap = async (p, t) => { clicks++; await p.locator('#vg-screen button', { hasText: t }).first().click(); await p.waitForTimeout(380) }
+// '신청서와 금액이 바뀌었나요?'(2026-10-01)는 따로 시험하는 경우가 아니면 '그대로예요'로 넘긴다
+let autoSame = true
+const tap = async (p, t) => {
+  clicks++; await p.locator('#vg-screen button', { hasText: t }).first().click(); await p.waitForTimeout(380)
+  if (autoSame && await p.evaluate(() => vg && vg.screen === 'changed')) { clicks++; await p.locator('#vg-screen button', { hasText: '신청서 금액 그대로예요' }).click(); await p.waitForTimeout(380) }
+}
 const next = async p => { clicks++; await p.click('#vg-next'); await p.waitForTimeout(250) }
 // 체크할 때마다 화면을 다시 그리므로 매번 안 된 첫 칸을 다시 찾아 누른다
 const checkAll = async p => {
@@ -156,8 +161,8 @@ for (const width of [1280, 390]) {
     check(`[${width}] 넓은 화면: 비교 패널은 전표 오른쪽, 가로 넘침 없음`, pos[0] > pos[1] || width < 1480, JSON.stringify(pos))
   }
   await shot(p, `${width}-voucher-final`)
-  await p.locator('#vg-screen .vg-link', { hasText: '금액이 달라요' }).click(); await p.waitForTimeout(250)
-  check(`[${width}] '금액이 달라요' → 고치기 화면`, (await screen(p)) === 'amounts')
+  await p.locator('#vg-screen .vg-link', { hasText: '출장정산서 만들기' }).click(); await p.waitForTimeout(250)
+  check(`[${width}] 전표에서 '금액이 바뀌었어요' → 출장정산서(먼저 받은 돈·전표번호 칸 포함)`, (await screen(p)) === 'settle' && (await p.locator('[data-text="advanceRef"]').count()) === 1)
   await p.fill('[data-text="advanceRef"]', '20261101-0001-001'); await p.dispatchEvent('[data-text="advanceRef"]', 'change'); await p.waitForTimeout(200)
   await next(p)
   check(`[${width}] 원 전표번호가 가지급금 줄 적요로`, (await text(p)).includes('20261101-0001-001'))
@@ -225,6 +230,32 @@ for (const width of [1280, 390]) {
   await ctx.close()
 }
 
+// ── 1-e. 금액이 바뀌었거나 추가 비용(리무진 등)이 있으면 출장정산서를 만든다(2026-10-01 지석초이) ──
+{
+  const [ctx, p] = await page(1280)
+  await toCard11(p, { feeMode: 'card' })
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  autoSame = false
+  await tap(p, '회의·업무 출장'); await tap(p, '다녀와서 한 번에 정산받을게요')
+  check('한 번 정산: 전표 전에 "금액이 바뀌었나요?"를 묻는다', (await screen(p)) === 'changed')
+  await tap(p, '바뀌었거나 추가된 비용이 있어요')
+  check('바뀌었으면 출장정산서 화면', (await screen(p)) === 'settle' && (await text(p)).includes('출 장 정 산 서'))
+  await p.fill('[data-money="finalAmounts.lodging"]', '120000'); await p.dispatchEvent('[data-money="finalAmounts.lodging"]', 'change'); await p.waitForTimeout(250)
+  await p.locator('#vg-screen button', { hasText: '+ 리무진(공항버스)' }).click(); await p.waitForTimeout(250)
+  await p.fill('[data-money="extras.0.amount"]', '15000'); await p.dispatchEvent('[data-money="extras.0.amount"]', 'change'); await p.waitForTimeout(250)
+  check('바뀐 칸·추가 칸은 노랗게(변경·추가 표시)', (await p.locator('.st-table tr.is-changed').count()) === 1 && (await p.locator('.st-table tr.is-added').count()) === 1 && (await text(p)).includes('+35,000원'))
+  await shot(p, 'settle')
+  await next(p)
+  const ln = await lines(p)
+  check('정산서 금액으로 전표: 차변 602,200, 현금에 숙박 증가분·리무진 포함', ln[0][3] === 602200 && ln.some(l => l[0] === '현금' && l[3] === 302200), JSON.stringify(ln))
+  check('오른쪽은 출장정산서, 문구에 출장여비 정산서 없음', (await p.evaluate(() => document.querySelector('.vc-title').innerText)).includes('출장정산서') && !(await p.evaluate(() => document.getElementById('card-12').innerText)).includes('출장여비'))
+  await shot(p, 'settle-voucher')
+  await next(p)
+  check('제출 서류에 출장정산서·리무진 영수증', /출장정산서/.test(await text(p)) && (await text(p)).includes('리무진(공항버스) 영수증'))
+  autoSame = true
+  await ctx.close()
+}
+
 // ── 2. 등록비 카드 결제 → 선지급·납부 방법 질문 생략, 카드 줄 ──
 {
   const [ctx, p] = await page(1280)
@@ -243,7 +274,7 @@ for (const width of [1280, 390]) {
   check('한 번에 정산 제출 준비: 전표/증빙 두 묶음(마지막 확인 없음), 증빙에 신청서·공문·등록비 영수증, 다시 첨부 문구 없음',
     (await screen(p)) === 'done' && /전표.*증빙.*출장신청서/.test(tone) && !tone.includes('대체전표') && !tone.includes('마지막 확인') && tone.includes('등록비 영수증') && !tone.includes('다시 첨부'), tone.slice(0, 160))
   await p.evaluate(() => vgJump('voucher'))
-  await p.evaluate(() => { vg.checks = { 'user-dup': true }; vgJump('amounts') })
+  await p.evaluate(() => { vg.checks = { 'doc-voucher': true }; vg.amtChanged = 'yes'; vgJump('settle') })
   await p.fill('[data-money="finalAmounts.lodging"]', '50000'); await p.dispatchEvent('[data-money="finalAmounts.lodging"]', 'change'); await p.waitForTimeout(250)
   const after = await p.evaluate(() => [vgResult().lines[0].amount, Object.values(vg.checks).some(Boolean), document.getElementById('vg-screen').innerText])
   check('⑫ 금액을 바꾸면 재계산 + 체크 해제 + 알림', after[0] === 517200 && after[1] === false && after[2].includes('체크를 다시 풀었어요'), `${after[0]}`)
@@ -291,7 +322,7 @@ for (const width of [1280, 390]) {
   check('제주: 가지급금 400,000 + 카드 145,000·15,900 + 현금 105,000 (p.7 구조)',
     JSON.stringify(ln.map(l => [l[0], l[3]])) === JSON.stringify([['여비교통비-국내출장비', 665900], ['가지급금-기타', 400000], ['미지급비용-법인개인카드', 145000], ['미지급비용-법인개인카드', 15900], ['현금', 105000]]), JSON.stringify(ln))
   const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
-  check('제주: 신청서 공란(항공·셔틀) → +160,900원 달라요 · 출장여비 정산서', cmp.includes('+160,900원 달라요') && cmp.includes('출장여비 정산서'), cmp)
+  check('제주: 신청서 공란(항공·셔틀) → +160,900원 달라요 · 출장정산서', cmp.includes('+160,900원 달라요') && cmp.includes('출장정산서'), cmp)
   await shot(p, 'jeju-voucher')
   await ctx.close()
 }
