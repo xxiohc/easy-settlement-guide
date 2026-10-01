@@ -3671,3 +3671,14 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .prev-day-hint.is-jeju { background: var(--surface) !important; border-color: var(--line) !important; color: var(--ink); }
 .pd-jeju { font-size: 14px; color: var(--subtle); }
 .pd-jeju b { color: var(--ink); }
+/* 두 번 정산 마지막 화면: ① 가지급금 전표 / ② 최종 정산 전표 준비물을 나눠 보인다(2026-10-01 지석초이) */
+.vd-stage-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 22px 0 4px; }
+.vd-stage-head b { font-size: 17px; }
+.vd-stage-head small { font-size: 13px; color: var(--subtle); }
+.vd-stage-head.is-later { margin-top: 28px; padding-top: 18px; border-top: 1.5px dashed #f8b877; }
+.vd-ro { margin-top: 8px; border: 1px solid var(--line); border-radius: 14px; background: #fffaf5; }
+.vd-ro-item { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.vd-ro-item:first-child { border-top: 0; }
+.vd-ro-item i { font-style: normal; color: #f0913f; font-weight: 800; }
+.vd-ro-item strong { display: block; font-size: 15px; }
+.vd-ro-item span { display: block; font-size: 13px; color: var(--subtle); margin-top: 2px; }

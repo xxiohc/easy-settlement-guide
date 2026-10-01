@@ -849,7 +849,8 @@ const VG_SCREEN = {
         : rt === 'transfer' ? (vgPaidSelf() ? '기관이 발급한 영수증이나 이수증 + 본인 계좌이체내역서 · 기관·금액 확인' : '적격증빙을 주지 않는 기관이 발급한 별도 영수증이나 이수증 · 기관·금액 확인')
         : vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인'
         : vg.evType === 'personal' ? '병원 사업자번호(608-82-14527) 현금영수증이 가장 좋고, 없으면 납부가 확인되는 참가 영수증 · 기관·금액 확인'
-        : vg.evType === 'bank-now' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인' : '기관·금액이 맞는지 확인', airEvidence: '법인카드 결제 왕복 전표',
+        : vg.evType === 'bank-now' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인'
+        : '적격증빙(카드 매출전표·세금계산서·현금영수증) — 없으면 기관(협회)이 발급한 영수증·이수증, 본인이 이체했다면 계좌이체내역서도', airEvidence: '법인카드 결제 왕복 전표',
       shuttleEvidence: '법인카드 결제 전표', mealEvidence: '법인카드 결제 전표' }
     const nLines = r.lines.length
     const groups = [
@@ -862,19 +863,33 @@ const VG_SCREEN = {
     // 체크리스트에 없는 남은 일(확인 필요·못 받은 영수증)만 따로 적는다
     const extra = vgLeft(r, true)
     const status = ready
-      ? `<div class="vd-status is-ok"><span>✅</span><div><b>${adv ? '① 선지급 전표 제출 준비 끝' : '전표 제출 준비 끝'}</b><small>${adv ? `${vgWord().when} ②로 최종 정산해요` : '내부 절차에 따라 제출하세요'}</small></div></div>`
+      ? `<div class="vd-status is-ok"><span>✅</span><div><b>${adv ? '① 가지급금 전표 제출 준비 끝' : '전표 제출 준비 끝'}</b><small>${adv ? `${vgWord().when} ②로 최종 정산해요` : '내부 절차에 따라 제출하세요'}</small></div></div>`
       : `<div class="vd-status is-left"><span>📋</span><div><b>남은 일 ${left.length}가지</b><small>아래 체크리스트를 채우면 제출 준비가 끝나요</small></div></div>`
     return `<div class="vg-print">${q('서류 챙기고<br>제출해요')}
       ${status}
       ${vgPickedList()}
       ${extra.length ? `<ul class="vd-left">${extra.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
+      ${adv ? `<div class="vd-stage-head"><span class="vd-next-num">1</span><b>가지급금 전표</b><small>지금 제출</small></div>` : ''}
       <div class="vd-checks">${checks}</div>
       ${adv && vg.trip.isJeju ? '<p class="vg-hint">✈️ 항공권·셔틀을 아직 예매 전이면 신청서에 공란 + ‘사후 실비 정산’이라고 적어 두세요.</p>' : ''}
-      ${adv ? `<div class="vd-next"><span class="vd-next-num">2</span><div><b>${vgWord().when} 최종 정산</b><small>첫 화면의 ‘${vgWord().btn}’에서 이어서 써요 · 그때 챙길 서류: ${vgFinalPreview().docs.map(d => escapeHtml(name[d.key] || d.title)).join(', ')}</small></div></div>` : ''}
+      ${adv ? vgFinalDocsHtml(name, sub) : ''}
       ${r.usesCashOrBank ? `<p class="vg-warn">⏰ 현금·보통예금 지급 전표는 <b>지급일 1~2일 전</b>까지 경영지원팀에 내요</p>` : ''}
       <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요 · 이 기기에 저장돼 있어요.</p></div>
       `
   },
+}
+
+// 두 번 정산의 마지막 화면: ② 최종 정산 전표 때 낼 것(2026-10-01 지석초이 "① 가지급금 전표와 ② 최종 정산 전표 준비물을 나눠서")
+// ② 전표 + 출장신청서·공문(다시 첨부) + 등록비 증빙(적격증빙, 없으면 기관 영수증·이수증 / 본인 이체면 계좌이체내역서도) + 항공·셔틀 등
+function vgFinalDocsHtml(name, sub) {
+  const r2 = vgFinalPreview()
+  const W = vgWord()
+  const sub2 = { ...sub, application: '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인', notice: '① 때 냈어도 다시 첨부' }
+  const row = (title, s) => `<div class="vd-ro-item"><i>•</i><div><strong>${escapeHtml(title)}</strong>${s ? `<span>${escapeHtml(s)}</span>` : ''}</div></div>`
+  const rows = [row('전표', `최종 정산 전표 · 가지급금 정리 줄에 ① 전표번호`),
+    ...r2.docs.map(d => row(name[d.key] || d.title, sub2[d.key] || d.check))]
+  return `<div class="vd-stage-head is-later"><span class="vd-next-num">2</span><b>최종 정산 전표</b><small>${W.when} · 첫 화면의 ‘${W.btn}’에서 이어서 써요</small></div>
+    <div class="vd-ro">${rows.join('')}</div>`
 }
 
 // 카드6에서 고른 등록비 증빙 이름(고른 것만)

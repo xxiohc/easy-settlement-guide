@@ -129,6 +129,10 @@ for (const width of [1280, 390]) {
   await shot(p, `${width}-voucher2-preview`)
   await next(p)
   check(`[${width}] 서류: 출장신청서 + 통장 사본(필요할 때만)`, /출장신청서.*통장 사본/.test(await text(p)))
+  // 2026-10-01 지석초이: 두 번 정산이면 마지막 화면에서 ① 가지급금 전표 / ② 최종 정산 전표 준비물을 나눠 보인다
+  { const st = await p.evaluate(() => [[...document.querySelectorAll('#vg-screen .vd-stage-head b')].map(b => b.textContent), document.querySelector('#vg-screen .vd-ro')?.innerText.replace(/\s+/g, ' ') || ''])
+    check(`[${width}] 마지막 화면: ① 가지급금 전표 / ② 최종 정산 전표(전표·신청서 다시 첨부·등록비 증빙) 나눠 보기`,
+      JSON.stringify(st[0]) === JSON.stringify(['가지급금 전표', '최종 정산 전표']) && /^• 전표 .*출장신청서 ① 때 냈어도 다시 첨부.*등록비 영수증/.test(st[1]), JSON.stringify(st)) }
   // 2026-10-01 지석초이: 병원 계좌로 냈으면 계좌이체내역서는 필요 없다(본인 이체만) · 적격증빙이 없으면 기관이 주는 별도 영수증·이수증
   { const td = await text(p)
     check(`[${width}] 병원 계좌 + 적격증빙 없음: 증빙은 '기관 영수증 또는 이수증', 계좌이체내역서 없음, 정산 방법 '등록비 먼저 지급'`,
@@ -138,7 +142,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 제출 준비 한 화면: 체크 전엔 '남은 일', 전표 요약 반복 없음`, (await screen(p)) === 'done' && (await text(p)).includes('남은 일') && (await p.locator('.vd-voucher').count()) === 0)
   await checkAll(p)
   const td = await text(p)
-  check(`[${width}] 제출 준비 끝 + 1~2일 전 + 지급 완료 아님`, td.includes('선지급 전표 제출 준비 끝') && td.includes('1~2일 전') && td.includes('지급·정산이 끝난 건 아니에요'), td.slice(0, 60))
+  check(`[${width}] 제출 준비 끝 + 1~2일 전 + 지급 완료 아님`, td.includes('① 가지급금 전표 제출 준비 끝') && td.includes('1~2일 전') && td.includes('지급·정산이 끝난 건 아니에요'), td.slice(0, 60))
   check(`[${width}] 선지급(①+② 미리 보기) 끝까지 클릭 수 ≤ 14(서류 체크 포함)`, clicks <= 14, `${clicks}번`)
   await shot(p, `${width}-done-adv`)
   const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('expense_guide_voucher_v1') || 'null'))
