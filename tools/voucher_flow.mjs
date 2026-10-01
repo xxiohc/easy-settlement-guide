@@ -216,7 +216,7 @@ for (const width of [1280, 390]) {
   await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
   await tap(p, '회의·업무 출장')
   await tap(p, '다녀와서 한 번에 정산받을게요')
-  check('한 번 정산: 낸 방법 대신 영수증 종류 4가지를 바로 묻는다', (await screen(p)) === 'evType' && (await p.locator('#vg-screen .choice-btn').count()) === 4 && /법인개별카드 영수증.*전자\(세금\)계산서.*현금영수증.*기타/.test(await text(p)))
+  check('한 번 정산: 영수증 종류 3가지(카드·현금영수증·기타), 세금계산서는 두 번 정산으로 안내', (await screen(p)) === 'evType' && (await p.locator('#vg-screen .choice-btn').count()) === 3 && /법인개별카드 영수증.*현금영수증.*기타/.test(await text(p)) && (await text(p)).includes('두 번 정산이에요'))
   await tap(p, '현금영수증')
   const ln = await lines(p)
   { const cardLn = await p.evaluate(() => { const keep = vg.evType; vg.evType = 'card-receipt'; const l = vgResult().lines.filter(x => x.side === 'C').map(x => [x.name, x.amount]); vg.evType = keep; return l })

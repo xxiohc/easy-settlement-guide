@@ -519,10 +519,11 @@ const VG_SCREEN = {
   evType() {
     return q('등록비 영수증은<br>어떤 종류인가요?', `${vgFee().amount.toLocaleString()}원`) + `<div class="choice-list">
       ${pick('evType', 'card-receipt', '💳', '법인개별카드 영수증', '법인카드로 결제한 매출전표')}
-      ${pick('evType', 'tax-invoice', '📋', '전자(세금)계산서', '제가 낸 등록비를 현금으로 돌려받아요')}
       ${pick('evType', 'cash-receipt', '🧾', '현금영수증', '병원 사업자번호로 발급 · 현금으로 돌려받아요')}
       ${pick('evType', 'other', '📄', '기타', '적격증빙을 받기 어려운 학회 등 — 학회 수료(참가) 영수증')}
-      </div>`
+      </div>
+      <div class="vg-box ev-tax"><b>전자(세금)계산서를 받았나요?</b><p>계산서는 병원이 주최기관에 등록비를 먼저 보낼 때만 받아요. 병원이 다 끝난 뒤에 보내는 경우는 없어서, 이건 <b>두 번 정산</b>이에요.</p>
+        <button type="button" class="vg-btn" onclick="vgJump('task')">정산 방법 다시 고르기 → 등록비만 먼저 회사 돈으로</button></div>`
   },
 
   purpose() {
