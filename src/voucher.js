@@ -133,7 +133,7 @@
         const adv = num(bp.amount)
         if (adv == null) issues.push({ level: 'block', key: 'advAmount', msg: '먼저 보낸 등록비(가지급금) 금액을 넣어 주세요' })
         else {
-          credits.push(line(rules, 'advance', 'C', adv, '먼저 보낸 등록비 정리', bp.ref ? `원 전표 ${bp.ref}` : '', ['fee']))
+          credits.push(line(rules, 'advance', 'C', adv, '먼저 지급한 등록비 정리', bp.ref ? `원 전표 ${bp.ref}` : '', ['fee']))
           if (num(feeItem.amount) != null && adv > feeItem.amount) issues.push({ level: 'block', key: 'overAdvance', msg: rules.unconfirmed.overAdvance })
           if (num(feeItem.amount) != null && adv < feeItem.amount) issues.push({ level: 'block', key: 'underAdvance', msg: rules.unconfirmed.underAdvance })
         }

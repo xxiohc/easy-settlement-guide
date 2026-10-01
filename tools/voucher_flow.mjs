@@ -101,7 +101,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 보통예금 줄 보조 설명은 은행코드 AC001(지석초이)`, (await text(p)).includes('은행코드 AC001을 적어 주세요') && !(await text(p)).includes('적요 · 은행코드'))
   check(`[${width}] 선지급 전표: 차 가지급금-기타 1114-99 / 대 보통예금 1102-02 · 300,000`,
     JSON.stringify(ln) === JSON.stringify([['가지급금-기타', '1114-99', 'D', 300000], ['보통예금', '1102-02', 'C', 300000]]), JSON.stringify(ln))
-  check(`[${width}] 차변·대변 장부 한 줄씩 + 칸마다 합계 + 일치 표시`, (await p.locator('.vt-row').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.textContent('.vt-total')).includes('같아요'))
+  check(`[${width}] 차변·대변 장부 한 줄씩 + 칸마다 합계, 합계가 맞으면 일치 문구 없음`, (await p.locator('.vt-row').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.locator('.vt-total').count()) === 0)
   { const x = await p.evaluate(() => [...document.querySelectorAll('.vt-row')].map(r => [r.querySelector('.vt-code').getBoundingClientRect(), r.querySelector('.vt-name').getBoundingClientRect(), r.querySelector('.vt-plain').getBoundingClientRect()]).map(([c, n, pl]) => [Math.round(c.left), Math.round(n.left), Math.round(pl.left), Math.round(c.bottom - n.bottom)]))
     // 넓은 화면: 코드|계정과목 한 줄(바닥선 같음) · 폰: 코드가 계정과목 위 줄, 같은 왼쪽 선. 어느 쪽이든 설명은 계정과목과 같은 시작, 코드가 이름을 덮지 않는다
     check(`[${width}] 코드·계정과목 정렬, 설명은 계정과목과 같은 시작`, x.every(([c, n, pl, dy]) => n === pl && (width > 640 ? Math.abs(dy) <= 3 : c === n)), JSON.stringify(x))
@@ -114,15 +114,15 @@ for (const width of [1280, 390]) {
     check(`[${width}] 차변·대변 합계 줄이 같은 높이`, y[0] === y[1], JSON.stringify(y))
   }
   // 2026-10-01 지석초이: 등록비는 '먼저 받는' 돈이 아니라 병원 통장에서 먼저 지급하는 돈
-  check(`[${width}] ① 제목: 병원 통장에서 먼저 지급하는 등록비 → 가지급금 처리`, (await text(p)).includes('① 병원 통장에서 먼저 지급하는 등록비는 가지급금으로 처리해요') && !(await text(p)).includes('먼저 받는 등록비'))
+  check(`[${width}] 전표 화면에 큰 제목·차변대변 설명·이어서 쓰는 안내 없음(2026-10-02 지석초이)`, (await p.locator('#vg-screen h1').count()) === 0 && !(await text(p)).includes('차변·대변이 뭐예요') && !(await text(p)).includes('이어서 써요'))
   { const all = await p.evaluate(() => document.getElementById('card-12').innerText.replace(/\s+/g, ' '))
     check(`[${width}] 등록비만 먼저: 형광펜 안내는 '병원 통장에서 기관(업체)으로 먼저 지급', 화면 어디에도 '먼저 받' 없음(지석초이)`, all.includes('병원 통장에서 기관(업체)으로 먼저 지급하는 금액') && !all.includes('먼저 받'), (all.match(/.{20}먼저 받.{20}/) || [''])[0]) }
-  check(`[${width}] 2회 정산 단계 표시(① 지금 등록비 먼저 지급 → ② 영수증 발급 후)`, /지금 · 등록비 먼저 지급.*영수증 발급 후 · 최종 정산/.test(await text(p)) && (await text(p)).includes('왜 두 번 정산하나요?'))
+  check(`[${width}] 단계 표시만: ① 등록비 선지급 → ② 증빙 수취 후 최종 출장비 정산`, /1\s*등록비 선지급\s*→\s*2\s*증빙 수취 후 최종 출장비 정산/.test(await text(p)) && !(await text(p)).includes('왜 두 번 정산하나요?'))
   // 2026-10-01 지석초이: 크로스체크는 금액이 다를 때만 보인다
   check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본, 금액이 같으면 크로스체크 숨김`, (await p.locator('.vx-form .tf-box').count()) === 1 && (await p.locator('.vx-check').count()) === 0)
   await shot(p, `${width}-voucher-adv`)
   await next(p)
-  check(`[${width}] ② 영수증 발급 후 최종 정산 전표 미리 보기(대제목)`, (await screen(p)) === 'voucher2' && (await text(p)).includes('② 영수증이 발급되면 ① 전표와 이어서 최종 정산 전표를 써요'))
+  check(`[${width}] ② 최종 정산 전표 미리 보기: 단계 표시 ②가 켜짐`, (await screen(p)) === 'voucher2' && (await p.locator('.vs-step.is-on').innerText()).includes('증빙 수취 후 최종 출장비 정산') && (await p.locator('#vg-screen h1').count()) === 0)
   const ln2p = await p.evaluate(() => vgFinalPreview().lines.map(l => [l.name, l.side, l.amount]))
   check(`[${width}] ② 미리 보기: 차 교육훈련비-간호사교육 / 대 가지급금-기타 300,000 + 현금`,
     JSON.stringify(ln2p) === JSON.stringify([['교육훈련비-간호사교육', 'D', 567200], ['가지급금-기타', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln2p))
@@ -171,7 +171,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계 줄만 칠한다(항목 행은 안 칠함)`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && !document.querySelector('.vx-form tr[data-kind].is-focus')))
   check(`[${width}] 신청서 크로스체크: 합계가 같으면 숨김`, (await p.locator('.vx-check').count()) === 0)
   check(`[${width}] 현금 줄 보조 설명은 펌뱅킹 사번(지석초이)`, (await text(p)).includes('펌뱅킹 직원 사번을 입력해 주세요') && !(await text(p)).includes('적요 · 펌뱅킹') && !(await text(p)).includes('받는 직원 사번'))
-  check(`[${width}] ② 최종 정산 친근한 제목`, (await text(p)).includes('② 최종 정산은 이렇게 해볼까요?'))
+  check(`[${width}] ② 최종 정산: 큰 제목 없이 단계 표시 ②`, (await p.locator('#vg-screen h1').count()) === 0 && (await p.locator('.vs-step.is-on').innerText()).includes('최종 출장비 정산'))
   if (width >= 1280) {
     const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-ledger').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])
     check(`[${width}] 넓은 화면: 비교 패널은 전표 오른쪽, 가로 넘침 없음`, pos[0] > pos[1] || width < 1480, JSON.stringify(pos))
@@ -205,7 +205,7 @@ for (const width of [1280, 390]) {
   const ln = await lines(p)
   check('등록비+여비 선지급: 차 가지급금 567,200 / 대 보통예금 300,000 + 현금 267,200',
     JSON.stringify(ln.map(l => [l[0], l[2], l[3]])) === JSON.stringify([['가지급금-기타', 'D', 567200], ['보통예금', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln))
-  { const tt = await text(p); check('여비 포함이면 ② 시점은 "다녀와서"', /지금·등록비·여비먼저지급.*다녀와서·최종정산/.test(tt.replace(/\s+/g, '')), tt.slice(0, 120)) }
+  { const tt = await text(p); check('여비 포함이면 ② 시점은 "다녀와서"', /등록비·여비선지급.*다녀와서최종출장비정산/.test(tt.replace(/\s+/g, '')), tt.slice(0, 120)) }
   check('신청서 형광펜: 등록비·일당·숙박·교통 행 모두', await p.evaluate(() => ['fee', 'daily', 'lodging', 'transport'].every(k => document.querySelector(`.vx-form tr.hl-main[data-kind="${k}"]`))))
   // x-nb(줄바꿈 방지 토막)가 flex·grid의 바로 아래 자식이면 토막마다 따로 놓여 '일당 ·숙 박비'처럼 갈라진다(2026-09-30 발견)
   const split = await p.evaluate(() => [...document.querySelectorAll('#card-12 x-nb')].filter(x => /flex|grid/.test(getComputedStyle(x.parentElement).display)).map(x => x.parentElement.className + ':' + x.textContent))
@@ -230,7 +230,7 @@ for (const width of [1280, 390]) {
   await tap(p, '회의·업무 출장')
   // 여비까지 먼저 받기는 화면에서 뺐다(2026-10-01 지석초이 "해당되는 것만") — 다시 넣을 때를 위해 계산만 지킨다
   await p.evaluate(() => vgPickCase('advance', ['fee', 'travel'])); await p.waitForTimeout(400)
-  check('다시 시작해도 먼저 받기는 ① 가지급금 전표', (await lines(p))[0][0] === '가지급금-기타' && (await text(p)).includes('가지급금으로 처리해요'))
+  check('다시 시작해도 먼저 받기는 ① 가지급금 전표', (await lines(p))[0][0] === '가지급금-기타' && (await text(p)).includes('등록비·여비 선지급'))
   await ctx.close()
 }
 
