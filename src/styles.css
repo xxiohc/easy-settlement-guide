@@ -3187,8 +3187,11 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 }
 .trail-item.current .trail-dot { animation: trailGlow 2.4s ease-in-out infinite; }
 .trail-item.current .trail-dot::after { animation: trailBreathe 2.4s ease-in-out infinite; }
+/* 윈도우 '애니메이션 효과' 끔(회사 PC·원격 접속에서 흔함)이면 브라우저가 reduced-motion을 보낸다 — 예전엔 여기서 껐더니
+   윈도우에서만 빛이 안 났다(2026-10-01 지석초이). 위치·크기 변화 없이 밝기만 오르내리는 효과라 끄지 않고 더 느리게만 한다. */
 @media (prefers-reduced-motion: reduce) {
-  .trail-item.current .trail-dot, .trail-item.current .trail-dot::after { animation: none; }
+  .trail-item.current .trail-dot { animation-duration: 3.6s; }
+  .trail-item.current .trail-dot::after { animation-duration: 3.6s; }
 }
 
 /* 공문 장소를 지도에서 확인 못 했을 때 — 직접 검색해 고르라고 분명히(2026-09-29 지석초이) */
@@ -3327,7 +3330,7 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   0%, 100% { box-shadow: 0 4px 12px rgba(240,145,63,0.36), 0 0 0 0 rgba(240,145,63,0.26); }
   50%      { box-shadow: 0 4px 16px rgba(240,145,63,0.22), 0 0 0 7px rgba(240,145,63,0.10); }
 }
-@media (prefers-reduced-motion: reduce) { #card-12 .trail-item.current .trail-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #card-12 .trail-item.current .trail-dot { animation-duration: 3.6s; } }
 
 /* ── 전표 안내 개편(클릭 위주·차변 대변 크게, 2026-09-30) ─────────────── */
 .vg-chip { display: grid; gap: 2px; margin-bottom: 18px; padding: 12px 16px; border-radius: 12px; background: var(--surface); font-size: 13.5px; color: var(--subtle); word-break: keep-all; }
