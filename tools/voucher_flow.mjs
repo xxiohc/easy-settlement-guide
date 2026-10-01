@@ -216,12 +216,12 @@ for (const width of [1280, 390]) {
   await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
   await tap(p, '회의·업무 출장')
   await tap(p, '다녀와서 한 번에 정산받을게요')
-  check('한 번 정산: 등록비 낸 방법은 법인카드·본인 결제 2가지만', (await screen(p)) === 'feePay' && (await p.locator('#vg-screen .choice-btn').count()) === 2 && !(await text(p)).includes('병원이 먼저'))
-  await tap(p, '제 돈으로 냈어요')
-  check('한 번 정산·본인 결제: 등록비 낸 방법은 2가지뿐, 영수증은 받았는지 대신 종류를 묻는다', (await screen(p)) === 'evType' && (await text(p)).includes('어떤 형태인가요'))
-  await tap(p, '세금계산서')
+  check('한 번 정산: 낸 방법 대신 영수증 종류 4가지를 바로 묻는다', (await screen(p)) === 'evType' && (await p.locator('#vg-screen .choice-btn').count()) === 4 && /법인개별카드 영수증.*전자\(세금\)계산서.*현금영수증.*기타/.test(await text(p)))
+  await tap(p, '현금영수증')
   const ln = await lines(p)
-  check('본인이 낸 등록비: 확인 필요 없이 현금 한 줄 567,200(여비+등록비)', JSON.stringify(ln.filter(l => l[2] === 'C').map(l => [l[0], l[3]])) === JSON.stringify([['현금', 567200]]) && !(await text(p)).includes('확인할 것'), JSON.stringify(ln))
+  { const cardLn = await p.evaluate(() => { const keep = vg.evType; vg.evType = 'card-receipt'; const l = vgResult().lines.filter(x => x.side === 'C').map(x => [x.name, x.amount]); vg.evType = keep; return l })
+    check('법인개별카드 영수증이면 등록비는 법인카드 줄', JSON.stringify(cardLn) === JSON.stringify([['미지급비용-법인개인카드', 300000], ['현금', 267200]]), JSON.stringify(cardLn)) }
+  check('현금영수증이면 본인이 낸 등록비 → 현금 한 줄 567,200(여비+등록비)', JSON.stringify(ln.filter(l => l[2] === 'C').map(l => [l[0], l[3]])) === JSON.stringify([['현금', 567200]]) && !(await text(p)).includes('확인할 것'), JSON.stringify(ln))
   await ctx.close()
 }
 
@@ -276,7 +276,7 @@ for (const width of [1280, 390]) {
   await p.evaluate(() => {
     vg = { version: 2, checks: {}, trip: { title: '재무부서장협의회 세미나', startDate: '2026-11-19', endDate: '2026-11-21', isJeju: true, hasDoc: true },
       costs: [{ kind: 'air', label: '항공료 (왕복)', amount: null }, { kind: 'shuttle', label: '공항 셔틀버스', amount: null }, { kind: 'daily', label: '일당 (3일)', amount: 105000 }, { kind: 'fee', label: '교육비 / 등록비', amount: 400000 }],
-      planTotal: 505000, task: 'final', feePay: 'advance', purpose: 'trip', evAll: 'received', screen: 'receipts' }
+      planTotal: 505000, task: 'final', resumed: true, advKinds: ['fee'], feePay: 'advance', purpose: 'trip', evAll: 'received', screen: 'receipts' }
     vgFrom = 11; goToCard(12); renderVoucher()
   })
   await p.waitForTimeout(500)
