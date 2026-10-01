@@ -161,7 +161,9 @@ for (const width of [1280, 390]) {
     check(`[${width}] 넓은 화면: 비교 패널은 전표 오른쪽, 가로 넘침 없음`, pos[0] > pos[1] || width < 1480, JSON.stringify(pos))
   }
   await shot(p, `${width}-voucher-final`)
-  await p.locator('#vg-screen .vg-link', { hasText: '출장정산서 만들기' }).click(); await p.waitForTimeout(250)
+  check(`[${width}] 금액이 그대로면 전표에 '출장정산서 만들기' 링크 없음`, (await p.locator('#vg-screen .vg-link', { hasText: '출장정산서' }).count()) === 0)
+  await p.evaluate(() => vgJump('changed')); await p.waitForTimeout(250)
+  autoSame = false; await tap(p, '바뀌었거나 추가된 비용이 있어요'); autoSame = true
   check(`[${width}] 전표에서 '금액이 바뀌었어요' → 출장정산서(먼저 받은 돈·전표번호 칸 포함)`, (await screen(p)) === 'settle' && (await p.locator('[data-text="advanceRef"]').count()) === 1)
   await p.fill('[data-text="advanceRef"]', '20261101-0001-001'); await p.dispatchEvent('[data-text="advanceRef"]', 'change'); await p.waitForTimeout(200)
   await next(p); await next(p)
