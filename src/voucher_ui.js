@@ -894,7 +894,10 @@ function focusFormRows(kinds, side) {
   const form = document.querySelector('#card-12 .vx-form')
   if (!form) return
   form.classList.toggle('has-focus', kinds.length > 0)
-  form.querySelectorAll('[data-kind]').forEach(tr => tr.classList.toggle('is-focus', kinds.includes(tr.dataset.kind)))
+  // 2026-10-01 지석초이: 최종 정산 차변(전체 비용)은 합계 줄만 칠한다 — 항목 행까지 칠하면 대변 줄과 구분이 안 된다
+  // (① 선지급 차변 가지급금은 합계가 아니라 먼저 받는 항목이라 그 행을 칠한다)
+  const totalOnly = side === 'D' && !!form.querySelector('.tf-total-row.hl-main')
+  form.querySelectorAll('[data-kind]').forEach(tr => tr.classList.toggle('is-focus', !totalOnly && kinds.includes(tr.dataset.kind)))
   form.querySelectorAll('.tf-total-row').forEach(t => t.classList.toggle('is-focus', side === 'D' && kinds.length > 0))
 }
 

@@ -154,7 +154,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 전표 현금 줄을 가리키면 신청서의 일당·숙박·교통비 행이 칠해진다`, await p.evaluate(() => [...document.querySelectorAll('.vx-form tr.is-focus')].map(t => t.dataset.kind).filter((v, i, a) => a.indexOf(v) === i).sort().join(',')) === 'daily,lodging,transport')
   check(`[${width}] 대변 현금 줄을 가리켜도 출장비 합계는 칠하지 않는다`, await p.evaluate(() => !document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && document.querySelector('.vx-form').classList.contains('has-focus')))
   await p.hover('.vt-row >> nth=0'); await p.waitForTimeout(150)
-  check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계까지 칠한다`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus')))
+  check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계 줄만 칠한다(항목 행은 안 칠함)`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && !document.querySelector('.vx-form tr[data-kind].is-focus')))
   check(`[${width}] 신청서 크로스체크: 합계가 같으면 숨김`, (await p.locator('.vx-check').count()) === 0)
   check(`[${width}] ② 최종 정산 친근한 제목`, (await text(p)).includes('② 최종 정산은 이렇게 해볼까요?'))
   if (width >= 1280) {
