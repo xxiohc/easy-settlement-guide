@@ -3652,3 +3652,5 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .c6-verdict.is-ok { background: #ecfdf3; color: #047857; }
 .c6-verdict.is-mid { background: #eef6ff; color: #1b64da; }
 .c6-verdict.is-late { background: #fff4e5; color: #9a3412; }
+.pc-change { margin-top: 14px; }
+.pc-change .vg-link { margin-top: 0; }

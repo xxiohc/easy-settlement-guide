@@ -540,6 +540,10 @@ function vgDelExtra(i) {
 }
 
 // 계좌 이체 + 현금영수증 + 5만 원 이하 → 본인이 이체했을 가능성이 크다(지석초이 실무 기준)
+// 앞 단계(카드6) 답을 바꾸러 가는 링크 — 카드11에서 들어온 경우만
+function vgChangeLink() {
+  return vg.fromFlow ? `<p class="vg-hint pc-change">다른 경우라면 <button type="button" class="vg-link va-link" onclick="goToCard(6)">등록비 납부 방법 바꾸러 가기</button></p>` : ''
+}
 // 지금 고른 정산 방법 — simple: 등록비 영수증 질문이 없는 화면('final' / 먼저 받을 돈 목록)
 function vgCaseKey(simple) {
   if (!vg.task) return null
@@ -562,11 +566,12 @@ function vgSmallSelfPaid() {
 
 // 2회 정산 단계 표시 — ① 지금 선지급 → ② 영수증 발급 후 최종 정산(2026-09-30 지석초이: 기준은 '교육 종료'가 아니라 '영수증 발급')
 // 왜 두 번 정산하나요? — 접지 않고 보여 준다(2026-09-30 지석초이 "왜 두 번 해야 하는지 알기 쉽게")
-function twoStepWhy() {
+// feeOnly: 등록비 때문에 두 번 정산하는 화면 — 여비 이유는 빼고 해당되는 이유만(2026-10-01 지석초이)
+function twoStepWhy(feeOnly) {
   return `<div class="ts-why"><div class="ts-why-title">왜 두 번 정산하나요?</div>
     <ul class="ts-reasons">
       <li><span>🧾</span><p>등록비를 병원 돈으로 먼저 보내는데, <b>영수증(적격증빙)이 나중에 나오거나 아예 안 나올</b> 때</p></li>
-      <li><span>🧳</span><p>일당·숙박비·교통비를 <b>출장 전에 먼저 받아야</b> 할 때</p></li>
+      ${feeOnly ? '' : '<li><span>🧳</span><p>일당·숙박비·교통비를 <b>출장 전에 먼저 받아야</b> 할 때</p></li>'}
     </ul>
     <p class="ts-ok">✅ 등록비 영수증(카드 매출전표·세금계산서·현금영수증)이 <b>바로 나오면</b> 두 번 할 필요가 없어요. 필요한 영수증이 다 모이면 출장 전이라도 전표 한 장으로 끝나요.</p>
     <div class="ts-flow"><div><b>① 지금 먼저 받기</b><small>가지급금으로 잠시 적어 둬요</small></div><i>→</i>
@@ -649,9 +654,9 @@ const VG_SCREEN = {
         ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>법인카드로 결제</b>한다고 하셨어요</div><p>카드 매출전표는 결제하는 순간 나오는 <b>적격증빙</b>이라 <b>한 번에 정산</b>하면 돼요. 아래에 미리 골라 뒀어요.</p></div>` : ''
       return tripChip() + q('어떻게<br>정산받을까요?', preBox ? '' : '특별한 사정이 없으면 한 번에 정산하는 게 가장 간단해요') + preBox + `<div class="choice-list pc-list">
         <div class="pc-best">${preBox ? '' : '<span class="pc-badge">추천</span>'}${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}</div>
-        ${opts.includes('travel') ? `<div class="pc-sep">꼭 먼저 받아야 할 때만 <span class="pc-n">번거롭지만 전표를 두 번 작성해야 해요</span></div>
+        ${opts.includes('travel') && !preBox ? `<div class="pc-sep">꼭 먼저 받아야 할 때만 <span class="pc-n">번거롭지만 전표를 두 번 작성해야 해요</span></div>
         ${card('advance', ['travel'], '📦', '여비를 먼저 받아 둘게요', `지금 일당·숙박·교통비 ${tr.toLocaleString()}원`, '교육 수료 후 최종 정산', 2)}` : ''}
-        </div>${opts.includes('travel') ? twoStepWhy() : ''}`
+        </div>${opts.includes('travel') && !preBox ? twoStepWhy() : ''}${preBox ? vgChangeLink() : ''}`
     }
     // 2026-10-01 지석초이: 두 번 정산은 '등록비 영수증' 때문이다. 적격증빙이 바로 나오는 곳이면 출장 전이라도 바로 정산,
     // 적격증빙을 안 주거나 세금계산서가 늦게 나오는 곳만 두 번 — 초보자가 '내 영수증이면 바로 되겠네'를 알아보게 영수증으로 묻는다
@@ -664,6 +669,27 @@ const VG_SCREEN = {
     }[pre]
     const ev = (key, onclick, icon, title, sub) => choice(vgCaseKey() ? vgCaseKey() === key : pre === key, `onclick="${onclick}"`, icon, title, sub)
     const all = opts.includes('travel')
+    // 2026-10-01 지석초이 "선택지가 너무 많다, 해당되는 것만": 앞 답(카드6)으로 정해지면 그 한 칸만, 세금계산서는 발급 시점 두 칸만.
+    // 여비 먼저 받기 등 나머지는 지석초이가 케이스별로 보고 필요하면 다시 넣는다. 앞 답이 없을 때만 전체 목록
+    const ONE = {
+      card: ['💳', '법인카드로 결제해요', '결제하는 순간 매출전표가 나와요 · 전표를 한 번 작성하면 끝나요', "vgPickCase('final', null, 'card-receipt')"],
+      bankNow: ['🏦', '병원 계좌로 보내고 현금영수증을 바로 받아요', '입금하면 병원 사업자번호로 바로 나와요 · 전표를 한 번 작성하면 끝나요', "vgPickCase('final', null, 'bank-now')"],
+      personal: ['👤', '내 돈으로 내고 영수증을 받아요', '정산할 때 현금으로 돌려받아요 · 전표를 한 번 작성하면 끝나요', "vgPickCase('final', null, 'personal')"],
+      late: ['⏳', '등록비만 먼저 보내고, 서류가 갖춰지면 마무리해요', `지금 등록비 ${fee.toLocaleString()}원 → ${tr ? `다녀와서 일당·숙박·교통비 ${tr.toLocaleString()}원` : '영수증이 나오면 최종 정산'} · 번거롭지만 전표를 두 번 작성해야 해요`, "vgPickCase('advance', ['fee'])"],
+    }[pre]
+    if (ONE) {
+      const [icon, title, sub, onclick] = ONE
+      return tripChip() + q('이렇게<br>정산하면 돼요', '앞에서 답한 등록비 납부 방법으로 골랐어요') + `<div class="va-box pc-pre">${preBox}</div>
+        <div class="choice-list pc-list">${choice(true, `onclick="${onclick}"`, icon, title, sub)}</div>
+        ${pre === 'late' ? twoStepWhy(true) : ''}${vgChangeLink()}`
+    }
+    if (pre === 'ask') {
+      return tripChip() + q('세금계산서는<br>언제 나오나요?', '나오는 때에 따라 바로 정산할지, 두 번 정산할지 갈려요') + `<div class="choice-list pc-list">
+        ${ev('bankNow', "vgPickCase('final', null, 'bank-now')", '✅', '입금하면 바로 나와요', '바로 정산 · 전표를 한 번 작성하면 끝나요')}
+        ${ev('late', "vgPickCase('advance', ['fee'])", '⏳', '교육이 끝난 뒤에 나와요', `등록비만 먼저 보내고 나중에 마무리 · 번거롭지만 전표를 두 번 작성해야 해요`)}
+        </div>
+        ${why('언제 나오는지 모르겠다면?', '주최기관(학회·협회)에 <b>“등록비를 입금하면 병원 사업자번호(608-82-14527)로 세금계산서를 바로 발급해 주시나요?”</b>라고 물어보세요.')}${vgChangeLink()}`
+    }
     return tripChip() + q('등록비 영수증,<br>바로 받을 수 있나요?', '영수증(적격증빙)이 바로 나오면 출장 전이라도 바로 정산할 수 있어요') + `
       <div class="ev-guide"><div class="eg-title">✅ 이 중 하나면 바로 정산돼요 <small>적격증빙</small></div>
         <div class="eg-chips"><span>💳 법인카드 매출전표</span><span>📋 세금계산서</span><span>🧾 현금영수증 <small>병원 사업자번호</small></span></div>
