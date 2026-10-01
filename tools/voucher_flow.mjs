@@ -401,28 +401,35 @@ for (const width of [1280, 390]) {
   await ctx.close()
 }
 
-// ── 5. 제주(항공·셔틀 영수증 금액) — 금액을 다 넣어야 다음 ──
+// ── 5. 제주(항공·셔틀 '사후정산') — 신청서에 금액이 비어 있으니 '바뀌었나요?'를 묻지 않고 바로 출장정산서(2026-10-02 지석초이) ──
 {
   const [ctx, p] = await page(390)
   await p.evaluate(() => {
     vg = { version: 2, checks: {}, trip: { title: '재무부서장협의회 세미나', startDate: '2026-11-19', endDate: '2026-11-21', isJeju: true, hasDoc: true },
       costs: [{ kind: 'air', label: '항공료 (왕복)', amount: null }, { kind: 'shuttle', label: '공항 셔틀버스', amount: null }, { kind: 'daily', label: '일당 (3일)', amount: 105000 }, { kind: 'fee', label: '교육비 / 등록비', amount: 400000 }],
-      planTotal: 505000, task: 'final', resumed: true, advKinds: ['fee'], feePay: 'advance', purpose: 'trip', evAll: 'received', screen: 'receipts' }
+      planTotal: 505000, task: 'final', resumed: true, advKinds: ['fee'], feePay: null, purpose: 'trip', screen: 'resumeQ' }
     vgFrom = 11; goToCard(12); renderVoucher()
   })
   await p.waitForTimeout(500)
+  autoSame = false
+  await tap(p, '네, 처리됐어요'); await tap(p, '네, 다 받았어요')
+  check('제주: "금액이 바뀌었나요?" 없이 바로 출장정산서(사후정산 항공료·공항 셔틀 안내)', (await screen(p)) === 'settle' && !(await p.evaluate(() => vgScreens().some(([id]) => id === 'changed'))) && (await text(p)).includes('사후정산으로 비워 둔 항공료·공항 셔틀 금액'), await screen(p))
   check('제주: 영수증 금액 전엔 다음 잠김', await p.isDisabled('#vg-next'))
-  await p.fill('[data-money="finalAmounts.air"]', '145000'); await p.fill('[data-money="finalAmounts.shuttle"]', '15900'); await p.waitForTimeout(150)
+  await p.fill('[data-money="finalAmounts.air"]', '145000'); await p.dispatchEvent('[data-money="finalAmounts.air"]', 'change'); await p.waitForTimeout(200)
+  await p.fill('[data-money="finalAmounts.shuttle"]', '15900'); await p.dispatchEvent('[data-money="finalAmounts.shuttle"]', 'change'); await p.waitForTimeout(200)
   check('제주: 금액을 다 넣으면 다음 열림', !(await p.isDisabled('#vg-next')))
-  await shot(p, 'jeju-receipts')
-  await p.dispatchEvent('[data-money="finalAmounts.air"]', 'change'); await p.dispatchEvent('[data-money="finalAmounts.shuttle"]', 'change'); await p.waitForTimeout(200)
-  await next(p)
+  await shot(p, 'jeju-settle')
+  await next(p); await next(p)
   const ln = await lines(p)
   check('제주: 가지급금 400,000 + 카드 145,000·15,900 + 현금 105,000 (p.7 구조)',
-    JSON.stringify(ln.map(l => [l[0], l[3]])) === JSON.stringify([['여비교통비-국내출장비', 665900], ['가지급금-기타', 400000], ['미지급비용-법인개인카드', 145000], ['미지급비용-법인개인카드', 15900], ['현금', 105000]]), JSON.stringify(ln))
-  const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
-  check('제주: 신청서 공란(항공·셔틀) → +160,900원 달라요 · 출장정산서, 다른 줄만 보인다', cmp.includes('+160,900원 달라요') && cmp.includes('출장정산서') && (await p.locator('.vx-check .vx-row').count()) === 1, cmp)
+    (await screen(p)) === 'voucher' && JSON.stringify(ln.map(l => [l[0], l[3]])) === JSON.stringify([['여비교통비-국내출장비', 665900], ['가지급금-기타', 400000], ['미지급비용-법인개인카드', 145000], ['미지급비용-법인개인카드', 15900], ['현금', 105000]]), JSON.stringify(ln))
+  check('제주: 오른쪽은 출장정산서, 서류에 출장정산서', (await p.locator('.vc-title').innerText()).includes('출장정산서') && await p.evaluate(() => vgResult().docs.some(d => d.key === 'settlement')))
   await shot(p, 'jeju-voucher')
+  // ① 마지막 화면(두 번 정산)의 ② 준비물에도 출장정산서가 미리 보인다
+  await p.evaluate(() => { Object.assign(vg, { task: 'advance', resumed: false, feePay: null, screen: 'done' }); renderVoucher() }); await p.waitForTimeout(300)
+  const added = await p.evaluate(() => [...document.querySelectorAll('.vd-ro-cell.is-added strong')].map(e => e.textContent))
+  check('제주 ① 마지막 화면: ②에 항공·셔틀 매출전표·출장정산서가 + 추가', added.some(t => t.includes('항공권')) && added.some(t => t.includes('셔틀')) && added.includes('출장정산서'), JSON.stringify(added))
+  autoSame = true
   await ctx.close()
 }
 
