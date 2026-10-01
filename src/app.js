@@ -3178,6 +3178,17 @@ function sizeFeeInput(input = document.getElementById('input-fee')) {
 // ── CARD 6: 등록비 납부 (납부 여부 + 납부 형태 통합) ────────────────────────
 // 예전에는 "납부했나요"(Card 6) → "어떻게 납부했나요"(Card 7)로 갈라 두 화면에서
 // 선택지를 두 개씩만 물었다. 같은 주제를 두 번 넘기게 되어 한 화면으로 합쳤다.
+// 등록비 납부: 주의사항(안내 상자)은 중요하니 넓은 화면에선 선택지 옆 칸에 모아 보인다(2026-10-01 지석초이).
+// 원래 자리의 상자는 넓은 화면에서만 CSS로 숨기고, 여기엔 지금 보이는 상자를 복제해 싣는다.
+function renderC6Aside() {
+  const aside = document.getElementById('c6-aside')
+  if (!aside) return
+  const shown = el => { for (let n = el; n && n.id !== 'card-6'; n = n.parentElement) if (n.classList?.contains('hidden')) return false; return true }
+  const notes = [...document.querySelectorAll('#card-6 .card-body > .c7-sub .c7-note-box, #card-6 .card-body > .c7-sub .c7-reference')].filter(shown)
+  aside.innerHTML = notes.length ? `<div class="c6-aside-title">⚠️ 꼭 확인하세요</div>` + notes.map(n => n.outerHTML).join('') : ''
+  aside.classList.toggle('hidden', !notes.length)
+}
+
 function resetCard6() {
   ;['c6-card-note', 'c6-bank-opts', 'c6-pending-sub', 'c6-pend-card-note', 'c6-pend-bank-note']
     .forEach(id => document.getElementById(id)?.classList.add('hidden'))
@@ -3187,6 +3198,7 @@ function resetCard6() {
   if (q) q.innerHTML = state.tripStatus === 'planned'
     ? '교육비 / 등록비를<br>이미 납부하셨나요?'
     : '교육비 / 등록비를<br>어떻게 납부하셨나요?'
+  renderC6Aside()
 }
 
 function select6Method(method) {
@@ -3206,6 +3218,7 @@ function select6Method(method) {
   updateDocStrip()
   const panelId = method === 'card' ? 'c6-card-note' : method === 'bank' ? 'c6-bank-opts' : 'c6-pending-sub'
   document.getElementById(panelId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  renderC6Aside()
 }
 
 function select6PendingMethod(method) {
@@ -3213,6 +3226,7 @@ function select6PendingMethod(method) {
   document.getElementById('c6-pend-bank')?.classList.toggle('selected', method === 'bank')
   document.getElementById('c6-pend-card-note')?.classList.toggle('hidden', method !== 'card')
   document.getElementById('c6-pend-bank-note')?.classList.toggle('hidden', method !== 'bank')
+  renderC6Aside()
 }
 
 function select6Receipt(val) {
