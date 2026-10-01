@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>교육·출장 정산 가이드</title>
+    <script>if (/Windows/i.test(navigator.userAgent)) document.documentElement.classList.add('is-win')</script>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css" />
     <link rel="stylesheet" href="./src/styles.css" />
@@ -394,7 +395,7 @@
             <div class="choice-list">
               <button class="choice-btn" id="c6-btn-card" onclick="select6Method('card')">
                 <span class="choice-icon">💳</span>
-                <div><strong>법인카드로 결제할게요</strong><span>결제하고 카드 매출전표를 챙겨요</span></div>
+                <div><strong>법인카드로 결제할게요</strong><span>결제하고 카드 매출전표를 챙겨요</span><em class="c6-verdict is-ok">✅ 매출전표가 바로 나와 바로 정산</em></div>
                 <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
               </button>
               <button class="choice-btn" id="c6-btn-bank" onclick="select6Method('bank')">
@@ -422,6 +423,7 @@
                   <div>
                     <strong>현금영수증을 받을게요</strong>
                     <span>사업자등록번호 608-82-14527로 발급된 현금영수증</span>
+                    <em class="c6-verdict is-ok">✅ 입금하면 바로 나와 바로 정산</em>
                   </div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </button>
@@ -430,6 +432,7 @@
                   <div>
                     <strong>세금계산서를 받을게요</strong>
                     <span>전자 또는 종이 세금계산서</span>
+                    <em class="c6-verdict is-mid">바로 나오면 바로 정산 · 교육 뒤에 나오면 두 번 정산</em>
                   </div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </button>
@@ -438,6 +441,7 @@
                   <div>
                     <strong>둘 다 받기 어려워요</strong>
                     <span class="alt-tag">대체 증빙 — 계좌이체내역서 + 이수증</span>
+                    <em class="c6-verdict is-late">⏳ 적격증빙이 아니라 병원 돈으로 먼저 보내면 두 번 정산</em>
                   </div>
                   <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
                 </button>

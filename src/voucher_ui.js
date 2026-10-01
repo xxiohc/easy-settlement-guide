@@ -161,8 +161,9 @@ function vgModel(opts = {}) {
   // 이어하기(②)에서 '먼저 받은 돈 처리됐나요?' 답(feePay)은 선지급한 항목에만 적용한다
   const advState = opts.preview ? 'advance' : vg.resumed ? vg.feePay : null
   let pay = vg.feePay || (vgFeePaidByCardBefore() ? 'card' : null)
-  // 한 번에 정산: 법인카드 영수증이면 카드, 그 밖의 영수증(계산서·현금영수증·기타)은 본인이 낸 것 → 현금으로 돌려받음
-  if (vg.task === 'final' && !vg.resumed && !opts.preview && !vgFeePaidByCardBefore()) pay = vg.evType === 'card-receipt' ? 'card' : vg.evType ? 'personal' : null
+  // 한 번에 정산(2026-10-01 지석초이): 법인카드 → 카드 / 병원 계좌 + 바로 나오는 계산서·현금영수증 → 보통예금 /
+  // 내 돈으로 냄(현금영수증·참가 영수증) → 현금으로 돌려받음. 옛 저장값(cash-receipt·other)은 내 돈으로 본다
+  if (vg.task === 'final' && !vg.resumed && !opts.preview && !vgFeePaidByCardBefore()) pay = vg.evType === 'card-receipt' ? 'card' : vg.evType === 'bank-now' ? null : vg.evType ? 'personal' : null
   if (opts.preview || vg.resumed) pay = ak.includes('fee') ? advState : (vgFeePaidByCardBefore() ? 'card' : 'none')
   if (ak.includes('travel') && advState === 'advance') m.travelAdv = vg.advanceTravel ?? Voucher.travelSum(vg)
   if (ak.includes('travel') && advState === 'unknown') m.travelAdvUnknown = true
@@ -224,13 +225,12 @@ function vgScreens() {
   if (!vg.resumed) list.push(['task', 0])
   if (vg.task === 'advance') {
     // 2회 정산(원 자료 p.4 Case②): ① 지금 선지급 전표, ② 영수증(적격증빙) 발급 후 최종 정산 전표를 미리 보여 준다
-    if (vgAdvKinds().includes('fee')) list.push(['advEv', 0])
     list.push(['voucher', 1], ['voucher2', 1], ['done', 2])
   } else if (vg.task === 'final') {
     if (vg.resumed) {
       const needEv = (vg.costs || []).some(c => ['air', 'shuttle', 'meal'].includes(c.kind) || (c.kind === 'fee' && c.amount && vg.feePay !== 'expensed'))
       if (needEv) list.push(['evidence', 0])
-    } else if (vgFee() && !vgFeePaidByCardBefore()) list.push(['evType', 0])
+    }
     // 2026-10-01 지석초이: 금액이 바뀌었는지 먼저 묻고, 바뀌었으면 출장정산서를 만든다(영수증 금액 칸도 정산서 안에)
     list.push(['changed', 0])
     if (vg.amtChanged === 'yes') list.push(['settle', 1], ['settleView', 1])
@@ -240,7 +240,7 @@ function vgScreens() {
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
 }
-const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'evType', 'changed', 'advEv', 'purpose', 'job', 'evidence']
+const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'changed', 'purpose', 'job', 'evidence']
 
 function vgGo(delta) {
   const list = vgScreens()
@@ -269,9 +269,12 @@ function vgSet(path, value) {
   renderVoucher()
 }
 // 정산 방법 한 번에 고르기(할 일 + 먼저 받을 돈)
-function vgPickCase(task, kinds) {
+// ev: 한 번에 정산일 때 등록비 영수증(card-receipt·bank-now·personal). 두 번 정산은 '영수증이 늦거나 안 나오는' 경우라 시점은 이미 답한 셈이다
+function vgPickCase(task, kinds, ev) {
   vg.task = task
   vg.advKinds = kinds || null
+  vg.evType = task === 'final' ? ev || null : null
+  vg.feeEvidence = task === 'advance' && (kinds || []).includes('fee') ? 'after' : null
   vgSave(); renderVoucher()
   setTimeout(() => vgGo(1), 160)
 }
@@ -537,6 +540,21 @@ function vgDelExtra(i) {
 }
 
 // 계좌 이체 + 현금영수증 + 5만 원 이하 → 본인이 이체했을 가능성이 크다(지석초이 실무 기준)
+// 지금 고른 정산 방법 — simple: 등록비 영수증 질문이 없는 화면('final' / 먼저 받을 돈 목록)
+function vgCaseKey(simple) {
+  if (!vg.task) return null
+  if (simple) return vg.task === 'final' ? 'final' : JSON.stringify(vgAdvKinds())
+  if (vg.task === 'advance') return vgAdvKinds().includes('travel') ? 'all' : 'late'
+  return { 'card-receipt': 'card', 'bank-now': 'bankNow', personal: 'personal', 'cash-receipt': 'personal', other: 'personal' }[vg.evType] || null
+}
+// 앞 단계(카드6) 답으로 미리 고를 칸 — 세금계산서는 발급 시점을 몰라 고르지 않고 묻는다(2026-10-01 지석초이)
+function vgFeePre() {
+  const t = vg.trip
+  if (t.feeStatus !== 'paid' || !t.receiptType) return null
+  if (t.receiptType === 'card-receipt') return 'card'
+  if (vgSmallSelfPaid()) return 'personal'
+  return { 'cash-receipt': 'bankNow', transfer: 'late', 'tax-invoice': 'ask' }[t.receiptType] || null
+}
 function vgSmallSelfPaid() {
   const t = vg.trip, fee = vgFee()
   return !!(fee && fee.amount <= 50000 && t.feeStatus === 'paid' && (t.receiptType === 'cash-receipt' || t.receiptType === 'transfer'))
@@ -547,10 +565,10 @@ function vgSmallSelfPaid() {
 function twoStepWhy() {
   return `<div class="ts-why"><div class="ts-why-title">왜 두 번 정산하나요?</div>
     <ul class="ts-reasons">
-      <li><span>💰</span><p>등록비가 커서 <b>병원 돈으로 먼저 보내야</b> 할 때</p></li>
+      <li><span>🧾</span><p>등록비를 병원 돈으로 먼저 보내는데, <b>영수증(적격증빙)이 나중에 나오거나 아예 안 나올</b> 때</p></li>
       <li><span>🧳</span><p>일당·숙박비·교통비를 <b>출장 전에 먼저 받아야</b> 할 때</p></li>
-      <li><span>🧾</span><p>등록비·항공권·리무진(공항버스)처럼 <b>영수증이 나중에 나오는</b> 비용이 있을 때</p></li>
     </ul>
+    <p class="ts-ok">✅ 등록비 영수증(카드 매출전표·세금계산서·현금영수증)이 <b>바로 나오면</b> 두 번 할 필요가 없어요. 필요한 영수증이 다 모이면 출장 전이라도 전표 한 장으로 끝나요.</p>
     <div class="ts-flow"><div><b>① 지금 먼저 받기</b><small>가지급금으로 잠시 적어 둬요</small></div><i>→</i>
       <div><b>② 다녀와서 서류가 갖춰지면</b><small>실제 비용으로 최종 정산해요</small></div></div></div>`
 }
@@ -622,34 +640,46 @@ const VG_SCREEN = {
   task() {
     const fee = vgFee()?.amount, tr = Voucher.travelSum(vg)
     const opts = vgAdvOptions()
-    // 앞 단계 등록비 납부 답으로 기본값을 잡는다(2026-10-01 지석초이): 법인카드 → 한 번에 / 계좌로 보냄 → 등록비만 먼저(병원이 먼저 보냄)
     const t = vg.trip
-    // 계좌 이체라도 5만 원 이하 + 현금영수증은 보통 본인이 이체하고 병원 사업자번호로 영수증을 받는다 → 한 번에 정산(현금 환급)
-    // 5만 원 넘거나 세금계산서면 보통 병원 계좌에서 먼저 보낸다 → 등록비만 먼저(2026-10-01 지석초이)
-    const small = vgSmallSelfPaid()
-    const pre = !opts.includes('fee') && vgFeePaidByCardBefore() ? 'final'
-      : small ? 'final'
-      : opts.includes('fee') && t.feeStatus === 'paid' && t.receiptType && t.receiptType !== 'card-receipt' ? 'fee' : null
-    const cur = vg.task ? (vg.task === 'final' ? 'final' : JSON.stringify(vgAdvKinds())) : pre === 'fee' ? '["fee"]' : pre
-    const on = (task, kinds) => cur === (task === 'final' ? 'final' : JSON.stringify(kinds))
-    const rName = { 'cash-receipt': '현금영수증', 'tax-invoice': '세금계산서', transfer: '계좌이체내역서·이수증' }[t.receiptType] || ''
-    const preBox = small
-      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>계좌로 보내고 현금영수증</b>을 받는다고 하셨어요</div><p>${vgFee().amount.toLocaleString()}원처럼 5만 원 이하는 보통 <b>본인이 이체하고 병원 사업자번호로 현금영수증</b>을 받아요. 그래서 <b>다녀와서 한 번에 정산</b>하며 현금으로 돌려받는 걸로 미리 골라 뒀어요. 병원 계좌에서 보낸다면 ‘등록비만 먼저’를 눌러 주세요.</p></div>`
-      : pre === 'final'
-      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>법인카드로 결제</b>한다고 하셨어요</div><p>카드로 내면 병원이 먼저 보낼 돈이 없어서 <b>다녀와서 한 번에 정산</b>하면 돼요. 아래에 미리 골라 뒀어요.</p></div>`
-      : pre === 'fee'
-      ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>계좌로 보낸다</b>고 하셨어요${rName ? ` (${rName})` : ''}</div><p>${t.receiptType === 'tax-invoice' ? '세금계산서는 병원이 보낼 때 받아요.' : '5만 원이 넘는 등록비는 보통 병원 계좌에서 보내요.'} 주최기관에 먼저 보내는 거라 <b>등록비만 먼저 회사 돈으로</b> 처리해요. 아래에 미리 골라 뒀어요 — 다르면 다른 칸을 눌러 주세요.</p></div>`
-      : ''
-    const card = (task, kinds, icon, title, now, later, n) => choice(on(task, kinds), `onclick="vgPickCase('${task}', ${kinds ? `['${kinds.join("','")}']` : 'null'})"`, icon, title,
+    const card = (task, kinds, icon, title, now, later, n) => choice((vg.task ? vgCaseKey(true) : vgFeePaidByCardBefore() ? 'final' : null) === (task === 'final' ? 'final' : JSON.stringify(kinds)), `onclick="vgPickCase('${task}', ${kinds ? `['${kinds.join("','")}']` : 'null'})"`, icon, title,
       `<span class="pc-flow">${now}${later ? ` <i>→</i> ${later}` : ''}</span>${n === 1 ? '<span class="pc-n is-one">전표를 한 번 작성하면 끝나요</span>' : ''}`)
-    const all = opts.includes('fee') && opts.includes('travel')
-    return tripChip() + q('어떻게<br>정산받을까요?', pre ? '' : '특별한 사정이 없으면 다녀와서 한 번에 정산하는 게 가장 간단해요') + preBox + `<div class="choice-list pc-list">
-      <div class="${pre === 'fee' ? '' : 'pc-best'}">${pre === 'fee' ? '' : '<span class="pc-badge">추천</span>'}${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}</div>
-      ${opts.length ? '<div class="pc-sep">꼭 먼저 받아야 할 때만 <span class="pc-n">번거롭지만 전표를 두 번 작성해야 해요</span></div>' : ''}
-      ${opts.includes('fee') ? card('advance', ['fee'], '🏦', '등록비만 먼저 회사 돈으로 보낼게요', `지금 등록비 ${fee.toLocaleString()}원`, tr ? `다녀와서 일당·숙박·교통비 ${tr.toLocaleString()}원` : '영수증이 나오면 최종 정산', 2) : ''}
-      ${opts.includes('travel') ? card('advance', all ? ['fee', 'travel'] : ['travel'], '📦', all ? '모든 비용을 먼저 받아 둘게요' : '여비를 먼저 받아 둘게요',
-        `지금 ${all ? `${(fee + tr).toLocaleString()}원 모두` : `일당·숙박·교통비 ${tr.toLocaleString()}원`}`, '교육 수료 후 최종 정산', 2) : ''}
-      </div>${opts.length ? twoStepWhy() : ''}`
+    // 등록비가 없거나 이미 법인카드로 낸 건 — 영수증 걱정이 없으니 '한 번에'와 '여비 먼저'만
+    if (!opts.includes('fee')) {
+      const preBox = fee && vgFeePaidByCardBefore()
+        ? `<div class="va-box pc-pre"><div class="va-title">앞에서 등록비를 <b>법인카드로 결제</b>한다고 하셨어요</div><p>카드 매출전표는 결제하는 순간 나오는 <b>적격증빙</b>이라 <b>한 번에 정산</b>하면 돼요. 아래에 미리 골라 뒀어요.</p></div>` : ''
+      return tripChip() + q('어떻게<br>정산받을까요?', preBox ? '' : '특별한 사정이 없으면 한 번에 정산하는 게 가장 간단해요') + preBox + `<div class="choice-list pc-list">
+        <div class="pc-best">${preBox ? '' : '<span class="pc-badge">추천</span>'}${card('final', null, '🧾', vg.trip.isOnline ? '교육이 끝나고 한 번에 정산받을게요' : '다녀와서 한 번에 정산받을게요', '모든 비용을 영수증과 함께 한 번에', '', 1)}</div>
+        ${opts.includes('travel') ? `<div class="pc-sep">꼭 먼저 받아야 할 때만 <span class="pc-n">번거롭지만 전표를 두 번 작성해야 해요</span></div>
+        ${card('advance', ['travel'], '📦', '여비를 먼저 받아 둘게요', `지금 일당·숙박·교통비 ${tr.toLocaleString()}원`, '교육 수료 후 최종 정산', 2)}` : ''}
+        </div>${opts.includes('travel') ? twoStepWhy() : ''}`
+    }
+    // 2026-10-01 지석초이: 두 번 정산은 '등록비 영수증' 때문이다. 적격증빙이 바로 나오는 곳이면 출장 전이라도 바로 정산,
+    // 적격증빙을 안 주거나 세금계산서가 늦게 나오는 곳만 두 번 — 초보자가 '내 영수증이면 바로 되겠네'를 알아보게 영수증으로 묻는다
+    const pre = vgFeePre()
+    const preBox = {
+      personal: `<div class="va-title">앞에서 등록비를 <b>계좌로 보내고 ${t.receiptType === 'transfer' ? '이체내역서·이수증' : '현금영수증'}</b>을 받는다고 하셨어요</div><p>${fee.toLocaleString()}원처럼 5만 원 이하는 보통 <b>본인이 이체하고 병원 사업자번호로 현금영수증</b>을 받아요. 그래서 <b>본인이 낸 등록비를 정산 때 현금으로 돌려받는 것</b>으로 골라 뒀어요. 병원 계좌에서 보낸다면 다른 칸을 눌러 주세요.</p>`,
+      bankNow: `<div class="va-title">앞에서 등록비를 <b>계좌로 보내고 현금영수증</b>을 받는다고 하셨어요</div><p>병원 사업자번호 현금영수증은 입금하면 바로 나오는 <b>적격증빙</b>이에요. 그래서 <b>출장 전이라도 바로 정산</b>할 수 있어요. 아래에 미리 골라 뒀어요.</p>`,
+      late: `<div class="va-title">앞에서 <b>현금영수증·세금계산서를 받기 어렵다</b>고 하셨어요</div><p>계좌이체내역서·이수증은 적격증빙이 아니고, 이수증은 교육이 끝나야 나와요. 그래서 등록비만 먼저 <b>가지급금</b>으로 보내고, 서류가 갖춰지면 마무리해요. 아래에 미리 골라 뒀어요.</p>`,
+      ask: `<div class="va-title">앞에서 <b>세금계산서</b>를 받는다고 하셨어요</div><p>세금계산서는 <b>언제 나오는지</b>에 따라 달라요. 입금하면 바로 발급되면 <b>바로 정산</b>, 교육이 끝난 뒤에 발급되면 <b>두 번 정산</b>이에요. 모르면 아래 ‘어떤 영수증을 주는지 모르겠다면?’을 봐 주세요.</p>`,
+    }[pre]
+    const ev = (key, onclick, icon, title, sub) => choice(vgCaseKey() ? vgCaseKey() === key : pre === key, `onclick="${onclick}"`, icon, title, sub)
+    const all = opts.includes('travel')
+    return tripChip() + q('등록비 영수증,<br>바로 받을 수 있나요?', '영수증(적격증빙)이 바로 나오면 출장 전이라도 바로 정산할 수 있어요') + `
+      <div class="ev-guide"><div class="eg-title">✅ 이 중 하나면 바로 정산돼요 <small>적격증빙</small></div>
+        <div class="eg-chips"><span>💳 법인카드 매출전표</span><span>📋 세금계산서</span><span>🧾 현금영수증 <small>병원 사업자번호</small></span></div>
+        <p class="eg-no">❌ 참가·수료 영수증, 이수증, 입금 확인증은 적격증빙이 아니에요</p></div>
+      ${preBox ? `<div class="va-box pc-pre">${preBox}</div>` : ''}
+      <div class="choice-list pc-list">
+      <div class="pc-sep pc-sep-ok">✅ 바로 정산 <span class="pc-n is-one">전표를 한 번 작성하면 끝나요</span></div>
+      ${ev('card', "vgPickCase('final', null, 'card-receipt')", '💳', '법인카드로 결제해요', '결제하는 순간 매출전표가 나와요')}
+      ${ev('bankNow', "vgPickCase('final', null, 'bank-now')", '🏦', '병원 계좌로 보내고, 세금계산서·현금영수증이 바로 나와요', '입금하면 주최기관이 병원 사업자번호로 바로 발급해 줘요')}
+      ${ev('personal', "vgPickCase('final', null, 'personal')", '👤', '내 돈으로 내고 영수증을 받아요', '현금영수증·참가 영수증 — 정산할 때 현금으로 돌려받아요')}
+      <div class="pc-sep">⏳ 이럴 때만 두 번 정산 <span class="pc-n">번거롭지만 전표를 두 번 작성해야 해요</span></div>
+      ${ev('late', "vgPickCase('advance', ['fee'])", '⏳', '병원 돈을 먼저 보내야 하는데, 영수증이 늦거나 안 나와요', `세금계산서가 교육 뒤에 나오거나 적격증빙을 안 주는 곳 <span class="pc-flow">지금 등록비 ${fee.toLocaleString()}원 <i>→</i> ${tr ? `다녀와서 일당·숙박·교통비 ${tr.toLocaleString()}원` : '영수증이 나오면 최종 정산'}</span>`)}
+      ${all ? ev('all', "vgPickCase('advance', ['fee','travel'])", '📦', '여비(일당·숙박·교통비)까지 모두 먼저 받아야 해요', `<span class="pc-flow">지금 ${(fee + tr).toLocaleString()}원 모두 <i>→</i> 교육 수료 후 최종 정산</span>`) : ''}
+      </div>
+      ${why('어떤 영수증을 주는지 모르겠다면?', '주최기관(학회·협회)에 <b>“등록비를 입금하면 병원 사업자번호(608-82-14527)로 세금계산서나 현금영수증을 바로 발급해 주시나요?”</b>라고 물어보세요. 바로 준다면 <b>바로 정산</b>, 교육이 끝난 뒤에 주거나 안 준다면 <b>두 번 정산</b>이에요.')}
+      ${twoStepWhy()}`
   },
 
   resumeQ() {
@@ -660,27 +690,6 @@ const VG_SCREEN = {
       ${pick('feePay', 'unknown', '❓', '잘 모르겠어요', '전표 처리자에게 확인이 필요해요')}
       ${pick('feePay', 'refund', '↩️', '취소·환불됐어요')}
       </div>`
-  },
-
-  advEv() {
-    return q('등록비 영수증은<br>언제 받나요?', '세금계산서·현금영수증·카드 매출전표') + `<div class="choice-list">
-      ${pick('feeEvidence', 'after', '⏳', '교육이 끝난 뒤에 받아요', '가장 흔한 경우')}
-      ${pick('feeEvidence', 'received', '✅', '이미 받았어요')}
-      ${pick('feeEvidence', 'unknown', '❓', '모르겠어요', '주최기관에 물어볼 문구를 드려요')}
-      </div>`
-  },
-
-  // 한 번에 정산은 이미 다 내고 영수증도 받은 상태 — 받았는지가 아니라 어떤 영수증인지 묻는다(2026-10-01 지석초이)
-  // 2026-10-01 지석초이: 한 번에 정산은 '어떻게 냈나요' 대신 영수증 종류를 바로 묻는다 — 종류로 결제 방법이 정해진다
-  evType() {
-    if (vg.evType == null && vgSmallSelfPaid()) vg.evType = vg.trip.receiptType === 'transfer' ? 'other' : 'cash-receipt'
-    return q('등록비 영수증은<br>어떤 종류인가요?', `${vgFee().amount.toLocaleString()}원`) + `<div class="choice-list">
-      ${pick('evType', 'card-receipt', '💳', '법인개별카드 영수증', '법인카드로 결제한 매출전표')}
-      ${pick('evType', 'cash-receipt', '🧾', '현금영수증', '병원 사업자번호로 발급 · 현금으로 돌려받아요')}
-      ${pick('evType', 'other', '📄', '기타', '적격증빙을 받기 어려운 학회 등 — 학회 수료(참가) 영수증')}
-      </div>
-      <div class="vg-box ev-tax"><b>전자(세금)계산서를 받았나요?</b><p>계산서는 병원이 주최기관에 등록비를 먼저 보낼 때만 받아요. 병원이 다 끝난 뒤에 보내는 경우는 없어서, 이건 <b>두 번 정산</b>이에요.</p>
-        <button type="button" class="vg-btn" onclick="vgJump('task')">정산 방법 다시 고르기 → 등록비만 먼저 회사 돈으로</button></div>`
   },
 
   purpose() {
@@ -775,13 +784,15 @@ const VG_SCREEN = {
       <div class="final-check-text"><strong>${escapeHtml(title)}${optional ? ' <small>(필요할 때만)</small>' : ''}</strong>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</div></label>`
     // 2026-09-30 지석초이: 전표 / 증빙(마지막 확인 칸은 지석초이 요청으로 뺌) — 큰 칸으로 먼저 나누고 그 안에 세부 서류. '다시 첨부'는 2회 정산의 ② 전표에서만.
     const again = vg.task === 'final' && (vg.resumed || vgModel().bankPay?.status === 'advance')
-    const evName = { 'card-receipt': '법인개별카드 영수증', 'tax-invoice': '전자(세금)계산서', 'cash-receipt': '현금영수증', other: '학회 수료 영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
+    const evName = { 'card-receipt': '법인카드 매출전표', 'bank-now': '세금계산서 또는 현금영수증', personal: '현금영수증 또는 참가 영수증', 'cash-receipt': '현금영수증', other: '학회 수료 영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
     const name = { notice: '교육·출장 공문', feeEvidence: evName ? `등록비 영수증 (${evName})` : '등록비 영수증' }
     const sub = {
       application: again ? '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : vg.task === 'advance' ? '등록비 금액이 전표와 같은지 · 결재·합의 확인' : '결재·인사지원팀 합의 확인',
       notice: again ? '① 때 냈어도 다시 첨부' : vg.task === 'advance' ? '등록비·입금 계좌 확인' : '신청서 금액 기준이 공문과 같은지',
       bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서와 달라진 금액 · 앞에서 만든 출장정산서를 인쇄해 첨부',
-      feeEvidence: vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인' : '기관·금액이 맞는지 확인', airEvidence: '법인카드 결제 왕복 전표',
+      feeEvidence: vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인'
+        : vg.evType === 'personal' ? '병원 사업자번호(608-82-14527) 현금영수증이 가장 좋고, 없으면 납부가 확인되는 참가 영수증 · 기관·금액 확인'
+        : vg.evType === 'bank-now' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인' : '기관·금액이 맞는지 확인', airEvidence: '법인카드 결제 왕복 전표',
       shuttleEvidence: '법인카드 결제 전표', mealEvidence: '법인카드 결제 전표' }
     const nLines = r.lines.length
     const groups = [
