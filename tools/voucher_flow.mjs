@@ -98,6 +98,7 @@ for (const width of [1280, 390]) {
   await tap(p, '등록비만 먼저 보내고')
   check(`[${width}] 두 번 정산은 영수증 시점을 다시 묻지 않고 바로 ① 전표`, (await screen(p)) === 'voucher')
   const ln = await lines(p)
+  check(`[${width}] 보통예금 줄 보조 설명은 은행코드 AC001(지석초이)`, (await text(p)).includes('적요 · 은행코드 AC001을 적어 주세요'))
   check(`[${width}] 선지급 전표: 차 가지급금-기타 1114-99 / 대 보통예금 1102-02 · 300,000`,
     JSON.stringify(ln) === JSON.stringify([['가지급금-기타', '1114-99', 'D', 300000], ['보통예금', '1102-02', 'C', 300000]]), JSON.stringify(ln))
   check(`[${width}] 차변·대변 장부 한 줄씩 + 칸마다 합계 + 일치 표시`, (await p.locator('.vt-row').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.textContent('.vt-total')).includes('같아요'))
@@ -118,7 +119,7 @@ for (const width of [1280, 390]) {
   check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본, 금액이 같으면 크로스체크 숨김`, (await p.locator('.vx-form .tf-box').count()) === 1 && (await p.locator('.vx-check').count()) === 0)
   await shot(p, `${width}-voucher-adv`)
   await next(p)
-  check(`[${width}] ② 영수증 발급 후 최종 정산 전표 미리 보기(대제목)`, (await screen(p)) === 'voucher2' && (await text(p)).includes('영수증이 발급되면 이 전표를 써요'))
+  check(`[${width}] ② 영수증 발급 후 최종 정산 전표 미리 보기(대제목)`, (await screen(p)) === 'voucher2' && (await text(p)).includes('영수증 발급 후 ① 전표와 이어서 최종 정산 전표를 써요'))
   const ln2p = await p.evaluate(() => vgFinalPreview().lines.map(l => [l.name, l.side, l.amount]))
   check(`[${width}] ② 미리 보기: 차 교육훈련비-간호사교육 / 대 가지급금-기타 300,000 + 현금`,
     JSON.stringify(ln2p) === JSON.stringify([['교육훈련비-간호사교육', 'D', 567200], ['가지급금-기타', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln2p))
@@ -156,6 +157,7 @@ for (const width of [1280, 390]) {
   await p.hover('.vt-row >> nth=0'); await p.waitForTimeout(150)
   check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계 줄만 칠한다(항목 행은 안 칠함)`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && !document.querySelector('.vx-form tr[data-kind].is-focus')))
   check(`[${width}] 신청서 크로스체크: 합계가 같으면 숨김`, (await p.locator('.vx-check').count()) === 0)
+  check(`[${width}] 현금 줄 보조 설명은 펌뱅킹 사번(지석초이)`, (await text(p)).includes('적요 · 펌뱅킹 사번을 입력해 주세요') && !(await text(p)).includes('받는 직원 사번'))
   check(`[${width}] ② 최종 정산 친근한 제목`, (await text(p)).includes('② 최종 정산은 이렇게 해볼까요?'))
   if (width >= 1280) {
     const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-ledger').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])

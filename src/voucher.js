@@ -80,7 +80,8 @@
   // kinds: 이 줄이 신청서의 어느 항목(교통비·일당·숙박비·등록비·항공…)에서 왔는지 — 화면에서 신청서 행과 잇는다
   function line(rules, key, side, amount, plain, memo, kinds = []) {
     const a = rules.accounts[key] || { name: key, code: '' }
-    return { key, name: a.name, code: a.code, side, amount: num(amount), plain, memo: memo || '', kinds }
+    // 현금·보통예금 줄의 보조 설명(적요에 넣을 것)은 규칙 파일에서 — 현금은 펌뱅킹 사번, 보통예금은 은행코드(2026-10-01 지석초이)
+    return { key, name: a.name, code: a.code, side, amount: num(amount), plain, memo: memo || (rules.memoHint || {})[key] || '', kinds }
   }
 
   // 선지급 전표(p.6): 차 가지급금-기타 / 대 보통예금(등록비, 병원→주최기관) · 현금(여비, 병원→직원)
@@ -94,7 +95,7 @@
     const total = fee == null || trav == null ? null : fee + trav
     const lines = [line(rules, 'advance', 'D', total, `먼저 받는 ${ADV_NAME(ak)}를 잠시 적어 두는 금액`, '', debitKinds)]
     if (ak.includes('fee')) lines.push(line(rules, 'bank', 'C', fee, '병원 계좌에서 주최기관으로 보내는 등록비', '', ['fee']))
-    if (ak.includes('travel')) lines.push(line(rules, 'cash', 'C', trav, `직원에게 먼저 주는 여비(${travKinds.map(k => KIND_LABEL[k]).join('·')})`, '받는 직원 사번', travKinds))
+    if (ak.includes('travel')) lines.push(line(rules, 'cash', 'C', trav, `직원에게 먼저 주는 여비(${travKinds.map(k => KIND_LABEL[k]).join('·')})`, '', travKinds))
     const issues = []
     if (ak.includes('fee') && fee == null) issues.push({ level: 'block', key: 'fee', msg: '먼저 보낼 등록비 금액을 넣어 주세요' })
     if (ak.includes('travel') && trav == null) issues.push({ level: 'block', key: 'travel', msg: '먼저 받을 여비 금액을 넣어 주세요' })
@@ -158,11 +159,11 @@
       if (travAdv != null) {
         // 먼저 받은 여비는 가지급금으로 정리하고, 모자란 만큼만 현금으로 더 받는다
         credits.push(line(rules, 'advance', 'C', travAdv, '먼저 받은 여비 정리', v.advanceRef ? `원 전표 ${v.advanceRef}` : '', ck))
-        if (cashAmt != null && cashAmt > travAdv) credits.push(line(rules, 'cash', 'C', cashAmt - travAdv, '더 받을 여비(차액)', '받는 직원 사번', ck))
+        if (cashAmt != null && cashAmt > travAdv) credits.push(line(rules, 'cash', 'C', cashAmt - travAdv, '더 받을 여비(차액)', '', ck))
         if (cashAmt != null && cashAmt < travAdv) issues.push({ level: 'block', key: 'overAdvance', msg: rules.unconfirmed.overAdvance })
-        if (cashAmt == null) credits.push(line(rules, 'cash', 'C', null, '더 받을 여비(차액)', '받는 직원 사번', ck))
+        if (cashAmt == null) credits.push(line(rules, 'cash', 'C', null, '더 받을 여비(차액)', '', ck))
       } else {
-        credits.push(line(rules, 'cash', 'C', cashAmt, `직원에게 지급(${cashItems.map(i => KIND_LABEL[i.kind]).join('·')})`, '받는 직원 사번', ck))
+        credits.push(line(rules, 'cash', 'C', cashAmt, `직원에게 지급(${cashItems.map(i => KIND_LABEL[i.kind]).join('·')})`, '', ck))
       }
     }
     if (personalFee) {
@@ -171,7 +172,7 @@
         cashLine.amount = cashLine.amount == null || personalFee.amount == null ? null : cashLine.amount + personalFee.amount
         cashLine.kinds = [...cashLine.kinds, 'fee']
         cashLine.plain = cashLine.plain.replace(/\)$/, '·본인이 낸 등록비)')
-      } else credits.push(line(rules, 'cash', 'C', personalFee.amount, '본인이 먼저 낸 등록비 돌려받기', '받는 직원 사번', ['fee']))
+      } else credits.push(line(rules, 'cash', 'C', personalFee.amount, '본인이 먼저 낸 등록비 돌려받기', '', ['fee']))
     }
     // 다녀와서 생긴 추가 비용(리무진·택시·주차비 등, 2026-10-01 지석초이) — 법인카드면 카드 줄, 개인 돈이면 현금으로 돌려받는다
     for (const x of extras) {
@@ -182,7 +183,7 @@
           cashLine.amount = cashLine.amount == null || x.amount == null ? null : cashLine.amount + x.amount
           if (!cashLine.kinds.includes('extra')) cashLine.kinds = [...cashLine.kinds, 'extra']
           cashLine.plain = cashLine.plain.replace(/\)$/, `·${x.label})`)
-        } else credits.push(line(rules, 'cash', 'C', x.amount, `직원에게 지급(${x.label})`, '받는 직원 사번', ['extra']))
+        } else credits.push(line(rules, 'cash', 'C', x.amount, `직원에게 지급(${x.label})`, '', ['extra']))
       }
     }
     // 가지급금 정리는 한 줄로(원 전표 하나) — 등록비·여비를 함께 받았으면 합친다
