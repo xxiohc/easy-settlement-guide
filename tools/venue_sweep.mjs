@@ -26,7 +26,7 @@ for (const file of Object.keys(EXP)) {
   await p.click('#ctaNext3'); await p.waitForTimeout(3500)
   const r = await p.evaluate(() => ({
     online: state.isOnline, jeju: state.isJeju, region: state.region, venue: state.parsedMeta?.venue || '', place: state.place,
-    lat: state.placeLat, geo: document.getElementById('place-geo-note')?.innerText?.replace(/\s+/g, ' ') || '',
+    lat: state.placeLat, geo: (document.getElementById('place-geo-note')?.dataset.geo || document.getElementById('place-geo-note')?.innerText || '').replace(/\s+/g, ' '),
     route: (document.getElementById('prevday-verdict')?.innerText || '').replace(/\s+/g, ' '), needsPick: !!state.placeNeedsPick,
   }))
   const hasGeo = Number.isFinite(r.lat)

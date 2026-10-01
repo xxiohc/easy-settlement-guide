@@ -2580,7 +2580,7 @@ async function geocodeDocVenue(venue, rawVenue = venue, meta = null) {
   // 삼성전자 연수원 → 충남 서천)이 잡혔다. ① 공문 지역과 주소가 맞는 결과만 쓰고 ② 안 맞으면 '지역 + 이름'으로 다시,
   // ③ 0건이면 뒤 낱말을 하나씩 떼며 다시 찾고 ④ 그래도 없으면 본문 '주소:'로 찾는다. 끝내 못 찾으면 좌표를 쓰지 않는다.
   const note = document.getElementById('place-geo-note')
-  if (note) { note.textContent = ''; note.classList.add('hidden'); note.classList.remove('is-warn') }
+  if (note) { note.textContent = ''; note.dataset.geo = ''; note.classList.add('hidden'); note.classList.remove('is-warn') }
   document.getElementById('field-place')?.classList.remove('place-needs-pick')
   state.placeNeedsPick = false
   if (meta && !venue && !meta.isOnline && !meta.isJeju && meta.destination !== '제주') { showPlaceNeedsPick('공문에서 교육 장소를 찾지 못했어요.'); return }
@@ -2655,9 +2655,11 @@ async function geocodeDocVenue(venue, rawVenue = venue, meta = null) {
   }
   document.getElementById('field-place')?.classList.remove('place-needs-pick')
   if (note) {
+    // 2026-10-01 지석초이: 찾은 위치 안내 문구는 화면에 띄우지 않는다(못 찾았을 때 경고만 띄움). 점검 도구(venue_sweep)용으로만 남긴다
     note.classList.remove('is-warn')
-    note.textContent = `📍 카카오 지도 위치: ${hit.place_name} · ${hit.road_address_name || hit.address_name || ''} — 다르면 장소를 다시 검색해 고르세요.`
-    note.classList.remove('hidden')
+    note.dataset.geo = `${hit.place_name} · ${hit.road_address_name || hit.address_name || ''}`
+    note.textContent = ''
+    note.classList.add('hidden')
   }
   renderPrevDayVerdict()
 }

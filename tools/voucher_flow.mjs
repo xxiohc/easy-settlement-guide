@@ -113,13 +113,14 @@ for (const width of [1280, 390]) {
     const y = await p.evaluate(() => [...document.querySelectorAll('.vt-sum')].map(e => Math.round(e.getBoundingClientRect().top)))
     check(`[${width}] 차변·대변 합계 줄이 같은 높이`, y[0] === y[1], JSON.stringify(y))
   }
-  check(`[${width}] ① 제목이 가지급금 처리임을 밝힌다`, (await text(p)).includes('가지급금으로 처리해요'))
-  check(`[${width}] 2회 정산 단계 표시(① 지금 선지급 → ② 영수증 발급 후)`, /지금 · 등록비 먼저 받기.*영수증 발급 후 · 최종 정산/.test(await text(p)) && (await text(p)).includes('왜 두 번 정산하나요?'))
+  // 2026-10-01 지석초이: 등록비는 '먼저 받는' 돈이 아니라 병원 통장에서 먼저 지급하는 돈
+  check(`[${width}] ① 제목: 병원 통장에서 먼저 지급하는 등록비 → 가지급금 처리`, (await text(p)).includes('① 병원 통장에서 먼저 지급하는 등록비는 가지급금으로 처리해요') && !(await text(p)).includes('먼저 받는 등록비'))
+  check(`[${width}] 2회 정산 단계 표시(① 지금 등록비 먼저 지급 → ② 영수증 발급 후)`, /지금 · 등록비 먼저 지급.*영수증 발급 후 · 최종 정산/.test(await text(p)) && (await text(p)).includes('왜 두 번 정산하나요?'))
   // 2026-10-01 지석초이: 크로스체크는 금액이 다를 때만 보인다
   check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본, 금액이 같으면 크로스체크 숨김`, (await p.locator('.vx-form .tf-box').count()) === 1 && (await p.locator('.vx-check').count()) === 0)
   await shot(p, `${width}-voucher-adv`)
   await next(p)
-  check(`[${width}] ② 영수증 발급 후 최종 정산 전표 미리 보기(대제목)`, (await screen(p)) === 'voucher2' && (await text(p)).includes('영수증 발급 후 ① 전표와 이어서 최종 정산 전표를 써요'))
+  check(`[${width}] ② 영수증 발급 후 최종 정산 전표 미리 보기(대제목)`, (await screen(p)) === 'voucher2' && (await text(p)).includes('② 영수증이 발급되면 ① 전표와 이어서 최종 정산 전표를 써요'))
   const ln2p = await p.evaluate(() => vgFinalPreview().lines.map(l => [l.name, l.side, l.amount]))
   check(`[${width}] ② 미리 보기: 차 교육훈련비-간호사교육 / 대 가지급금-기타 300,000 + 현금`,
     JSON.stringify(ln2p) === JSON.stringify([['교육훈련비-간호사교육', 'D', 567200], ['가지급금-기타', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln2p))
@@ -192,7 +193,7 @@ for (const width of [1280, 390]) {
   const ln = await lines(p)
   check('등록비+여비 선지급: 차 가지급금 567,200 / 대 보통예금 300,000 + 현금 267,200',
     JSON.stringify(ln.map(l => [l[0], l[2], l[3]])) === JSON.stringify([['가지급금-기타', 'D', 567200], ['보통예금', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln))
-  { const tt = await text(p); check('여비 포함이면 ② 시점은 "다녀와서"', /지금·등록비·여비먼저받기.*다녀와서·최종정산/.test(tt.replace(/\s+/g, '')), tt.slice(0, 120)) }
+  { const tt = await text(p); check('여비 포함이면 ② 시점은 "다녀와서"', /지금·등록비·여비먼저지급.*다녀와서·최종정산/.test(tt.replace(/\s+/g, '')), tt.slice(0, 120)) }
   check('신청서 형광펜: 등록비·일당·숙박·교통 행 모두', await p.evaluate(() => ['fee', 'daily', 'lodging', 'transport'].every(k => document.querySelector(`.vx-form tr.hl-main[data-kind="${k}"]`))))
   // x-nb(줄바꿈 방지 토막)가 flex·grid의 바로 아래 자식이면 토막마다 따로 놓여 '일당 ·숙 박비'처럼 갈라진다(2026-09-30 발견)
   const split = await p.evaluate(() => [...document.querySelectorAll('#card-12 x-nb')].filter(x => /flex|grid/.test(getComputedStyle(x.parentElement).display)).map(x => x.parentElement.className + ':' + x.textContent))
@@ -308,6 +309,20 @@ for (const width of [1280, 390]) {
     await shot(p, 'done-tax') }
   await p.evaluate(() => vgJump('task')); await p.waitForTimeout(300)
   await shot(p, 'task-tax')
+  await ctx.close()
+}
+
+// ── 1-i. 넓은 화면(1920)에서 오른쪽 신청서는 600px — 교통비 줄이 두 줄로 넘어가지 않는다(2026-10-01 지석초이) ──
+{
+  const [ctx, p] = await page(1920)
+  await toCard11(p, { bankOpt: 2 })
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  await tap(p, '회의·업무 출장'); await tap(p, '등록비만 먼저 보내고')
+  const m = await p.evaluate(() => ({ w: Math.round(document.querySelector('.vg-aside').getBoundingClientRect().width),
+    over: document.documentElement.scrollWidth > innerWidth,
+    wrapped: [...document.querySelectorAll('.vx-form tr[data-kind="transport"] td')].filter(td => td.getBoundingClientRect().height > parseFloat(getComputedStyle(td).lineHeight) * 1.6 + 16).map(td => td.textContent.trim().slice(0, 30)) }))
+  check('1920: 신청서 600px · 가로 넘침 없음 · 교통비 줄 한 줄', m.w === 600 && !m.over && m.wrapped.length === 0, JSON.stringify(m))
+  await shot(p, 'wide-aside')
   await ctx.close()
 }
 
