@@ -467,6 +467,8 @@ function compareAside(r, kind) {
     const feeNow = (r.items || []).find(i => i.kind === 'fee')
     if (planFee != null && feeNow) checks.push(['신청서 등록비', planFee, '전표 등록비', feeNow.amount])
   }
+  // 2026-10-01 지석초이 "크로스체크는 하되 이상이 없으면 보여주지 말자" — 금액이 다른 줄만, 다른 게 있을 때만 띄운다
+  const isDiff = ([, a, , b]) => a != null && b != null && a !== b
   const row = ([la, a, lb, b]) => {
     const ok = a != null && b != null && a === b
     const mark = b == null ? '<i class="vc-need">영수증 후</i>' : ok ? '<i class="vc-ok">✓ 같아요</i>' : `<i class="vc-diff">${b - a > 0 ? '+' : ''}${(b - (a || 0)).toLocaleString()}원</i>`
@@ -490,7 +492,7 @@ function compareAside(r, kind) {
   return `<aside class="vg-aside"><div class="vc-card">
     <div class="vc-title">${settled ? '📋 내가 쓴 출장정산서' : '📋 내가 쓴 출장신청서'}</div>
     ${form}
-    <div class="vx-check"><div class="vx-check-title">크로스체크</div>${checks.map(row).join('')}${status}</div>
+    ${checks.some(isDiff) ? `<div class="vx-check"><div class="vx-check-title">크로스체크</div>${checks.filter(isDiff).map(row).join('')}${status}</div>` : ''}
   </div></aside>`
 }
 
@@ -813,13 +815,18 @@ const VG_SCREEN = {
       <div class="final-check-text"><strong>${escapeHtml(title)}${optional ? ' <small>(필요할 때만)</small>' : ''}</strong>${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</div></label>`
     // 2026-09-30 지석초이: 전표 / 증빙(마지막 확인 칸은 지석초이 요청으로 뺌) — 큰 칸으로 먼저 나누고 그 안에 세부 서류. '다시 첨부'는 2회 정산의 ② 전표에서만.
     const again = vg.task === 'final' && (vg.resumed || vgModel().bankPay?.status === 'advance')
-    const evName = { 'card-receipt': '법인카드 매출전표', 'bank-now': '세금계산서 또는 현금영수증', personal: '현금영수증 또는 참가 영수증', 'cash-receipt': '현금영수증', other: '학회 수료 영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
+    // 2026-10-01 지석초이: 고른 영수증 이름만 — 세금계산서를 골랐으면 '현금영수증' 같은 말은 쓰지 않는다. 카드6 답이 가장 정확하다
+    const evName = vgReceiptName() || { 'card-receipt': '법인카드 매출전표', 'bank-now': '세금계산서 또는 현금영수증', personal: '현금영수증 또는 참가 영수증', 'cash-receipt': '현금영수증', other: '학회 수료 영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
+    const rt = vg.trip.feeStatus === 'paid' ? vg.trip.receiptType : null
     const name = { notice: '교육·출장 공문', feeEvidence: evName ? `등록비 영수증 (${evName})` : '등록비 영수증' }
     const sub = {
       application: again ? '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : vg.task === 'advance' ? '등록비 금액이 전표와 같은지 · 결재·합의 확인' : '결재·인사지원팀 합의 확인',
       notice: again ? '① 때 냈어도 다시 첨부' : vg.task === 'advance' ? '등록비·입금 계좌 확인' : '신청서 금액 기준이 공문과 같은지',
       bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서와 달라진 금액 · 앞에서 만든 출장정산서를 인쇄해 첨부',
-      feeEvidence: vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인'
+      feeEvidence: rt === 'card-receipt' ? '법인카드로 결제한 매출전표 · 기관·금액 확인'
+        : rt === 'tax-invoice' || rt === 'cash-receipt' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인'
+        : rt === 'transfer' ? '계좌이체내역서와 이수증 · 기관·금액 확인'
+        : vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인'
         : vg.evType === 'personal' ? '병원 사업자번호(608-82-14527) 현금영수증이 가장 좋고, 없으면 납부가 확인되는 참가 영수증 · 기관·금액 확인'
         : vg.evType === 'bank-now' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인' : '기관·금액이 맞는지 확인', airEvidence: '법인카드 결제 왕복 전표',
       shuttleEvidence: '법인카드 결제 전표', mealEvidence: '법인카드 결제 전표' }
@@ -838,6 +845,7 @@ const VG_SCREEN = {
       : `<div class="vd-status is-left"><span>📋</span><div><b>남은 일 ${left.length}가지</b><small>아래 체크리스트를 채우면 제출 준비가 끝나요</small></div></div>`
     return `<div class="vg-print">${q('서류 챙기고<br>제출해요')}
       ${status}
+      ${vgPickedList()}
       ${extra.length ? `<ul class="vd-left">${extra.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
       <div class="vd-checks">${checks}</div>
       ${adv && vg.trip.isJeju ? '<p class="vg-hint">✈️ 항공권·셔틀을 아직 예매 전이면 신청서에 공란 + ‘사후 실비 정산’이라고 적어 두세요.</p>' : ''}
@@ -846,6 +854,27 @@ const VG_SCREEN = {
       <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요 · 이 기기에 저장돼 있어요.</p></div>
       `
   },
+}
+
+// 카드6에서 고른 등록비 증빙 이름(고른 것만)
+function vgReceiptName() {
+  const t = vg.trip
+  if (!vgFee() || t.feeStatus !== 'paid') return ''
+  return { 'card-receipt': '법인카드 매출전표', 'tax-invoice': '세금계산서', 'cash-receipt': '현금영수증', transfer: '계좌이체내역서 + 이수증' }[t.receiptType] || ''
+}
+// 마지막 화면: 내가 고른 내용(2026-10-01 지석초이 "마지막 화면에서는 내가 선택한 것 리스트")
+function vgPickedList() {
+  const t = vg.trip, rows = []
+  if (vg.purpose) rows.push(['비용 목적', vg.purpose === 'trip' ? '회의·업무 출장' : `교육·학회 참석${vg.job ? ` · ${{ nurse: '간호사', tech: '의료기사', etc: '그 외 직원' }[vg.job] || ''}` : ''}`])
+  if (vgFee() && t.feeStatus === 'paid') {
+    const how = t.receiptType === 'card-receipt' ? '법인카드로 결제' : vg.evType === 'personal' || vg.evType === 'cash-receipt' || vg.evType === 'other' ? '내 돈으로 이체' : '병원 계좌로 이체'
+    rows.push(['등록비', `${vgFee().amount.toLocaleString()}원 · ${how} · ${vgReceiptName()}`])
+  }
+  if (t.receiptType === 'tax-invoice' && vg.task) rows.push(['세금계산서', vg.task === 'final' ? '입금하면 바로 나와요' : '교육이 끝난 뒤에 나와요'])
+  if (vg.task) rows.push(['정산 방법', vg.task === 'final' ? (vg.resumed ? '② 최종 정산' : '한 번에 정산 · 전표 1장') : `두 번 정산 · ① ${vgWord().what} 먼저 받기`])
+  if (vg.task === 'final') rows.push(['금액', vg.amtChanged === 'yes' ? '신청서와 달라요 · 출장정산서 첨부' : '신청서 금액 그대로'])
+  if (!rows.length) return ''
+  return `<div class="vd-picked"><div class="vd-picked-title">내가 고른 내용</div>${rows.map(([k, v]) => `<div class="vd-picked-row"><span>${k}</span><b>${escapeHtml(v)}</b></div>`).join('')}</div>`
 }
 
 function vgLeft(r, extraOnly) {
@@ -865,7 +894,10 @@ function focusFormRows(kinds, side) {
   const form = document.querySelector('#card-12 .vx-form')
   if (!form) return
   form.classList.toggle('has-focus', kinds.length > 0)
-  form.querySelectorAll('[data-kind]').forEach(tr => tr.classList.toggle('is-focus', kinds.includes(tr.dataset.kind)))
+  // 2026-10-01 지석초이: 최종 정산 차변(전체 비용)은 합계 줄만 칠한다 — 항목 행까지 칠하면 대변 줄과 구분이 안 된다
+  // (① 선지급 차변 가지급금은 합계가 아니라 먼저 받는 항목이라 그 행을 칠한다)
+  const totalOnly = side === 'D' && !!form.querySelector('.tf-total-row.hl-main')
+  form.querySelectorAll('[data-kind]').forEach(tr => tr.classList.toggle('is-focus', !totalOnly && kinds.includes(tr.dataset.kind)))
   form.querySelectorAll('.tf-total-row').forEach(t => t.classList.toggle('is-focus', side === 'D' && kinds.length > 0))
 }
 

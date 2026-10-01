@@ -114,7 +114,8 @@ for (const width of [1280, 390]) {
   }
   check(`[${width}] ① 제목이 가지급금 처리임을 밝힌다`, (await text(p)).includes('가지급금으로 처리해요'))
   check(`[${width}] 2회 정산 단계 표시(① 지금 선지급 → ② 영수증 발급 후)`, /지금 · 등록비 먼저 받기.*영수증 발급 후 · 최종 정산/.test(await text(p)) && (await text(p)).includes('왜 두 번 정산하나요?'))
-  check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본 + 크로스체크`, (await p.locator('.vx-form .tf-box').count()) === 1 && /신청서 등록비.*300,000원.*✓ 같아요/.test(await p.evaluate(() => document.querySelector('.vx-check').innerText.replace(/\s+/g, ' '))))
+  // 2026-10-01 지석초이: 크로스체크는 금액이 다를 때만 보인다
+  check(`[${width}] 오른쪽에 내가 쓴 출장신청서 원본, 금액이 같으면 크로스체크 숨김`, (await p.locator('.vx-form .tf-box').count()) === 1 && (await p.locator('.vx-check').count()) === 0)
   await shot(p, `${width}-voucher-adv`)
   await next(p)
   check(`[${width}] ② 영수증 발급 후 최종 정산 전표 미리 보기(대제목)`, (await screen(p)) === 'voucher2' && (await text(p)).includes('영수증이 발급되면 이 전표를 써요'))
@@ -153,9 +154,8 @@ for (const width of [1280, 390]) {
   check(`[${width}] 전표 현금 줄을 가리키면 신청서의 일당·숙박·교통비 행이 칠해진다`, await p.evaluate(() => [...document.querySelectorAll('.vx-form tr.is-focus')].map(t => t.dataset.kind).filter((v, i, a) => a.indexOf(v) === i).sort().join(',')) === 'daily,lodging,transport')
   check(`[${width}] 대변 현금 줄을 가리켜도 출장비 합계는 칠하지 않는다`, await p.evaluate(() => !document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && document.querySelector('.vx-form').classList.contains('has-focus')))
   await p.hover('.vt-row >> nth=0'); await p.waitForTimeout(150)
-  check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계까지 칠한다`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus')))
-  const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
-  check(`[${width}] 신청서 크로스체크: 합계가 같으면 ✓ 같아요`, cmp.includes('신청서와 전표 금액이 같아요'), cmp)
+  check(`[${width}] 차변(전체 비용) 줄을 가리키면 합계 줄만 칠한다(항목 행은 안 칠함)`, await p.evaluate(() => document.querySelector('.vx-form .tf-total-row').classList.contains('is-focus') && !document.querySelector('.vx-form tr[data-kind].is-focus')))
+  check(`[${width}] 신청서 크로스체크: 합계가 같으면 숨김`, (await p.locator('.vx-check').count()) === 0)
   check(`[${width}] ② 최종 정산 친근한 제목`, (await text(p)).includes('② 최종 정산은 이렇게 해볼까요?'))
   if (width >= 1280) {
     const pos = await p.evaluate(() => [document.querySelector('.vg-aside').getBoundingClientRect().left, document.querySelector('.vt-ledger').getBoundingClientRect().right, document.documentElement.scrollWidth, innerWidth])
@@ -298,6 +298,13 @@ for (const width of [1280, 390]) {
   check('다시 시작하면 지난번 정산 방법이 골라져 있지 않다', (await screen(p)) === 'task' && (await p.locator('#vg-screen .choice-btn.is-on').count()) === 0 && !(await p.evaluate(() => vg.task)))
   await tap(p, '입금하면 바로 나와요')
   check('세금계산서 바로 → 한 장 전표(보통예금, 가지급금 없음)', (await screen(p)) === 'voucher' && (await lines(p)).some(l => l[0] === '보통예금') && !(await lines(p)).some(l => l[0] === '가지급금-기타'))
+  await next(p)
+  { const td = await text(p)
+    check('마지막 화면: 내가 고른 내용 목록 + 등록비 영수증은 고른 이름(세금계산서)만, 현금영수증 말 없음',
+      (await screen(p)) === 'done' && td.includes('내가 고른 내용') && /등록비 300,000원 · 병원 계좌로 이체 · 세금계산서/.test(td) && td.includes('입금하면 바로 나와요') && td.includes('한 번에 정산')
+      && td.includes('등록비 영수증 (세금계산서)') && !td.includes('현금영수증'), td.slice(0, 300))
+    await shot(p, 'done-tax') }
+  await p.evaluate(() => vgJump('task')); await p.waitForTimeout(300)
   await shot(p, 'task-tax')
   await ctx.close()
 }
@@ -378,7 +385,7 @@ for (const width of [1280, 390]) {
   check('제주: 가지급금 400,000 + 카드 145,000·15,900 + 현금 105,000 (p.7 구조)',
     JSON.stringify(ln.map(l => [l[0], l[3]])) === JSON.stringify([['여비교통비-국내출장비', 665900], ['가지급금-기타', 400000], ['미지급비용-법인개인카드', 145000], ['미지급비용-법인개인카드', 15900], ['현금', 105000]]), JSON.stringify(ln))
   const cmp = await p.evaluate(() => document.querySelector('.vc-status')?.innerText || '')
-  check('제주: 신청서 공란(항공·셔틀) → +160,900원 달라요 · 출장정산서', cmp.includes('+160,900원 달라요') && cmp.includes('출장정산서'), cmp)
+  check('제주: 신청서 공란(항공·셔틀) → +160,900원 달라요 · 출장정산서, 다른 줄만 보인다', cmp.includes('+160,900원 달라요') && cmp.includes('출장정산서') && (await p.locator('.vx-check .vx-row').count()) === 1, cmp)
   await shot(p, 'jeju-voucher')
   await ctx.close()
 }

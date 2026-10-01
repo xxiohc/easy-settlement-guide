@@ -3654,3 +3654,9 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .c6-verdict.is-late { background: #fff4e5; color: #9a3412; }
 .pc-change { margin-top: 14px; }
 .pc-change .vg-link { margin-top: 0; }
+/* 마지막 화면: 내가 고른 내용(2026-10-01 지석초이) */
+.vd-picked { margin: 14px 0 6px; padding: 14px 16px; border-radius: 14px; background: var(--surface); }
+.vd-picked-title { font-size: 13px; font-weight: 700; color: var(--subtle); margin-bottom: 6px; }
+.vd-picked-row { display: flex; gap: 12px; padding: 5px 0; font-size: 14.5px; }
+.vd-picked-row span { flex: 0 0 76px; color: var(--muted); }
+.vd-picked-row b { flex: 1; color: var(--ink); font-weight: 600; }
