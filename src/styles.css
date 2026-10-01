@@ -3594,3 +3594,13 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .sv-orig [data-chg] > th, .sv-orig [data-chg] > td { background: #fffbe0 !important; }
 .sf-old { margin-left: 6px; color: var(--muted); font-weight: 400; font-size: .9em; }
 #card-12.has-aside .vx-form [data-chg].hl-dim { opacity: 1; }
+
+/* 출장정산서 확인 화면은 넓게·크게 */
+@media (min-width: 1100px) {
+  #card-12.is-wide .card-body, #card-12.is-wide .card-footer { max-width: 1320px; }
+}
+#card-12 .sv-grid .tf-box { font-size: 14.5px; }
+#card-12 .sv-grid .tf-title { font-size: 20px; padding: 16px 0 12px; }
+#card-12 .sv-grid .tf-th, #card-12 .sv-grid .tf-td { padding: 10px 12px; font-size: 14.5px; }
+#card-12 .sv-grid .tf-total-amount { font-size: 19px; }
+#card-12 .sv-label { font-size: 16px; }
