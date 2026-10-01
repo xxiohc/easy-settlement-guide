@@ -866,27 +866,35 @@ const VG_SCREEN = {
       ${status}
       ${vgPickedList()}
       ${extra.length ? `<ul class="vd-left">${extra.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
-      ${adv ? `<div class="vd-stage-head"><span class="vd-next-num">1</span><b>가지급금 전표</b><small>지금 제출</small></div>` : ''}
-      <div class="vd-checks">${checks}</div>
+      ${adv ? vgCompareDocsHtml(r, name, sub, item) : `<div class="vd-checks">${checks}</div>`}
       ${adv && vg.trip.isJeju ? '<p class="vg-hint">✈️ 항공권·셔틀을 아직 예매 전이면 신청서에 공란 + ‘사후 실비 정산’이라고 적어 두세요.</p>' : ''}
-      ${adv ? vgFinalDocsHtml(name, sub) : ''}
       ${r.usesCashOrBank ? `<p class="vg-warn">⏰ 현금·보통예금 지급 전표는 <b>지급일 1~2일 전</b>까지 경영지원팀에 내요</p>` : ''}
       <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요 · 이 기기에 저장돼 있어요.</p></div>
       `
   },
 }
 
-// 두 번 정산의 마지막 화면: ② 최종 정산 전표 때 낼 것(2026-10-01 지석초이 "① 가지급금 전표와 ② 최종 정산 전표 준비물을 나눠서")
-// ② 전표 + 출장신청서·공문(다시 첨부) + 등록비 증빙(적격증빙, 없으면 기관 영수증·이수증 / 본인 이체면 계좌이체내역서도) + 항공·셔틀 등
-function vgFinalDocsHtml(name, sub) {
-  const r2 = vgFinalPreview()
+// 두 번 정산의 마지막 화면: ① 가지급금 전표(왼쪽, 지금 체크) | ② 최종 정산 전표(오른쪽) 준비물을 같은 줄에 나란히(2026-10-02 지석초이
+// "공통으로 내는 것과 ②에서 추가되는 증빙을 바로 알게"). 같은 서류는 같은 줄, ②에서만 내는 서류는 '+ 추가'로 칠한다
+function vgCompareDocsHtml(r, name, sub, item) {
   const W = vgWord()
-  const sub2 = { ...sub, application: '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인', notice: '① 때 냈어도 다시 첨부' }
-  const row = (title, s) => `<div class="vd-ro-item"><i>•</i><div><strong>${escapeHtml(title)}</strong>${s ? `<span>${escapeHtml(s)}</span>` : ''}</div></div>`
-  const rows = [row('전표', `최종 정산 전표 · 가지급금 정리 줄에 ① 전표번호`),
-    ...r2.docs.map(d => row(name[d.key] || d.title, sub2[d.key] || d.check))]
-  return `<div class="vd-stage-head is-later"><span class="vd-next-num">2</span><b>최종 정산 전표</b><small>${W.when} · 첫 화면의 ‘${W.btn}’에서 이어서 써요</small></div>
-    <div class="vd-ro">${rows.join('')}</div>`
+  const r2 = vgFinalPreview()
+  const sub2 = { ...sub, application: '① 때 냈어도 다시 첨부', notice: '① 때 냈어도 다시 첨부' }
+  const left = [{ key: 'voucher', title: '전표', sub: `가지급금 전표 · ${Voucher.won(r.sumD)}` }, ...r.docs.map(d => ({ key: d.key, title: name[d.key] || d.title, sub: sub[d.key] || d.check, optional: d.optional }))]
+  const right = [{ key: 'voucher', title: '전표', sub: '최종 정산 전표 · 가지급금 정리 줄에 ① 전표번호' }, ...r2.docs.map(d => ({ key: d.key, title: name[d.key] || d.title, sub: sub2[d.key] || d.check, optional: d.optional }))]
+  const keys = [...new Set([...left.map(d => d.key), ...right.map(d => d.key)])]
+  const ro = (d, added) => `<div class="vd-ro-cell${added ? ' is-added' : ''}">${added ? '<em>+ 추가</em>' : ''}<strong>${escapeHtml(d.title)}${d.optional ? ' <small>(필요할 때만)</small>' : ''}</strong><span>${escapeHtml(d.sub || '')}</span></div>`
+  const rows = keys.map(k => {
+    const L = left.find(d => d.key === k), R = right.find(d => d.key === k)
+    const l = L ? item(k === 'voucher' ? 'doc-voucher' : `doc-${k}`, L.title, L.sub, L.optional, !L.optional) : '<div class="vd-empty"></div>'
+    const rr = R ? ro(R, !L) : '<div class="vd-empty"></div>'
+    return l + rr
+  }).join('')
+  return `<div class="vd-cmp">
+    <div class="vd-cmp-head"><span class="vd-next-num">1</span><b>가지급금 전표</b><small>지금 제출</small></div>
+    <div class="vd-cmp-head is-later"><span class="vd-next-num">2</span><b>최종 정산 전표</b><small>${W.s2.replace(' 최종 출장비 정산', '')}</small></div>
+    ${rows}
+  </div>`
 }
 
 // 카드6에서 고른 등록비 증빙 이름(고른 것만)

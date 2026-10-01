@@ -167,8 +167,9 @@ test('⑪·⑫ 다른 건 저장이 섞이지 않게 건 열쇠가 다르고, �
 })
 
 test('적요 초안', () => {
-  assert.equal(V.memoDraft(base({ task: 'advance' })), '의료기관 회계기준 연수 등록비 선지급 / 교육일 10월 12일')
-  assert.equal(V.memoDraft(base({ task: 'final', paid: { bank: true }, bankPay: { status: 'advance' } })), '의료기관 회계기준 연수 최종 정산 / 선지급 등록비 포함')
+  // 2026-10-02 지석초이: 적요는 교육명만(꼬리말 없음) — 규칙 변경
+  assert.equal(V.memoDraft(base({ task: 'advance' })), '의료기관 회계기준 연수')
+  assert.equal(V.memoDraft(base({ task: 'final', paid: { bank: true }, bankPay: { status: 'advance' } })), '의료기관 회계기준 연수')
 })
 
 // ── 2026-09-30 지석초이: 일당·숙박·교통비(여비)도 먼저 받는 경우 ──
@@ -178,7 +179,7 @@ test('여비만 선지급 — 차 가지급금-기타 / 대 현금(여비 합계
   assert.deepEqual(r.lines.map(l => [l.name, l.side, l.amount]), [['가지급금-기타', 'D', 289600], ['현금', 'C', 289600]])
   assert.ok(r.ready)
   assert.ok(!r.docs.some(d => d.key === 'bankCopy'), '여비만이면 통장 사본(받는 기관) 불필요')
-  assert.equal(V.memoDraft(base({ task: 'advance', advKinds: ['travel'] })), '의료기관 회계기준 연수 여비 선지급 / 교육일 10월 12일')
+  assert.equal(V.memoDraft(base({ task: 'advance', advKinds: ['travel'] })), '의료기관 회계기준 연수')
 })
 test('등록비·여비 함께 선지급 — 차 가지급금 589,600 / 대 보통예금 300,000 + 현금 289,600', () => {
   const r = V.buildAdvance(base({ task: 'advance', advKinds: ['fee', 'travel'], feeEvidence: 'after' }), R)
