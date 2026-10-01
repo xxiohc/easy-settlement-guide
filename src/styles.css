@@ -3511,3 +3511,33 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 #card-11 .card-actions { margin-top: 20px; }
 #card-11 .card-actions .action-btn-primary { background: #fff; color: var(--subtle); border: 1px solid var(--line); box-shadow: none; font-weight: 600; }
 #card-11 .card-actions .action-btn-primary:hover { background: var(--surface); color: var(--ink); }
+
+/* 앞 답 자동 적용 알림 */
+.va-box { margin-top: 20px; padding: 18px 20px; border-radius: 16px; background: #fffbe6; border: 1.5px solid #fde68a; }
+.va-title { font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 10px; }
+.va-row { display: flex; gap: 12px; align-items: flex-start; padding: 6px 0; }
+.va-ico { font-size: 20px; line-height: 1.4; }
+.va-k { display: block; font-size: 13px; color: var(--muted); }
+.va-row p { margin: 2px 0 0; font-size: 15px; line-height: 1.6; color: var(--ink); word-break: keep-all; }
+.va-box small { display: block; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.va-link { margin: 0; font-size: 13px; }
+/* 위아래 간격(2026-10-01 지석초이 '빼곡하지 않게') */
+#card-12 .card-question { margin-bottom: 10px; }
+#card-12 .card-desc { margin-bottom: 4px; }
+#card-12 .vs-bar { margin-bottom: 14px; }
+#card-12 .ts-why { margin: 14px 0 26px; }
+#card-12 .vt-ledger { margin-top: 26px; }
+#card-12 .vt-total { margin-top: 12px; }
+#card-12 .vg-aside { margin-top: 28px; }
+#card-12 .vt-memo-row { margin-top: 24px; }
+#card-12 .vg-link { margin-top: 20px; display: inline-block; }
+#card-12 .vg-why { margin-top: 18px; }
+#card-12 .choice-list { margin-top: 24px; gap: 14px; }
+#card-12 .vg-chip { margin-bottom: 26px; }
+#card-12 .pc-sep { margin-top: 22px; }
+#card-12 .pc-list + .ts-why { margin-top: 30px; }
+#card-12 .vd-status { margin-top: 18px; }
+#card-12 .vd-group { margin-top: 28px; }
+#card-12 .vd-next, #card-12 .vg-warn { margin-top: 24px; }
+#card-12 .vg-actions { margin-top: 24px; }
+#card-12 .vx-check { margin-top: 20px; padding-top: 16px; }
