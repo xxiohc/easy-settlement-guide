@@ -438,6 +438,20 @@ function stageBar(stage) {
     ${stage === 1 ? twoStepWhy() : `<p class="vs-note">${W.when} 이 전표로 마무리해요. 먼저 받은 ${W.what}(가지급금)를 여기서 정리해요.</p>`}`
 }
 
+// 묻지 않고 앞 답을 그대로 쓴 것 — 사용자가 잊었을 수 있어 전표 위에 크게 알린다(2026-10-01 지석초이)
+function autoApplied(stage) {
+  const out = []
+  const fee = vgFee()
+  if (fee && vgFeePaidByCardBefore() && stage !== 1) out.push(['💳', '등록비', `앞 단계에서 <b>법인카드로 결제</b>했다고 하셔서 등록비 ${fee.amount.toLocaleString()}원은 <b>법인카드</b>로 처리했어요`])
+  if (vg.resumed && Voucher.expenseAccountKey(vg.purpose, vg.job)) {
+    const p = vg.purpose === 'trip' ? '회의·업무 출장' : `교육·학회 참석 · ${{ nurse: '간호사', tech: '의료기사', etc: '그 외 직원' }[vg.job] || ''}`
+    out.push(['📌', '비용 목적', `①을 쓸 때 고른 <b>${p}</b>로 처리했어요`])
+  }
+  if (!out.length) return ''
+  return `<div class="va-box"><div class="va-title">앞에서 답한 내용으로 처리했어요</div>${out.map(([i, k, t]) => `<div class="va-row"><span class="va-ico">${i}</span><div><b class="va-k">${k}</b><p>${t}</p></div></div>`).join('')}
+    ${fee && vgFeePaidByCardBefore() && stage !== 1 && vg.fromFlow ? `<small>다르면 <button type="button" class="vg-link va-link" onclick="goToCard(6)">등록비 납부 방법 바꾸러 가기</button></small>` : ''}</div>`
+}
+
 function voucherView(r, stage, memo, preview) {
   const D = r.lines.filter(l => l.side === 'D'), C = r.lines.filter(l => l.side === 'C')
   // 2026-09-30 지석초이: 이 화면에서 복사해 시스템에 붙일 환경이 아니다 — 보기 전용, 계정명·금액을 한 줄에 맞춰 정렬
@@ -464,6 +478,7 @@ function voucherView(r, stage, memo, preview) {
     : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
   return `<div class="vg-wrap">${stageBar(stage)}
       ${q(title)}
+      ${preview ? '' : autoApplied(stage)}
       <div class="vt-ledger">
         ${half('vt-d', '차변', '돈이 쓰인 곳', D, r.sumD)}
         ${half('vt-c', '대변', '돈이 나간 곳', C, r.sumC)}

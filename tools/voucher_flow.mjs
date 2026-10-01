@@ -156,7 +156,7 @@ for (const width of [1280, 390]) {
     check(`[${width}] 넓은 화면: 비교 패널은 전표 오른쪽, 가로 넘침 없음`, pos[0] > pos[1] || width < 1480, JSON.stringify(pos))
   }
   await shot(p, `${width}-voucher-final`)
-  await p.click('#vg-screen .vg-link'); await p.waitForTimeout(250)
+  await p.locator('#vg-screen .vg-link', { hasText: '금액이 달라요' }).click(); await p.waitForTimeout(250)
   check(`[${width}] '금액이 달라요' → 고치기 화면`, (await screen(p)) === 'amounts')
   await p.fill('[data-text="advanceRef"]', '20261101-0001-001'); await p.dispatchEvent('[data-text="advanceRef"]', 'change'); await p.waitForTimeout(200)
   await next(p)
@@ -234,6 +234,7 @@ for (const width of [1280, 390]) {
   check('카드로 낸 등록비는 선지급 대상에서 빠지고 여비만 먼저 받을 수 있다', (await text(p)).includes('여비를 먼저 받아 둘게요'))
   await tap(p, '다녀와서 한 번에 정산받을게요')
   check('카드 결제면 영수증 종류도 묻지 않고 바로 전표', (await screen(p)) === 'voucher')
+  check('건너뛴 답은 전표 위에 크게 알린다(법인카드로 결제)', (await p.locator('.va-box').count()) === 1 && (await text(p)).includes('법인카드로 결제했다고 하셔서'))
   const ln = await lines(p)
   check('최종: 여비교통비-국내출장비 / 법인카드 300,000 + 현금, 보통예금 없음',
     ln[0][0] === '여비교통비-국내출장비' && ln.some(([n, , s, a]) => n === '미지급비용-법인개인카드' && s === 'C' && a === 300000) && !ln.some(([n]) => n === '보통예금'), JSON.stringify(ln))
