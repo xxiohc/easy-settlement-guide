@@ -296,6 +296,7 @@ function renderVoucher() {
   vgNotice = ''
   body.innerHTML = notice + html
   document.getElementById('card-12')?.classList.toggle('has-aside', vg.screen === 'voucher' || vg.screen === 'voucher2')
+  document.getElementById('card-12')?.classList.toggle('is-wide', vg.screen === 'settleView')
   const next = document.getElementById('vg-next')
   const isChoice = VG_CHOICE_SCREENS.includes(vg.screen)
   next.textContent = { settle: '출장정산서 완성하기', settleView: '이 정산서로 회계처리하기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
@@ -515,6 +516,17 @@ function settleDoc(editable) {
     <table class="st-table"><thead><tr><th>항목</th><th>신청 금액</th><th>정산 금액</th></tr></thead><tbody>${rows}${ex}</tbody>
     <tfoot><tr><th>합계</th><td class="st-plan">${won(plan)}</td><td class="st-now"><b>${won(now)}</b>${diff ? `<span class="st-diff">${diff > 0 ? '+' : ''}${diff.toLocaleString()}원</span>` : ''}</td></tr></tfoot></table></div>`
 }
+// 출장정산서만 새 창에 담아 인쇄한다 — 화면 인쇄는 고정 머리글이 제목을 가렸다(2026-10-01 지석초이)
+function printSettle() {
+  const w = window.open('', '_blank')
+  if (!w) { alert('팝업이 막혀 있어요. 팝업을 허용한 뒤 다시 눌러 주세요.'); return }
+  const css = new URL('./src/styles.css', location.href).href
+  w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>출장정산서 — ${escapeHtml(vg.trip.title || '')}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css"><link rel="stylesheet" href="${css}">
+    <style>body{background:#fff;padding:24px;font-family:Pretendard,sans-serif}.print-wrap{max-width:760px;margin:0 auto}.print-wrap .tf-box{font-size:14px}.print-wrap .tf-title{font-size:22px;padding:18px 0 14px}[data-chg]>th,[data-chg]>td,.tf-total-row[data-chg]{background:#fff08a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}@media print{body{padding:0}}</style></head>
+    <body><div class="print-wrap vx-form">${buildSettleForm('settle')}</div><script>window.onload=()=>{setTimeout(()=>{window.print()},300)}<\/script></body></html>`)
+  w.document.close()
+}
 function vgAddExtra(label) {
   vg.extras = [...(vg.extras || []), { label: label || '', amount: null, pay: 'cash' }]
   vgSave(); renderVoucher()
@@ -676,7 +688,7 @@ const VG_SCREEN = {
     return q('출장정산서가<br>완성됐어요', '왼쪽 신청서와 비교해 보세요. 형광펜 칸이 바뀌었거나 추가된 금액이에요') +
       `<div class="sv-grid"><div class="sv-col"><div class="sv-label">출장신청서 (처음)</div><div class="vx-form sv-orig">${buildSettleForm('orig')}</div></div>
         <div class="sv-col"><div class="sv-label sv-label-new">출장정산서 (최종)</div><div class="vx-form sv-new vg-print">${buildSettleForm('settle')}</div></div></div>
-      <div class="vg-actions"><button type="button" class="vg-btn" onclick="vgJump('settle')">✏️ 금액 다시 고치기</button><button type="button" class="vg-btn" onclick="window.print()">🖨 출장정산서 인쇄</button></div>`
+      <div class="vg-actions"><button type="button" class="vg-btn" onclick="vgJump('settle')">✏️ 금액 다시 고치기</button><button type="button" class="vg-btn" onclick="printSettle()">🖨 출장정산서 인쇄</button></div>`
   },
 
   changed() {
@@ -744,7 +756,7 @@ const VG_SCREEN = {
     const sub = {
       application: again ? '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : vg.task === 'advance' ? '등록비 금액이 전표와 같은지 · 결재·합의 확인' : '결재·인사지원팀 합의 확인',
       notice: again ? '① 때 냈어도 다시 첨부' : vg.task === 'advance' ? '등록비·입금 계좌 확인' : '신청서 금액 기준이 공문과 같은지',
-      bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서 금액과 달라졌어요 · S-portal 양식함',
+      bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서와 달라진 금액 · 앞에서 만든 출장정산서를 인쇄해 첨부',
       feeEvidence: vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인' : '기관·금액이 맞는지 확인', airEvidence: '법인카드 결제 왕복 전표',
       shuttleEvidence: '법인카드 결제 전표', mealEvidence: '법인카드 결제 전표' }
     const nLines = r.lines.length
@@ -768,10 +780,7 @@ const VG_SCREEN = {
       ${adv ? `<div class="vd-next"><span class="vd-next-num">2</span><div><b>${vgWord().when} 최종 정산</b><small>첫 화면의 ‘${vgWord().btn}’에서 이어서 써요 · 그때 챙길 서류: ${vgFinalPreview().docs.map(d => escapeHtml(name[d.key] || d.title)).join(', ')}</small></div></div>` : ''}
       ${r.usesCashOrBank ? `<p class="vg-warn">⏰ 현금·보통예금 지급 전표는 <b>지급일 1~2일 전</b>까지 경영지원팀에 내요</p>` : ''}
       <p class="vg-small">안내가 끝난 것이지, 지급·정산이 끝난 건 아니에요 · 이 기기에 저장돼 있어요.</p></div>
-      <div class="vg-actions">
-        <button type="button" class="vg-btn" onclick="window.print()">🖨 인쇄</button>
-        <button type="button" class="vg-btn" onclick="if (confirm('저장된 전표 안내를 지울까요?')) { vgDelete(); goToCard(2) }">🗑 삭제</button>
-      </div>`
+      `
   },
 }
 
