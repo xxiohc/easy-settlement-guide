@@ -88,9 +88,10 @@ for (const width of [1280, 390]) {
   await shot(p, `${width}-purpose`)
   await tap(p, '교육·학회 참석'); await tap(p, '간호사')
   check(`[${width}] 목적·직종 다음이 정산 방법`, (await screen(p)) === 'task')
+  check(`[${width}] 앞에서 계좌로 보낸다고 했으면 '등록비만 먼저'를 미리 골라 두고 이유를 알린다`, (await text(p)).includes('계좌로 보낸다고 하셨어요') && (await p.locator('#vg-screen .choice-btn.is-on').innerText()).includes('등록비만 먼저'))
   check(`[${width}] 선택 화면은 다음 버튼 없이 고르면 넘어간다`, await p.isHidden('#vg-next'))
   await shot(p, `${width}-task`)
-  { const tt = await text(p); check(`[${width}] 처음에 정산 방법 3가지(한 번에 / 등록비만 먼저 / 모두 먼저)`, tt.includes('다녀와서 한 번에 정산받을게요') && tt.includes('등록비만 먼저 회사 돈으로 보낼게요') && tt.includes('모든 비용을 먼저 받아 둘게요') && tt.includes('전표를 한 번 작성하면 끝나요') && tt.split('번거롭지만 전표를 두 번 작성해야 해요').length === 2 && tt.includes('영수증이 나중에 나오는') && tt.includes('추천') && tt.includes('왜 두 번 정산하나요?'), tt.slice(0, 200)) }
+  { const tt = await text(p); check(`[${width}] 처음에 정산 방법 3가지(한 번에 / 등록비만 먼저 / 모두 먼저), 앞 답이 '계좌'면 추천 배지 대신 미리 선택`, tt.includes('다녀와서 한 번에 정산받을게요') && tt.includes('등록비만 먼저 회사 돈으로 보낼게요') && tt.includes('모든 비용을 먼저 받아 둘게요') && tt.includes('전표를 한 번 작성하면 끝나요') && tt.split('번거롭지만 전표를 두 번 작성해야 해요').length === 2 && tt.includes('영수증이 나중에 나오는') && !tt.includes('추천') && tt.includes('왜 두 번 정산하나요?'), tt.slice(0, 200)) }
   await tap(p, '등록비만 먼저 회사 돈으로 보낼게요')
   check(`[${width}] 등록비만 고르면 영수증 시점 질문`, (await screen(p)) === 'advEv')
   await shot(p, `${width}-advEv`)
@@ -270,6 +271,7 @@ for (const width of [1280, 390]) {
   await toCard11(p, { feeMode: 'card' })
   await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
   await tap(p, '회의·업무 출장')
+  check('앞에서 법인카드라고 했으면 한 번에 정산을 미리 골라 두고 이유를 알린다', (await text(p)).includes('법인카드로 결제한다고 하셨어요') && (await p.locator('#vg-screen .choice-btn.is-on').innerText()).includes('한 번에 정산'))
   check('카드로 낸 등록비는 선지급 대상에서 빠지고 여비만 먼저 받을 수 있다', (await text(p)).includes('여비를 먼저 받아 둘게요'))
   await tap(p, '다녀와서 한 번에 정산받을게요')
   check('카드 결제면 영수증 종류도 묻지 않고 바로 전표', (await screen(p)) === 'voucher')
