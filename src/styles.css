@@ -3604,3 +3604,20 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 #card-12 .sv-grid .tf-th, #card-12 .sv-grid .tf-td { padding: 10px 12px; font-size: 14.5px; }
 #card-12 .sv-grid .tf-total-amount { font-size: 19px; }
 #card-12 .sv-label { font-size: 16px; }
+/* 계좌 이체 하위 질문 — 선택 아래 이어지는 2단계 상자로(2026-10-01 지석초이 '가시적이지 않다') */
+#c6-bank-opts { margin-top: 14px; padding: 20px 22px 22px; border-radius: 18px; background: var(--primary-soft); border: 1.5px solid #cfe3ff; }
+#c6-bank-opts .c6-step { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 16px; font-weight: 800; color: var(--ink); }
+.c6-step-num { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: #fff; font-size: 13px; font-weight: 800; }
+#c6-bank-opts .choice-btn { background: #fff; }
+#card-6 .card-body > .choice-list:has(.choice-btn.selected) > .choice-btn:not(.selected) { opacity: .55; }
+/* 전날 이동 카드: 밤 느낌(어두운 바탕) */
+.prev-day-hint { background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important; border-color: #111827 !important; color: #e5e7eb; }
+.prev-day-hint .pd-head { color: #fde68a; }
+.prev-day-hint .pd-head b { color: #fde68a; }
+.prev-day-hint .pd-day { background: rgba(255,255,255,0.08); color: #e5e7eb; }
+.prev-day-hint .pd-day.is-prev { outline-color: #fde68a; }
+.prev-day-hint .pd-date { color: #fff; }
+.prev-day-hint .pd-arrow { color: #fde68a; }
+.prev-day-hint .pd-why { color: #cbd5e1; }
+.prev-day-hint .pd-why b { color: #fff; }
+.prev-day-hint .pd-sum { color: #94a3b8; }

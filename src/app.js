@@ -3190,9 +3190,9 @@ function renderC6Aside() {
 }
 
 function resetCard6() {
-  ;['c6-card-note', 'c6-bank-opts', 'c6-pending-sub', 'c6-pend-card-note', 'c6-pend-bank-note']
+  ;['c6-card-note', 'c6-bank-opts']
     .forEach(id => document.getElementById(id)?.classList.add('hidden'))
-  ;['c6-btn-card', 'c6-btn-bank', 'c6-btn-pending', 'c6-pend-card', 'c6-pend-bank']
+  ;['c6-btn-card', 'c6-btn-bank']
     .forEach(id => document.getElementById(id)?.classList.remove('selected'))
   const q = document.getElementById('card6-q')
   // 2026-10-01 지석초이: 갈 예정(계획 단계)이니 '이미 냈나요'가 아니라 '어떻게 낼 건가요'로 묻는다
@@ -3203,30 +3203,15 @@ function resetCard6() {
 }
 
 function select6Method(method) {
-  state.feeStatus   = method === 'pending' ? 'not-paid' : 'paid'
+  state.feeStatus   = 'paid'
   state.receiptType = null
-  ;['card', 'bank', 'pending'].forEach(m =>
+  ;['card', 'bank'].forEach(m =>
     document.getElementById(`c6-btn-${m}`)?.classList.toggle('selected', m === method))
   document.getElementById('c6-card-note')?.classList.toggle('hidden', method !== 'card')
   document.getElementById('c6-bank-opts')?.classList.toggle('hidden', method !== 'bank')
-  document.getElementById('c6-pending-sub')?.classList.toggle('hidden', method !== 'pending')
-  if (method === 'pending') {
-    document.getElementById('c6-pend-card')?.classList.remove('selected')
-    document.getElementById('c6-pend-bank')?.classList.remove('selected')
-    document.getElementById('c6-pend-card-note')?.classList.add('hidden')
-    document.getElementById('c6-pend-bank-note')?.classList.add('hidden')
-  }
   updateDocStrip()
-  const panelId = method === 'card' ? 'c6-card-note' : method === 'bank' ? 'c6-bank-opts' : 'c6-pending-sub'
+  const panelId = method === 'card' ? 'c6-card-note' : 'c6-bank-opts'
   document.getElementById(panelId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  renderC6Aside()
-}
-
-function select6PendingMethod(method) {
-  document.getElementById('c6-pend-card')?.classList.toggle('selected', method === 'card')
-  document.getElementById('c6-pend-bank')?.classList.toggle('selected', method === 'bank')
-  document.getElementById('c6-pend-card-note')?.classList.toggle('hidden', method !== 'card')
-  document.getElementById('c6-pend-bank-note')?.classList.toggle('hidden', method !== 'bank')
   renderC6Aside()
 }
 
@@ -3235,12 +3220,6 @@ function select6Receipt(val) {
   state.receiptType = val
   updateDocStrip()
   setTimeout(() => state.isOnline ? goToCard(9) : goToCard(8), 150)
-}
-
-function confirmCard6NotPaid() {
-  state.feeStatus   = 'not-paid'
-  state.receiptType = null
-  state.isOnline ? goToCard(9) : goToCard(8)
 }
 
 // ── 전날 이동 판정 ───────────────────────────────────────────────────────────

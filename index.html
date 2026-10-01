@@ -402,11 +402,6 @@
                 <div><strong>계좌로 보낼게요</strong><span>현금영수증·세금계산서 중 무엇을 받을지 골라요</span></div>
                 <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
               </button>
-              <button class="choice-btn" id="c6-btn-pending" onclick="select6Method('pending')">
-                <span class="choice-icon">⏳</span>
-                <div><strong>아직 정하지 못했어요</strong><span>주최기관 안내를 보고 정할게요</span></div>
-                <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
-              </button>
             </div>
 
             <!-- 카드 결제 -->
@@ -420,7 +415,7 @@
 
             <!-- 계좌 이체: 증빙 종류 -->
             <div class="c7-sub hidden" id="c6-bank-opts">
-              <p class="c7-sub-title">어떤 증빙을 받을 건가요?</p>
+              <p class="c7-sub-title c6-step"><span class="c6-step-num">2</span>계좌로 보낼 때, 어떤 증빙을 받을 건가요?</p>
               <div class="choice-list">
                 <button class="choice-btn" onclick="select6Receipt('cash-receipt')">
                   <span class="choice-icon">🧾</span>
@@ -460,45 +455,7 @@
             </div>
 
             <!-- 아직 납부 전: 예정 방식 -->
-            <div class="c7-sub hidden" id="c6-pending-sub">
-              <p class="c7-sub-title">어느 쪽이 될 것 같나요?</p>
-              <div class="choice-list">
-                <button class="choice-btn" id="c6-pend-card" onclick="select6PendingMethod('card')">
-                  <span class="choice-icon">💳</span>
-                  <div><strong>법인카드로 낼 것 같아요</strong></div>
-                  <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
-                </button>
-                <button class="choice-btn" id="c6-pend-bank" onclick="select6PendingMethod('bank')">
-                  <span class="choice-icon">🏦</span>
-                  <div><strong>계좌로 보낼 것 같아요</strong></div>
-                  <svg class="choice-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 15l5-5-5-5" stroke="#c9cdd2" stroke-width="1.5" stroke-linecap="round"/></svg>
-                </button>
-              </div>
 
-              <div class="c7-sub hidden" id="c6-pend-card-note">
-                <div class="c7-note-box">
-                  💳 반드시 <strong>법인카드</strong>로 결제하세요<br>
-                  <span style="font-size:13px;color:#6b7684;">결제 후 카드 매출전표(영수증)를 반드시 제출하세요</span>
-                </div>
-                <button class="cta-btn" onclick="confirmCard6NotPaid()">다음으로</button>
-              </div>
-
-              <div class="c7-sub hidden" id="c6-pend-bank-note">
-                <div class="c7-note-box">
-                  <ul style="margin:0;padding-left:0;list-style:none;">
-                    <li style="margin-bottom:10px;">🧾 회사 사업자번호 <strong>608-82-14527</strong>로 <strong>현금영수증</strong>을 수취하세요</li>
-                    <li>📋 또는 <strong>세금계산서</strong>를 수취하세요<br>
-                      <span style="font-size:12px;color:#6b7684;">반드시 세금계산서 수취하는 이메일을 정확하게 작성하고, 확인하세요</span>
-                    </li>
-                  </ul>
-                </div>
-                <div class="c7-note-box" style="margin-top:8px;background:#f8f9fa;border:1px dashed #d1d5db;">
-                  <div style="font-size:12px;font-weight:600;color:#6b7684;margin-bottom:6px;">📎 위 두 가지 모두 어려울 경우 · 대체 증빙</div>
-                  <span style="color:#374151;font-size:13px;">송금증(계좌이체내역서) 및 학회 이수증, 수료증 등을 준비해주세요</span>
-                </div>
-                <button class="cta-btn" onclick="confirmCard6NotPaid()">다음으로</button>
-              </div>
-            </div>
 
             <aside class="c6-aside hidden" id="c6-aside" aria-live="polite"></aside>
           </div>
