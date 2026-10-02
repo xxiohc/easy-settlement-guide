@@ -327,7 +327,7 @@ function renderVoucher() {
   document.getElementById('card-12')?.classList.toggle('is-wide', vg.screen === 'settleView')
   const next = document.getElementById('vg-next')
   const isChoice = VG_CHOICE_SCREENS.includes(vg.screen)
-  next.textContent = { settle: '출장정산서 완성하기', settleView: '이 정산서로 회계처리하기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
+  next.textContent = { settle: '출장정산서 완성하기', settleView: '이 정산서로 회계처리하기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '① 가지급금 전표 제출 준비하기' }[vg.screen] || '다음'
   next.classList.toggle('hidden', isChoice || vg.screen === 'done')
   next.disabled = (vg.screen === 'receipts' || vg.screen === 'settle') && vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
 }
@@ -663,7 +663,10 @@ function voucherView(r, stage, memo, preview) {
   const W = vgWord()
   // 2026-10-02 지석초이: 합계가 맞으면 아무것도 띄우지 않는다 — 다를 때만
   const total = r.balanced || (preview && r.sumD == null) ? '' : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
+  const later = preview && r.lines.some(l => l.amount == null)
+    ? `<div class="vg-box vp-later">영수증 금액은 <b>영수증을 받은 뒤</b> 출장정산서를 작성하면서 채워요 — ① 제출 화면의 <b>‘최종 정산 전표 작성하기’</b>에서 이어서 해요</div>` : ''
   return `<div class="vg-wrap">${stageBar(stage)}
+      ${later}
       ${preview ? '' : autoApplied(stage)}
       <div class="vt-ledger">
         ${half('vt-d', '차변', '돈이 쓰인 곳', D, r.sumD)}
@@ -701,7 +704,8 @@ const VG_SCREEN = {
     const preBox = {
       personal: `<div class="va-title">앞에서 등록비를 <b>계좌로 보내고 ${t.receiptType === 'transfer' ? '기관 영수증·이수증' : '현금영수증'}</b>을 받는다고 하셨어요</div><p>${fee.toLocaleString()}원처럼 5만 원 이하는 보통 <b>본인이 이체하고 병원 사업자번호로 현금영수증</b>을 받아요. 그래서 <b>본인이 낸 등록비를 정산 때 현금으로 돌려받는 것</b>으로 골라 뒀어요. 병원 계좌에서 보낸다면 다른 칸을 눌러 주세요.</p>`,
       bankNow: `<div class="va-title">앞에서 등록비를 <b>계좌로 보내고 현금영수증</b>을 받는다고 하셨어요</div><p>병원 사업자번호 현금영수증은 입금하면 바로 나오는 <b>적격증빙</b>이에요. 그래서 <b>출장 전이라도 바로 정산</b>할 수 있어요. 아래에 미리 골라 뒀어요.</p>`,
-      late: `<div class="va-title">앞에서 <b>현금영수증·세금계산서를 받기 어렵다</b>고 하셨어요</div><p>기관이 따로 주는 영수증·이수증은 적격증빙이 아니고, 이수증은 교육이 끝나야 나와요. 그래서 등록비만 먼저 <b>가지급금</b>으로 보내고, 서류가 갖춰지면 마무리해요. 아래에 미리 골라 뒀어요.</p>`,
+      // 2026-10-02 지석초이: 적격증빙을 안 주는 기관은 예외 — 이수증·계좌이체내역서·거래명세서 등으로 지급 사실을 입증하면 회계상 비용으로 인정
+      late: `<div class="va-title">앞에서 <b>현금영수증·세금계산서를 받기 어렵다</b>고 하셨어요</div><p>적격증빙을 주지 않는 기관은 <b>예외</b>예요. <b>이수증·계좌이체내역서·거래명세서</b> 등으로 지급 사실을 입증하면 회계상 비용으로 인정돼요. 이런 서류는 교육이 끝나야 갖춰지니 등록비만 먼저 <b>가지급금</b>으로 지급하고, 서류가 갖춰지면 마무리해요.</p>`,
       ask: `<div class="va-title">앞에서 <b>세금계산서</b>를 받는다고 하셨어요</div><p>세금계산서는 <b>언제 나오는지</b>에 따라 달라요. 입금하면 바로 발급되면 <b>바로 정산</b>, 교육이 끝난 뒤에 발급되면 <b>두 번 정산</b>이에요. 모르면 아래 ‘어떤 영수증을 주는지 모르겠다면?’을 봐 주세요.</p>`,
     }[pre]
     const ev = (key, onclick, icon, title, sub) => choice(vgCaseKey() ? vgCaseKey() === key : pre === key, `onclick="${onclick}"`, icon, title, sub)
@@ -866,7 +870,7 @@ const VG_SCREEN = {
       bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서와 달라진 금액 · 앞에서 만든 출장정산서를 인쇄해 첨부',
       feeEvidence: rt === 'card-receipt' ? '법인카드로 결제한 매출전표 · 기관·금액 확인'
         : rt === 'tax-invoice' || rt === 'cash-receipt' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인'
-        : rt === 'transfer' ? (vgPaidSelf() ? '기관이 발급한 영수증이나 이수증 + 본인 계좌이체내역서 · 기관·금액 확인' : '적격증빙을 주지 않는 기관이 발급한 별도 영수증이나 이수증 · 기관·금액 확인')
+        : rt === 'transfer' ? (vgPaidSelf() ? '이수증·거래명세서 등 + 본인 계좌이체내역서 — 지급 사실 입증 · 기관·금액 확인' : '적격증빙을 주지 않는 기관의 예외 — 이수증·거래명세서 등으로 지급 사실 입증 · 기관·금액 확인')
         : vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인'
         : vg.evType === 'personal' ? '병원 사업자번호(608-82-14527) 현금영수증이 가장 좋고, 없으면 납부가 확인되는 참가 영수증 · 기관·금액 확인'
         : vg.evType === 'bank-now' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인'

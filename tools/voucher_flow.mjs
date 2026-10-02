@@ -89,7 +89,7 @@ for (const width of [1280, 390]) {
   await shot(p, `${width}-purpose`)
   await tap(p, '교육·학회 참석'); await tap(p, '간호사')
   check(`[${width}] 목적·직종 다음이 정산 방법`, (await screen(p)) === 'task' && (await text(p)).includes('이렇게 정산하면 돼요'))
-  check(`[${width}] 앞에서 적격증빙을 받기 어렵다고 했으면 해당 칸 하나만(등록비만 먼저 → 두 번 정산) + 이유`, (await text(p)).includes('받기 어렵다고 하셨어요') && (await p.locator('#vg-screen .choice-btn').count()) === 1 && (await p.locator('#vg-screen .choice-btn.is-on').innerText()).includes('등록비만 먼저'))
+  check(`[${width}] 앞에서 적격증빙을 받기 어렵다고 했으면 해당 칸 하나만(등록비만 먼저 → 두 번 정산) + 이유(예외·지급 사실 입증)`, (await text(p)).includes('받기 어렵다고 하셨어요') && (await text(p)).includes('이수증·계좌이체내역서·거래명세서') && (await text(p)).includes('회계상 비용으로 인정') && (await p.locator('#vg-screen .choice-btn').count()) === 1 && (await p.locator('#vg-screen .choice-btn.is-on').innerText()).includes('등록비만 먼저'))
   check(`[${width}] 선택 화면은 다음 버튼 없이 고르면 넘어간다`, await p.isHidden('#vg-next'))
   await shot(p, `${width}-task`)
   { const tt = await text(p); check(`[${width}] 두 번 정산 칸: 금액 흐름·전표 두 번 + 왜 두 번인지 + 납부 방법 바꾸기 링크, 다른 선택지 없음`,
@@ -123,6 +123,7 @@ for (const width of [1280, 390]) {
   await shot(p, `${width}-voucher-adv`)
   await next(p)
   check(`[${width}] ② 최종 정산 전표 미리 보기: 단계 표시 ②가 켜짐`, (await screen(p)) === 'voucher2' && (await p.locator('.vs-step.is-on').innerText()).includes('증빙 수취 후 최종 출장비 정산') && (await p.locator('#vg-screen h1').count()) === 0)
+  check(`[${width}] ② 미리 보기 버튼은 '① 가지급금 전표 제출 준비하기'(제출 준비하기 아님)`, (await p.textContent('#vg-next')).trim() === '① 가지급금 전표 제출 준비하기')
   const ln2p = await p.evaluate(() => vgFinalPreview().lines.map(l => [l.name, l.side, l.amount]))
   check(`[${width}] ② 미리 보기: 차 교육훈련비-간호사교육 / 대 가지급금-기타 300,000 + 현금`,
     JSON.stringify(ln2p) === JSON.stringify([['교육훈련비-간호사교육', 'D', 567200], ['가지급금-기타', 'C', 300000], ['현금', 'C', 267200]]), JSON.stringify(ln2p))
