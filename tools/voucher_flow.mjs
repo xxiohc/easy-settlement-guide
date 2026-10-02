@@ -345,6 +345,39 @@ for (const width of [1280, 390]) {
   await ctx.close()
 }
 
+// ── 1-j. 제주 실제 신청서 양식으로 출장정산서 — 항공료 총액이 '항공 김해 ↔ 제주 왕복' 한 줄로 들어간다(2026-10-02 지석초이 제보) ──
+{
+  const [ctx, p] = await page(1600)
+  await p.click('[data-choice="no-doc"]'); await p.waitForTimeout(600)
+  await p.fill('#input-title', '재무부서장협의회 정기세미나')
+  await p.fill('#input-start', '2026-06-10'); await p.fill('#input-end', '2026-06-12'); await p.dispatchEvent('#input-start', 'change')
+  await p.fill('#input-region', '제주'); await p.waitForTimeout(300)
+  await p.click('#feeBtn-yes'); await p.fill('#input-fee', '400000'); await p.waitForTimeout(200)
+  await p.click('#ctaNext4'); await p.waitForTimeout(600)
+  await p.click('#c6-btn-card'); await p.waitForTimeout(200); await p.click('#c6-card-note .cta-btn'); await p.waitForTimeout(600)
+  await p.click('#shuttle-yes'); await p.waitForTimeout(150)
+  for (let i = 0; i < 3 && (await active(p)) === 'card-8'; i++) { await answerVisible(p); await p.click('#ctaNext8'); await p.waitForTimeout(600) }
+  if ((await active(p)) === 'card-9') { await p.click('#card9-next-btn'); await p.waitForTimeout(600) }
+  const formTxt = await p.evaluate(() => document.querySelector('#card-10 .tf-box')?.innerText.replace(/\s+/g, ' ') || '')
+  check('제주 신청서: 항공은 김해 기준(마산엔 공항 없음)', formTxt.includes('항공 김해 → 제주') && formTxt.includes('항공 제주 → 김해') && !formTxt.includes('마산 → 제주'), formTxt.slice(0, 120))
+  if ((await active(p)) === 'card-10') { await p.locator('#card-10 .cta-btn').first().click(); await p.waitForTimeout(600) }
+  await p.click('#vg-entry .cta-btn'); await p.waitForTimeout(400)
+  autoSame = false
+  await tap(p, '회의·업무 출장'); await tap(p, '다녀와서 한 번에 정산받을게요')
+  await tap(p, '바뀌었거나 추가된 비용이 있어요')
+  await p.fill('[data-money="finalAmounts.air"]', '200000'); await p.dispatchEvent('[data-money="finalAmounts.air"]', 'change'); await p.waitForTimeout(200)
+  await p.fill('[data-money="finalAmounts.shuttle"]', '9900'); await p.dispatchEvent('[data-money="finalAmounts.shuttle"]', 'change'); await p.waitForTimeout(200)
+  await next(p)
+  const sv = await p.evaluate(() => { const f = document.querySelector('.sv-new'); const th = [...f.querySelectorAll('th')].find(t => t.textContent.replace(/\s+/g, '') === '교통비')
+    const rows = [...f.querySelectorAll('tr')].filter(tr => /항공|셔틀/.test(tr.textContent) && /정산 ₩/.test(tr.textContent)).map(tr => tr.innerText.replace(/\s+/g, ' ').trim())
+    return { rows, span: th ? th.rowSpan : 0, total: f.querySelector('.tf-total-amount')?.innerText.replace(/\s+/g, ' ') } })
+  check('제주 출장정산서: 항공료 200,000이 "항공 김해 ↔ 제주 왕복" 한 줄로, 셔틀 9,900, 교통비 칸 병합 2줄',
+    (await screen(p)) === 'settleView' && sv.rows.length === 2 && sv.rows[0].includes('항공 김해 ↔ 제주 왕복 정산 ₩ 200,000') && sv.rows[1].includes('공항 셔틀버스 정산 ₩ 9,900') && sv.span === 2 && !JSON.stringify(sv).includes('마산'), JSON.stringify(sv))
+  await shot(p, 'jeju-settle-view')
+  autoSame = true
+  await ctx.close()
+}
+
 // ── 1-h. 카드6 증빙 칸에 바로 정산 여부 표시 ──
 {
   const [ctx, p] = await page(390)

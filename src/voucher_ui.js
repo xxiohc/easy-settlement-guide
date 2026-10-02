@@ -388,6 +388,8 @@ function rowKind(tr, cur) {
   let kind = FORM_KIND[cur] || null
   if (kind === 'transport' && /셔틀/.test(tr.textContent)) kind = 'shuttle'
   else if (kind === 'transport' && /항공/.test(tr.textContent)) kind = 'air'
+  // 예전 신청서(‘마산 → 제주 사후정산’)는 '항공'이라는 말이 없다 — 제주 사후정산 줄은 항공으로 본다
+  else if (kind === 'transport' && /제주/.test(tr.textContent) && /사후정산/.test(tr.textContent)) kind = 'air'
   return kind
 }
 function changedKinds() {
@@ -402,20 +404,22 @@ function buildSettleForm(mode) {
   const chg = changedKinds()
   const won = v => `₩ ${Number(v).toLocaleString()}`
   const seen = new Set()
-  let cur = null
+  let cur = null, groupTh = null
+  // 사후정산 줄은 무엇의 금액인지 앞에 밝힌다 — 항공은 왕복 총액을 한 줄로(2026-10-02 지석초이 "김해↔제주 왕복", 마산엔 공항이 없다)
+  const LEAD = { air: '항공 김해 ↔ 제주 왕복', shuttle: '공항 셔틀버스' }
   tpl.content.querySelectorAll('tr').forEach(tr => {
     const th = tr.querySelector('th')
-    if (th) cur = th.textContent.replace(/\s+/g, '')
+    if (th) { cur = th.textContent.replace(/\s+/g, ''); groupTh = th }
     const kind = rowKind(tr, cur)
     if (!kind || !chg.has(kind)) return
     const td = tr.querySelector('td:last-child')
     const c = vg.costs.find(x => x.kind === kind)
     if (mode === 'orig') { tr.dataset.chg = '1'; return }
-    if (seen.has(kind)) { tr.remove(); return }
+    // 같은 항목의 두 번째 줄(항공 가는 편·오는 편)은 지우고, 묶음 칸(교통비)의 세로 병합만 한 칸 줄인다
+    if (seen.has(kind)) { if (groupTh && groupTh.rowSpan > 1) groupTh.rowSpan -= 1; tr.remove(); return }
     seen.add(kind)
-    td.innerHTML = `정산 ${won(fin[kind])}${c.amount != null ? ` <s class="sf-old">신청 ${won(c.amount)}</s>` : ' <small class="sf-old">사후 실비</small>'}`
+    td.innerHTML = `${LEAD[kind] ? `${LEAD[kind]} ` : ''}정산 ${won(fin[kind])}${c.amount != null ? ` <s class="sf-old">신청 ${won(c.amount)}</s>` : ' <small class="sf-old">사후 실비</small>'}`
     tr.dataset.chg = '1'
-    if (th && th.rowSpan > 1) th.rowSpan = 1
   })
   if (mode === 'settle') {
     const title = tpl.content.querySelector('.tf-title')
@@ -452,9 +456,7 @@ function markForm(stage, r, src) {
   tpl.content.querySelectorAll('tr').forEach(tr => {
     const th = tr.querySelector('th')
     if (th) { cur = th.textContent.replace(/\s+/g, ''); groups.push({ th, rows: [] }) }
-    let kind = FORM_KIND[cur] || null
-    if (kind === 'transport' && /셔틀/.test(tr.textContent)) kind = 'shuttle'
-    else if (kind === 'transport' && /항공/.test(tr.textContent)) kind = 'air'
+    const kind = rowKind(tr, cur)
     const memoRow = cur === '사유' || cur === '출장기간'
     if (kind) tr.dataset.kind = kind
     let t = null

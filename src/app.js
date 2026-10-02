@@ -4519,13 +4519,14 @@ function renderTripFormPreview() {
   let fareTotal = 0
   const sheetRouteFare = isJeju ? null : routeFare()
   if (isJeju) {
+    // 마산에는 공항이 없다 — 제주 항공은 김해공항 기준(2026-10-02 지석초이)
     fareRows = `
       <tr>
         <th class="tf-th tf-th-multi" rowspan="${state.hasShuttle === true ? 3 : 2}">교통비</th>
-        <td class="tf-td tf-td-post">마산 → 제주&nbsp;&nbsp;사후정산 <span class="tf-post-badge">법인카드 결제 후 매출전표 제출</span></td>
+        <td class="tf-td tf-td-post">항공 김해 → 제주&nbsp;&nbsp;사후정산 <span class="tf-post-badge">법인카드 결제 후 매출전표 제출</span></td>
       </tr>
       <tr>
-        <td class="tf-td tf-td-post">제주 → 마산&nbsp;&nbsp;사후정산 <span class="tf-post-badge">법인카드 결제 후 매출전표 제출</span></td>
+        <td class="tf-td tf-td-post">항공 제주 → 김해&nbsp;&nbsp;사후정산 <span class="tf-post-badge">법인카드 결제 후 매출전표 제출</span></td>
       </tr>
       ${state.hasShuttle === true ? `<tr>
         <td class="tf-td tf-td-post">공항 셔틀버스&nbsp;&nbsp;사후정산 <span class="tf-post-badge">법인카드 결제 후 매출전표 제출</span></td>
