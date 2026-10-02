@@ -1,7 +1,10 @@
 import { chromium } from 'playwright-core'
 const BASE = process.env.BASE || 'http://localhost:8799/index.html'
 const DOC  = '/Users/jiseokchoi/ODDCHOI/workspace/09_교육, 출장 정산 가이드/app/test-docs/삼일아카데미_교육.pdf'
-const b = await chromium.launch()
+// 2026-10-02: 헤드리스 크롬이 뜨자마자 끊기는 일이 가끔 있다('Connection terminated while reading from pipe' → SIGKILL, check_all 로그로 확인).
+// 앱 문제가 아니라 브라우저 기동 문제라 한 번 더 띄운다 — 두 번째도 실패하면 그대로 오류를 낸다
+async function launchRetry() { try { return await chromium.launch() } catch (e) { console.error('브라우저 기동 실패, 다시 시도:', e.message.split('\n')[0]); await new Promise(r => setTimeout(r, 2000)); return chromium.launch() } }
+const b = await launchRetry()
 const out = []
 const check = (name, ok, note='') => { out.push(`${ok?'PASS':'FAIL'}  ${name}${note?' — '+note:''}`); console.log(out.at(-1)) }
 

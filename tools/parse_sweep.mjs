@@ -11,7 +11,9 @@ const DOC_DIRS = [path.join(HERE, '../../테스트공문_업로드함')]
 const findDoc = f => DOC_DIRS.map(d => path.join(d, f)).find(p => fs.existsSync(p))
 const BASE = process.env.BASE || 'http://localhost:8799/index.html'
 const EXP = JSON.parse(fs.readFileSync(path.join(HERE, 'parse_expected.json'), 'utf8'))
-const b = await (process.env.ENGINE === 'chrome' ? chromium.launch() : webkit.launch())
+// 브라우저가 뜨자마자 끊기는 일이 가끔 있어 한 번 더 띄운다(2026-10-02, ux_fix_check와 같은 이유)
+const launchOnce = () => (process.env.ENGINE === 'chrome' ? chromium.launch() : webkit.launch())
+const b = await launchOnce().catch(async e => { console.error('브라우저 기동 실패, 다시 시도:', e.message.split('\n')[0]); await new Promise(r => setTimeout(r, 2000)); return launchOnce() })
 const ctx = await b.newContext({ viewport: { width: 420, height: 900 } })
 let p
 // 판독이 시간 초과되면 뒤에서 계속 돌던 OCR이 다음 공문 결과 자리에 끼어든다(2026-09-29 check_all 중 Veeam 칸에
