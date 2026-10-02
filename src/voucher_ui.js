@@ -191,6 +191,7 @@ function vgModel(opts = {}) {
   if (ak.includes('travel') && advState === 'advance') m.travelAdv = vg.advanceTravel ?? Voucher.travelSum(vg)
   if (ak.includes('travel') && advState === 'unknown') m.travelAdvUnknown = true
   m.advKinds = ak
+  m.advanceRef = ''   // 전표번호는 받지 않는다(2026-10-02 지석초이 — 회사 시스템과 연결돼 있지 않음)
   if (vg.task === 'final' && !vgSettleNeeded()) {
     const keep = {}
     for (const k of vgReceiptKinds()) if (vg.finalAmounts?.[k] != null) keep[k] = vg.finalAmounts[k]
@@ -199,7 +200,7 @@ function vgModel(opts = {}) {
   }
   if (fee) {
     const amt = vg.advanceAmount ?? fee.amount
-    if (pay === 'advance') { m.paid.bank = true; m.bankPay = { amount: amt, status: 'advance', ref: vg.advanceRef || '' } }
+    if (pay === 'advance') { m.paid.bank = true; m.bankPay = { amount: amt, status: 'advance', ref: '' } }
     else if (pay === 'expensed') { m.paid.bank = true; m.bankPay = { amount: amt, status: 'expensed' } }
     else if (pay === 'unknown') { m.paid.bank = true; m.bankPay = { amount: amt, status: 'unknown' } }
     else if (pay === 'card') { m.paid.card = true; m.cardItems = { fee: fee.amount } }
@@ -255,7 +256,6 @@ function vgScreens() {
       if (needEv) list.push(['evidence', 0])
     }
     // 2026-10-01 지석초이: 금액이 바뀌었는지 먼저 묻고, 바뀌었으면 출장정산서를 만든다(영수증 금액 칸도 정산서 안에)
-    // 신청서에 금액이 공란(제주 항공·공항 셔틀 '사후정산')이면 금액이 반드시 달라진다 — 단계는 보이되 '출장정산서 만들기' 한 칸만(2026-10-02 지석초이)
     list.push(['changed', 0])
     if (vgSettleNeeded()) list.push(['settle', 1], ['settleView', 1])
     else if (vgReceiptKinds().length) list.push(['receipts', 1])
@@ -596,8 +596,8 @@ function vgFeePre() {
   if (vgSmallSelfPaid()) return 'personal'
   return { 'cash-receipt': 'bankNow', transfer: 'late', 'tax-invoice': 'ask' }[t.receiptType] || null
 }
-// 출장정산서가 필요한가: '바뀌었어요'를 골랐거나, 신청서에 공란(사후정산)인 영수증 금액이 있을 때
-function vgSettleNeeded() { return vg.amtChanged === 'yes' || (vg.task === 'final' && vgReceiptKinds().length > 0) }
+// 출장정산서를 만드나: '바뀌었거나 추가된 비용이 있어요'를 골랐을 때(처음 만든 대로, 2026-10-02 지석초이)
+function vgSettleNeeded() { return vg.amtChanged === 'yes' }
 function vgSmallSelfPaid() {
   const t = vg.trip, fee = vgFee()
   return !!(fee && fee.amount <= 50000 && t.feeStatus === 'paid' && (t.receiptType === 'cash-receipt' || t.receiptType === 'transfer'))
@@ -786,10 +786,6 @@ const VG_SCREEN = {
   },
 
   changed() {
-    const blank = vgReceiptKinds().map(k => Voucher.KIND_LABEL[k] || k)
-    if (blank.length) return q('신청서와 금액이<br>달라요', `신청서에 사후정산으로 비워 둔 ${blank.join('·')} 금액을 영수증대로 넣어 출장정산서를 만들어요`) + `<div class="choice-list">
-      ${choice(true, `onclick="vgPick('amtChanged', 'yes')"`, '✏️', '출장정산서 만들기', `${blank.join('·')} 영수증 금액 넣기 · 다녀와서 생긴 비용도 추가`)}
-      </div>`
     return q('신청서와 금액이<br>바뀌었나요?', '다녀와서 생긴 리무진·택시·주차비 같은 비용도 여기서 넣어요') + `<div class="choice-list">
       ${pick('amtChanged', 'no', '✅', '신청서 금액 그대로예요', '바로 전표로 넘어가요')}
       ${pick('amtChanged', 'yes', '✏️', '바뀌었거나 추가된 비용이 있어요', '출장정산서를 만들어 바뀐 금액으로 정리해요')}
@@ -800,10 +796,8 @@ const VG_SCREEN = {
     const adv = vgModel().bankPay
     const extraAdv = vg.resumed ? `<div class="vg-box st-adv"><div class="vg-box-title">${vgWord().past.replace(/등록비.*|여비/, '돈')}</div>
       ${vgModel().travelAdv != null ? `<div class="vg-amt"><b>먼저 받은 여비</b>${moneyInput('advanceTravel', vgModel().travelAdv)}</div>` : ''}
-      ${adv && adv.status !== 'unknown' ? `<div class="vg-amt"><b>먼저 지급한 등록비</b>${moneyInput('advanceAmount', adv.amount)}</div>` : ''}
-      <div class="vg-amt"><b>그때 전표번호 <small>(있으면)</small></b><input type="text" class="info-input vg-ref" data-text="advanceRef" value="${escapeHtml(vg.advanceRef || '')}" placeholder="예: 20261001-0001-001"></div></div>` : ''
-    const blank = vgReceiptKinds().map(k => Voucher.KIND_LABEL[k] || k)
-    return q('출장정산서를<br>만들어요', blank.length ? `신청서에 사후정산으로 비워 둔 ${blank.join('·')} 금액을 영수증대로 넣어요` : '바뀐 금액을 고치고, 다녀와서 생긴 비용은 추가해요. 바뀐 칸은 노랗게 표시돼요') +
+      ${adv && adv.status !== 'unknown' ? `<div class="vg-amt"><b>먼저 지급한 등록비</b>${moneyInput('advanceAmount', adv.amount)}</div>` : ''}</div>` : ''
+    return q('출장정산서를<br>만들어요', '바뀐 금액을 고치고, 다녀와서 생긴 비용은 추가해요. 바뀐 칸은 노랗게 표시돼요') +
       `<div class="vg-print">${settleDoc(true)}</div>
       <div class="st-add"><span>비용 추가</span>${EXTRA_PRESETS.map(l => `<button type="button" class="st-add-btn" onclick="vgAddExtra('${l}')">+ ${l}</button>`).join('')}<button type="button" class="st-add-btn" onclick="vgAddExtra('')">+ 직접 입력</button></div>
       ${extraAdv}
@@ -826,9 +820,8 @@ const VG_SCREEN = {
     const adv = vgModel().bankPay
     return q(`${vgWord().amt}을<br>고쳐 주세요`) + `<div class="vg-box">${rows}</div>
       ${vg.task === 'final' && vgModel().travelAdv != null ? `<div class="vg-box"><div class="vg-amt"><b>먼저 받은 여비</b>${moneyInput('advanceTravel', vgModel().travelAdv)}</div></div>` : ''}
-      ${vg.task === 'final' && adv && adv.status !== 'unknown' ? `<div class="vg-box"><div class="vg-amt"><b>먼저 지급한 등록비</b>${moneyInput('advanceAmount', adv.amount)}</div>
-        <div class="vg-amt"><b>그때 전표번호 <small>(있으면)</small></b><input type="text" class="info-input vg-ref" data-text="advanceRef" value="${escapeHtml(vg.advanceRef || '')}" placeholder="예: 20261001-0001-001"></div></div>` : ''}
-      ${vg.task === 'advance' && vgAdvKinds().includes('fee') ? `<div class="vg-box"><div class="vg-amt"><b>먼저 보낼 등록비</b>${moneyInput('advanceAmount', vg.advanceAmount ?? vgFee()?.amount)}</div></div>` : ''}
+      ${vg.task === 'final' && adv && adv.status !== 'unknown' ? `<div class="vg-box"><div class="vg-amt"><b>먼저 지급한 등록비</b>${moneyInput('advanceAmount', adv.amount)}</div></div>` : ''}
+      ${vg.task === 'advance' && vgAdvKinds().includes('fee') ? `<div class="vg-box"><div class="vg-amt"><b>먼저 지급할 등록비</b>${moneyInput('advanceAmount', vg.advanceAmount ?? vgFee()?.amount)}</div></div>` : ''}
       ${vg.task === 'advance' && vgAdvKinds().includes('travel') ? `<div class="vg-box"><div class="vg-amt"><b>먼저 받을 여비</b>${moneyInput('advanceTravel', vg.advanceTravel ?? Voucher.travelSum(vg))}</div></div>` : ''}`
   },
 
@@ -898,7 +891,7 @@ function vgCompareDocsHtml(r, name, sub, item) {
   const r2 = vgFinalPreview()
   const sub2 = { ...sub, application: '① 때 냈어도 다시 첨부', notice: '① 때 냈어도 다시 첨부' }
   const left = [{ key: 'voucher', title: '전표', sub: `가지급금 전표 · ${Voucher.won(r.sumD)}` }, ...r.docs.map(d => ({ key: d.key, title: name[d.key] || d.title, sub: sub[d.key] || d.check, optional: d.optional }))]
-  const right = [{ key: 'voucher', title: '전표', sub: '최종 정산 전표 · 가지급금 정리 줄에 ① 전표번호' }, ...r2.docs.map(d => ({ key: d.key, title: name[d.key] || d.title, sub: sub2[d.key] || d.check, optional: d.optional }))]
+  const right = [{ key: 'voucher', title: '전표', sub: '최종 정산 전표 · 먼저 지급한 등록비(가지급금) 정리 포함' }, ...r2.docs.map(d => ({ key: d.key, title: name[d.key] || d.title, sub: sub2[d.key] || d.check, optional: d.optional }))]
   // 신청서에 사후정산(공란) 금액이 있으면 ②에서 출장정산서가 반드시 붙는다(제주 항공·공항 셔틀)
   if (vgReceiptKinds().length && !right.some(d => d.key === 'settlement')) right.push({ key: 'settlement', title: VG_RULES.docs.settlement.title, sub: '사후정산 금액을 영수증대로 넣어 만들어요' })
   const keys = [...new Set([...left.map(d => d.key), ...right.map(d => d.key)])]
