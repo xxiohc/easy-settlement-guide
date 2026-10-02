@@ -96,7 +96,8 @@ function resumeVoucherGuide(finalNow) {
   vg.fromFlow = false
   if (finalNow) {
     // 저장한 '보낼 예정액'을 실제 지급액으로 여기지 않는다 — 처리됐는지 다시 묻는다
-    Object.assign(vg, { task: 'final', feePay: null, resumed: true, evAll: null, checks: {}, pendingFinal: false, screen: 'resumeQ' })
+    // ② 최종 정산에 왔다면 먼저 지급한 등록비·여비는 이미 처리된 것이다 — '처리됐나요?'는 묻지 않고, 등록비 영수증 종류를 묻는다(2026-10-02 지석초이)
+    Object.assign(vg, { task: 'final', feePay: 'advance', resumed: true, evAll: null, checks: {}, pendingFinal: false, feeRcpt: null, screen: null })
     vgSave()
   }
   vgFrom = 2
@@ -241,7 +242,7 @@ function vgScreens() {
   const list = []
   // 2026-10-01 지석초이: 비용 목적(·직종)을 제일 먼저 묻는다 — 이어하기(②)는 앞서 답했으면 건너뛴다
   const askPurpose = !(vg.resumed && Voucher.expenseAccountKey(vg.purpose, vg.job))
-  if (vg.resumed) list.push(['resumeQ', 0])
+  if (vg.resumed && vgAdvKinds().includes('fee')) list.push(['feeRcpt', 0])
   if (askPurpose) {
     list.push(['purpose', 0])
     if (vg.purpose === 'edu') list.push(['job', 0])
@@ -264,7 +265,7 @@ function vgScreens() {
   if (vg.screen === 'amounts') list.splice(list.findIndex(([id]) => id === 'voucher'), 0, ['amounts', 1])
   return list
 }
-const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'changed', 'purpose', 'job', 'evidence']
+const VG_CHOICE_SCREENS = ['task', 'resumeQ', 'feeRcpt', 'changed', 'purpose', 'job', 'evidence']
 
 function vgGo(delta) {
   const list = vgScreens()
@@ -770,6 +771,16 @@ const VG_SCREEN = {
       </div>`
   },
 
+  // ② 처음: 먼저 지급한 등록비의 영수증 종류 — 카드6에서 고른 것이 있으면 미리 골라 둔다
+  feeRcpt() {
+    if (vg.feeRcpt == null && ['tax-invoice', 'cash-receipt', 'transfer'].includes(vg.trip.receiptType)) vg.feeRcpt = vg.trip.receiptType
+    return tripChip() + q('등록비 영수증은<br>어떤 걸 받았나요?', `먼저 지급한 등록비 ${Voucher.won(vg.advanceAmount ?? vgFee()?.amount)}`) + `<div class="choice-list">
+      ${pick('feeRcpt', 'tax-invoice', '📋', '세금계산서', '전자 또는 종이 세금계산서')}
+      ${pick('feeRcpt', 'cash-receipt', '🧾', '현금영수증', '병원 사업자번호(608-82-14527)로 발급')}
+      ${pick('feeRcpt', 'transfer', '📎', '기관 영수증 또는 이수증', '적격증빙을 주지 않는 기관이 따로 발급한 것')}
+      </div>`
+  },
+
   evidence() {
     const kinds = new Set((vg.costs || []).map(c => c.kind))
     const names = [kinds.has('fee') && '등록비', kinds.has('air') && '항공권', kinds.has('shuttle') && '셔틀', kinds.has('meal') && '식사비'].filter(Boolean)
@@ -847,7 +858,7 @@ const VG_SCREEN = {
     const again = vg.task === 'final' && (vg.resumed || vgModel().bankPay?.status === 'advance')
     // 2026-10-01 지석초이: 고른 영수증 이름만 — 세금계산서를 골랐으면 '현금영수증' 같은 말은 쓰지 않는다. 카드6 답이 가장 정확하다
     const evName = vgReceiptName() || { 'card-receipt': '법인카드 매출전표', 'bank-now': '세금계산서 또는 현금영수증', personal: '현금영수증 또는 참가 영수증', 'cash-receipt': '현금영수증', other: '학회 수료 영수증' }[vg.evType || (vgModel().paid.card ? 'card-receipt' : '')]
-    const rt = vg.trip.feeStatus === 'paid' ? vg.trip.receiptType : null
+    const rt = vgRcptType()
     const name = { notice: '교육·출장 공문', feeEvidence: evName ? `등록비 영수증 (${evName})` : '등록비 영수증' }
     const sub = {
       application: again ? '① 때 냈어도 다시 첨부 · 결재·인사지원팀 합의 확인' : vg.task === 'advance' ? '등록비 금액이 전표와 같은지 · 결재·합의 확인' : '결재·인사지원팀 합의 확인',
@@ -906,16 +917,21 @@ function vgCompareDocsHtml(r, name, sub, item) {
   }).join('')
   return `<div class="vd-cmp">
     <div class="vd-cmp-head"><span class="vd-next-num">1</span><b>가지급금 전표</b><small>지금 제출</small></div>
-    <div class="vd-cmp-head is-later"><span class="vd-next-num">2</span><b>최종 정산 전표</b><small>${W.s2.replace(' 최종 출장비 정산', '')}</small>
-      <button type="button" class="vg-btn vd-go2" onclick="vgStartFinalNow()">${W.btn.replace(' · 최종 정산 시작', '')} · ② 시작</button></div>
+    <div class="vd-cmp-head is-later"><span class="vd-next-num">2</span><b>최종 정산 전표</b><small>${W.s2.replace(' 최종 출장비 정산', '')}</small></div>
     ${rows}
-  </div>`
+  </div>
+  <button type="button" class="vd-go2-big" onclick="vgStartFinalNow()"><span class="vd-next-num">2</span>
+    <span><b>${vgAdvKinds().includes('travel') ? '다녀왔다면' : '영수증을 받았다면'} · 최종 정산 전표 작성하기</b><small>출장정산서와 ② 최종 정산 전표를 이어서 만들어요</small></span><i>→</i></button>`
 }
 
 // 카드6에서 고른 등록비 증빙 이름(고른 것만)
+function vgRcptType() {
+  if (vg.resumed && vg.feeRcpt) return vg.feeRcpt
+  return vg.trip.feeStatus === 'paid' ? vg.trip.receiptType : null
+}
 function vgReceiptName() {
-  const t = vg.trip
-  if (!vgFee() || t.feeStatus !== 'paid') return ''
+  const t = { receiptType: vgRcptType() }
+  if (!vgFee() || !t.receiptType) return ''
   // 2026-10-01 지석초이: 병원 계좌로 냈으면 계좌이체내역서는 필요 없다(본인이 이체했을 때만). 적격증빙이 없으면 기관이 주는 별도 영수증·이수증
   return { 'card-receipt': '법인카드 매출전표', 'tax-invoice': '세금계산서', 'cash-receipt': '현금영수증',
     transfer: vgPaidSelf() ? '기관 영수증 또는 이수증 + 계좌이체내역서' : '기관 영수증 또는 이수증' }[t.receiptType] || ''

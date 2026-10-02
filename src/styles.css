@@ -3733,3 +3733,10 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
 .vd-cmp-head { align-self: end; }
 #shuttle-notice { margin-top: 14px; }
 .vd-go2 { min-height: 32px; padding: 4px 12px; font-size: 13px; border-color: #f0913f; color: #c2410c; background: #fff7ed; }
+/* ② 최종 정산 시작 — 눈에 띄는 큰 버튼(2026-10-02 지석초이) */
+.vd-go2-big { display: flex; align-items: center; gap: 14px; width: 100%; margin-top: 18px; padding: 18px 20px; border: 2px solid #f0913f; border-radius: 16px; background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); text-align: left; cursor: pointer; animation: vsGlow 2.4s ease-in-out infinite; }
+.vd-go2-big b { display: block; font-size: 17px; font-weight: 800; color: #9a3412; }
+.vd-go2-big small { display: block; margin-top: 2px; font-size: 13px; color: #b45309; }
+.vd-go2-big > span:nth-child(2) { flex: 1; }
+.vd-go2-big i { font-style: normal; font-size: 22px; font-weight: 800; color: #f0913f; }
+@media (prefers-reduced-motion: reduce) { .vd-go2-big { animation-duration: 3.6s; } }
