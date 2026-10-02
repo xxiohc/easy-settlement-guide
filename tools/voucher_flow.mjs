@@ -36,7 +36,7 @@ let clicks = 0
 let autoSame = true
 const tap = async (p, t) => {
   clicks++; await p.locator('#vg-screen button', { hasText: t }).first().click(); await p.waitForTimeout(380)
-  if (autoSame && await p.evaluate(() => vg && vg.screen === 'changed' && !vgReceiptKinds().length)) { clicks++; await p.locator('#vg-screen button', { hasText: '신청서 금액 그대로예요' }).click(); await p.waitForTimeout(380) }
+  if (autoSame && await p.evaluate(() => vg && vg.screen === 'changed')) { clicks++; await p.locator('#vg-screen button', { hasText: '신청서 금액 그대로예요' }).click(); await p.waitForTimeout(380) }
 }
 const next = async p => { clicks++; await p.click('#vg-next'); await p.waitForTimeout(250) }
 // 체크할 때마다 화면을 다시 그리므로 매번 안 된 첫 칸을 다시 찾아 누른다
@@ -187,16 +187,16 @@ for (const width of [1280, 390]) {
   check(`[${width}] 금액이 그대로면 전표에 '출장정산서 만들기' 링크 없음`, (await p.locator('#vg-screen .vg-link', { hasText: '출장정산서' }).count()) === 0)
   await p.evaluate(() => vgJump('changed')); await p.waitForTimeout(250)
   autoSame = false; await tap(p, '바뀌었거나 추가된 비용이 있어요'); autoSame = true
-  check(`[${width}] 전표에서 '금액이 바뀌었어요' → 출장정산서(먼저 받은 돈·전표번호 칸 포함)`, (await screen(p)) === 'settle' && (await p.locator('[data-text="advanceRef"]').count()) === 1)
-  await p.fill('[data-text="advanceRef"]', '20261101-0001-001'); await p.dispatchEvent('[data-text="advanceRef"]', 'change'); await p.waitForTimeout(200)
+  check(`[${width}] 전표에서 '금액이 바뀌었어요' → 출장정산서(먼저 지급한 돈 칸, 전표번호 칸 없음 — 2026-10-02 지석초이)`, (await screen(p)) === 'settle' && (await p.locator('[data-text="advanceRef"]').count()) === 0 && (await p.locator('[data-money="advanceAmount"]').count()) === 1)
+  // 전표번호는 받지 않는다(회사 시스템과 연결돼 있지 않음)
   await next(p); await next(p)
-  check(`[${width}] 원 전표번호가 가지급금 줄 적요로`, (await text(p)).includes('20261101-0001-001'))
+  check(`[${width}] 가지급금 줄에 전표번호 적요 없음`, !(await text(p)).includes('원 전표'))
   await next(p)
   const tdocs = await text(p)
   check(`[${width}] 최종 서류: 신청서 다시 첨부 + 등록비 증빙`, tdocs.includes('다시 첨부') && tdocs.includes('등록비 영수증'))
   await checkAll(p)
   check(`[${width}] 최종 제출 준비 끝`, (await text(p)).includes('전표 제출 준비 끝'))
-  check(`[${width}] 최종 정산 클릭 수 ≤ 13(서류 체크·전표번호 고치기 포함)`, clicks <= 13, `${clicks}번`)
+  check(`[${width}] 최종 정산 클릭 수 ≤ 13(서류 체크 포함)`, clicks <= 13, `${clicks}번`)
   await shot(p, `${width}-done-final`)
   await ctx.close()
 }
@@ -413,8 +413,9 @@ for (const width of [1280, 390]) {
   await p.waitForTimeout(500)
   autoSame = false
   await tap(p, '네, 처리됐어요'); await tap(p, '네, 다 받았어요')
-  check('제주: "신청서와 금액이 달라요" 단계 — 사후정산 안내 + 출장정산서 만들기 한 칸만', (await screen(p)) === 'changed' && (await text(p)).includes('신청서와 금액이 달라요') && (await text(p)).includes('사후정산으로 비워 둔 항공료·공항 셔틀 금액') && (await p.locator('#vg-screen .choice-btn').count()) === 1, await screen(p))
-  await tap(p, '출장정산서 만들기')
+  // 2026-10-02 지석초이: '금액이 바뀌었나요?'는 처음 만든 대로 두 칸(제주도 같다)
+  check('제주: "신청서와 금액이 바뀌었나요?" 두 칸 단계', (await screen(p)) === 'changed' && (await text(p)).includes('신청서와 금액이 바뀌었나요?') && (await p.locator('#vg-screen .choice-btn').count()) === 2, await screen(p))
+  await tap(p, '바뀌었거나 추가된 비용이 있어요')
   check('제주: 출장정산서 화면', (await screen(p)) === 'settle', await screen(p))
   check('제주: 영수증 금액 전엔 다음 잠김', await p.isDisabled('#vg-next'))
   await p.fill('[data-money="finalAmounts.air"]', '145000'); await p.dispatchEvent('[data-money="finalAmounts.air"]', 'change'); await p.waitForTimeout(200)
