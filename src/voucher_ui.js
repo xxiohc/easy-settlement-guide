@@ -327,7 +327,7 @@ function renderVoucher() {
   document.getElementById('card-12')?.classList.toggle('is-wide', vg.screen === 'settleView')
   const next = document.getElementById('vg-next')
   const isChoice = VG_CHOICE_SCREENS.includes(vg.screen)
-  next.textContent = { settle: '출장정산서 완성하기', settleView: '이 정산서로 회계처리하기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '제출 준비하기' }[vg.screen] || '다음'
+  next.textContent = { settle: '출장정산서 완성하기', settleView: '이 정산서로 회계처리하기', receipts: '다음', amounts: '전표 보기', voucher: vg.task === 'advance' ? `다음 · ${vgWord().later} 최종 정산 보기` : '제출 준비하기', voucher2: '① 가지급금 전표 제출 준비하기' }[vg.screen] || '다음'
   next.classList.toggle('hidden', isChoice || vg.screen === 'done')
   next.disabled = (vg.screen === 'receipts' || vg.screen === 'settle') && vgReceiptKinds().some(k => vg.finalAmounts?.[k] == null)
 }
@@ -645,17 +645,22 @@ function voucherView(r, stage, memo, preview) {
   const D = r.lines.filter(l => l.side === 'D'), C = r.lines.filter(l => l.side === 'C')
   // 2026-09-30 지석초이: 이 화면에서 복사해 시스템에 붙일 환경이 아니다 — 보기 전용, 계정명·금액을 한 줄에 맞춰 정렬
   const amt = l => (l.amount == null && preview ? '영수증 금액' : Voucher.won(l.amount))
-  // 장부처럼 한 줄 = 코드 | 계정과목 | 금액, 설명은 계정과목 아래에 같은 줄 시작으로(2026-09-30 지석초이 "코드·계정과목 정렬, 조잡하지 않게")
-  const row = l => `<div class="vt-row" tabindex="0" data-side="${l.side}" data-kinds="${(l.kinds || []).join(',')}">
-      <span class="vt-code">${escapeHtml(l.code || '확인 필요')}</span>
-      <span class="vt-name">${escapeHtml(l.name).replace(/-/g, '-<wbr>')}</span>
-      <span class="vt-amt${l.amount == null ? ' is-need' : ''}">${amt(l)}</span>
-      <span class="vt-plain">${escapeHtml(l.plain)}${l.memo ? `<em>적요 · ${escapeHtml(l.memo)}</em>` : ''}${l.hint ? `<em>${escapeHtml(l.hint)}</em>` : ''}</span>
+  // 2026-10-02 지석초이: 회사 대체전표 양식(「회계의 이해」 p.4) 구조 — 한 줄 = 순번·계정코드·계정과목 | 필요기재사항·적요 | 차변 | 대변, 맨 아래 합계.
+  // 필요기재사항 자리에 현금은 펌뱅킹 직원 사번, 보통예금은 은행코드, 카드는 카드번호·승인일을 안내한다(양식의 '2025038' 자리)
+  const lines = [...D, ...C]
+  const row = (l, i) => `<div class="vt-row" tabindex="0" data-side="${l.side}" data-kinds="${(l.kinds || []).join(',')}">
+      <div class="jv-acc"><span class="jv-codeline"><i class="vt-no">${String(i + 1).padStart(3, '0')}</i><span class="vt-code">${escapeHtml(l.code || '확인 필요')}</span></span>
+        <span class="vt-name">${escapeHtml(l.name).replace(/-/g, '-<wbr>')}</span><span class="vt-plain">${escapeHtml(l.plain)}</span></div>
+      <div class="jv-memo">${l.hint || l.memo ? `<em class="jv-need">${escapeHtml(l.hint || l.memo)}</em>` : ''}<b>${escapeHtml(memo || '')}</b></div>
+      <div class="jv-amt jv-d${l.side === 'D' && l.amount == null ? ' is-need' : ''}">${l.side === 'D' ? `<small>차변</small><span>${amt(l)}</span>` : ''}</div>
+      <div class="jv-amt jv-c${l.side === 'C' && l.amount == null ? ' is-need' : ''}">${l.side === 'C' ? `<small>대변</small><span>${amt(l)}</span>` : ''}</div>
     </div>`
-  const half = (cls, title, sub, lines, total) => `<div class="vt-half ${cls}">
-      <div class="vt-head-row"><b>${title}</b><span>${sub}</span></div>
-      <div class="vt-rows">${lines.map(row).join('')}</div>
-      <div class="vt-sum"><span>${title} 합계</span><b>${total == null && preview ? '영수증 받은 뒤' : Voucher.won(total)}</b></div>
+  const sumTxt = v => (v == null && preview ? '영수증 받은 뒤' : Voucher.won(v))
+  const ledger = `<div class="vt-ledger jv">
+      <div class="jv-title"><b>전 표</b><span>삼성창원병원</span></div>
+      <div class="jv-th"><span>계정과목</span><span>필요기재사항 · 적요</span><span>차변<small>돈이 쓰인 곳</small></span><span>대변<small>돈이 나간 곳</small></span></div>
+      ${lines.map(row).join('')}
+      <div class="jv-sum"><span>합 계</span><b class="vt-sum">${sumTxt(r.sumD)}</b><b class="vt-sum">${sumTxt(r.sumC)}</b></div>
     </div>`
   const blocks = preview ? [] : r.issues.filter(i => i.level === 'block')
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
@@ -663,15 +668,14 @@ function voucherView(r, stage, memo, preview) {
   const W = vgWord()
   // 2026-10-02 지석초이: 합계가 맞으면 아무것도 띄우지 않는다 — 다를 때만
   const total = r.balanced || (preview && r.sumD == null) ? '' : '<div class="vt-total">차변과 대변 합계가 달라요 — 아래 확인할 것을 봐 주세요</div>'
+  const later = preview && r.lines.some(l => l.amount == null)
+    ? `<div class="vg-box vp-later">영수증 금액은 <b>영수증을 받은 뒤</b> 출장정산서를 작성하면서 채워요 — ① 제출 화면의 <b>‘최종 정산 전표 작성하기’</b>에서 이어서 해요</div>` : ''
   return `<div class="vg-wrap">${stageBar(stage)}
+      ${later}
       ${preview ? '' : autoApplied(stage)}
-      <div class="vt-ledger">
-        ${half('vt-d', '차변', '돈이 쓰인 곳', D, r.sumD)}
-        ${half('vt-c', '대변', '돈이 나간 곳', C, r.sumC)}
-      </div>
+      ${ledger}
       ${total}
       ${compareAside(r, stage === 1 ? 'advance' : 'final')}
-      <div class="vt-memo-row"><span>적요</span><b>${escapeHtml(memo || '')}</b></div>
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
       ${stage === 1 && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
       ${preview ? '' : stage === 1 ? `<button type="button" class="vg-link" onclick="vgJump('amounts')">${W.amt} 고치기</button>` : vgSettleNeeded() ? `<button type="button" class="vg-link" onclick="vgJump('settle')">출장정산서 다시 고치기</button>` : ''}</div>`
@@ -701,7 +705,8 @@ const VG_SCREEN = {
     const preBox = {
       personal: `<div class="va-title">앞에서 등록비를 <b>계좌로 보내고 ${t.receiptType === 'transfer' ? '기관 영수증·이수증' : '현금영수증'}</b>을 받는다고 하셨어요</div><p>${fee.toLocaleString()}원처럼 5만 원 이하는 보통 <b>본인이 이체하고 병원 사업자번호로 현금영수증</b>을 받아요. 그래서 <b>본인이 낸 등록비를 정산 때 현금으로 돌려받는 것</b>으로 골라 뒀어요. 병원 계좌에서 보낸다면 다른 칸을 눌러 주세요.</p>`,
       bankNow: `<div class="va-title">앞에서 등록비를 <b>계좌로 보내고 현금영수증</b>을 받는다고 하셨어요</div><p>병원 사업자번호 현금영수증은 입금하면 바로 나오는 <b>적격증빙</b>이에요. 그래서 <b>출장 전이라도 바로 정산</b>할 수 있어요. 아래에 미리 골라 뒀어요.</p>`,
-      late: `<div class="va-title">앞에서 <b>현금영수증·세금계산서를 받기 어렵다</b>고 하셨어요</div><p>기관이 따로 주는 영수증·이수증은 적격증빙이 아니고, 이수증은 교육이 끝나야 나와요. 그래서 등록비만 먼저 <b>가지급금</b>으로 보내고, 서류가 갖춰지면 마무리해요. 아래에 미리 골라 뒀어요.</p>`,
+      // 2026-10-02 지석초이: 적격증빙을 안 주는 기관은 예외 — 이수증·계좌이체내역서·거래명세서 등으로 지급 사실을 입증하면 회계상 비용으로 인정
+      late: `<div class="va-title">앞에서 <b>현금영수증·세금계산서를 받기 어렵다</b>고 하셨어요</div><p>적격증빙을 주지 않는 기관은 <b>예외</b>예요. <b>이수증·계좌이체내역서·거래명세서</b> 등으로 지급 사실을 입증하면 회계상 비용으로 인정돼요. 이런 서류는 교육이 끝나야 갖춰지니 등록비만 먼저 <b>가지급금</b>으로 지급하고, 서류가 갖춰지면 마무리해요.</p>`,
       ask: `<div class="va-title">앞에서 <b>세금계산서</b>를 받는다고 하셨어요</div><p>세금계산서는 <b>언제 나오는지</b>에 따라 달라요. 입금하면 바로 발급되면 <b>바로 정산</b>, 교육이 끝난 뒤에 발급되면 <b>두 번 정산</b>이에요. 모르면 아래 ‘어떤 영수증을 주는지 모르겠다면?’을 봐 주세요.</p>`,
     }[pre]
     const ev = (key, onclick, icon, title, sub) => choice(vgCaseKey() ? vgCaseKey() === key : pre === key, `onclick="${onclick}"`, icon, title, sub)
@@ -866,7 +871,7 @@ const VG_SCREEN = {
       bankCopy: '공문에 입금 계좌가 없을 때만', settlement: '신청서와 달라진 금액 · 앞에서 만든 출장정산서를 인쇄해 첨부',
       feeEvidence: rt === 'card-receipt' ? '법인카드로 결제한 매출전표 · 기관·금액 확인'
         : rt === 'tax-invoice' || rt === 'cash-receipt' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인'
-        : rt === 'transfer' ? (vgPaidSelf() ? '기관이 발급한 영수증이나 이수증 + 본인 계좌이체내역서 · 기관·금액 확인' : '적격증빙을 주지 않는 기관이 발급한 별도 영수증이나 이수증 · 기관·금액 확인')
+        : rt === 'transfer' ? (vgPaidSelf() ? '이수증·거래명세서 등 + 본인 계좌이체내역서 — 지급 사실 입증 · 기관·금액 확인' : '적격증빙을 주지 않는 기관의 예외 — 이수증·거래명세서 등으로 지급 사실 입증 · 기관·금액 확인')
         : vg.evType === 'other' ? '적격증빙을 받기 어려운 학회 등 — 납부가 확인되는 수료·참가 영수증 · 기관·금액 확인'
         : vg.evType === 'personal' ? '병원 사업자번호(608-82-14527) 현금영수증이 가장 좋고, 없으면 납부가 확인되는 참가 영수증 · 기관·금액 확인'
         : vg.evType === 'bank-now' ? '병원 사업자번호(608-82-14527)로 발급됐는지 · 기관·금액 확인'
