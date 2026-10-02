@@ -36,7 +36,7 @@ let clicks = 0
 let autoSame = true
 const tap = async (p, t) => {
   clicks++; await p.locator('#vg-screen button', { hasText: t }).first().click(); await p.waitForTimeout(380)
-  if (autoSame && await p.evaluate(() => vg && vg.screen === 'changed')) { clicks++; await p.locator('#vg-screen button', { hasText: '신청서 금액 그대로예요' }).click(); await p.waitForTimeout(380) }
+  if (autoSame && await p.evaluate(() => vg && vg.screen === 'changed' && !vgReceiptKinds().length)) { clicks++; await p.locator('#vg-screen button', { hasText: '신청서 금액 그대로예요' }).click(); await p.waitForTimeout(380) }
 }
 const next = async p => { clicks++; await p.click('#vg-next'); await p.waitForTimeout(250) }
 // 체크할 때마다 화면을 다시 그리므로 매번 안 된 첫 칸을 다시 찾아 누른다
@@ -413,7 +413,9 @@ for (const width of [1280, 390]) {
   await p.waitForTimeout(500)
   autoSame = false
   await tap(p, '네, 처리됐어요'); await tap(p, '네, 다 받았어요')
-  check('제주: "금액이 바뀌었나요?" 없이 바로 출장정산서(사후정산 항공료·공항 셔틀 안내)', (await screen(p)) === 'settle' && !(await p.evaluate(() => vgScreens().some(([id]) => id === 'changed'))) && (await text(p)).includes('사후정산으로 비워 둔 항공료·공항 셔틀 금액'), await screen(p))
+  check('제주: "신청서와 금액이 달라요" 단계 — 사후정산 안내 + 출장정산서 만들기 한 칸만', (await screen(p)) === 'changed' && (await text(p)).includes('신청서와 금액이 달라요') && (await text(p)).includes('사후정산으로 비워 둔 항공료·공항 셔틀 금액') && (await p.locator('#vg-screen .choice-btn').count()) === 1, await screen(p))
+  await tap(p, '출장정산서 만들기')
+  check('제주: 출장정산서 화면', (await screen(p)) === 'settle', await screen(p))
   check('제주: 영수증 금액 전엔 다음 잠김', await p.isDisabled('#vg-next'))
   await p.fill('[data-money="finalAmounts.air"]', '145000'); await p.dispatchEvent('[data-money="finalAmounts.air"]', 'change'); await p.waitForTimeout(200)
   await p.fill('[data-money="finalAmounts.shuttle"]', '15900'); await p.dispatchEvent('[data-money="finalAmounts.shuttle"]', 'change'); await p.waitForTimeout(200)
@@ -429,6 +431,9 @@ for (const width of [1280, 390]) {
   await p.evaluate(() => { Object.assign(vg, { task: 'advance', resumed: false, feePay: null, screen: 'done' }); renderVoucher() }); await p.waitForTimeout(300)
   const added = await p.evaluate(() => [...document.querySelectorAll('.vd-ro-cell.is-added strong')].map(e => e.textContent))
   check('제주 ① 마지막 화면: ②에 항공·셔틀 매출전표·출장정산서가 + 추가', added.some(t => t.includes('항공권')) && added.some(t => t.includes('셔틀')) && added.includes('출장정산서'), JSON.stringify(added))
+  // 같은 화면에서 바로 ②로 — 첫 화면 이어하기 버튼을 찾지 않아도 된다(2026-10-02 지석초이 "금액이 다른가요 단계가 안 나온다")
+  await p.click('#vg-screen .vd-go2'); await p.waitForTimeout(500)
+  check('① 마지막 화면의 "② 시작" → ② 이어하기 첫 질문(먼저 지급한 등록비 처리됐나요?)', (await screen(p)) === 'resumeQ' && (await p.evaluate(() => vg.resumed && vg.task === 'final')) && (await text(p)).includes('등록비는 처리됐나요?'), await screen(p))
   autoSame = true
   await ctx.close()
 }

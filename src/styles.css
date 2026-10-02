@@ -3731,3 +3731,5 @@ button { cursor: pointer; font: inherit; border: none; background: none; }
   .vd-ro-cell strong { font-size: 13.5px; }
 }
 .vd-cmp-head { align-self: end; }
+#shuttle-notice { margin-top: 14px; }
+.vd-go2 { min-height: 32px; padding: 4px 12px; font-size: 13px; border-color: #f0913f; color: #c2410c; background: #fff7ed; }
