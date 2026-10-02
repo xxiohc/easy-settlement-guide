@@ -645,22 +645,17 @@ function voucherView(r, stage, memo, preview) {
   const D = r.lines.filter(l => l.side === 'D'), C = r.lines.filter(l => l.side === 'C')
   // 2026-09-30 지석초이: 이 화면에서 복사해 시스템에 붙일 환경이 아니다 — 보기 전용, 계정명·금액을 한 줄에 맞춰 정렬
   const amt = l => (l.amount == null && preview ? '영수증 금액' : Voucher.won(l.amount))
-  // 2026-10-02 지석초이: 회사 대체전표 양식(「회계의 이해」 p.4) 구조 — 한 줄 = 순번·계정코드·계정과목 | 필요기재사항·적요 | 차변 | 대변, 맨 아래 합계.
-  // 필요기재사항 자리에 현금은 펌뱅킹 직원 사번, 보통예금은 은행코드, 카드는 카드번호·승인일을 안내한다(양식의 '2025038' 자리)
-  const lines = [...D, ...C]
-  const row = (l, i) => `<div class="vt-row" tabindex="0" data-side="${l.side}" data-kinds="${(l.kinds || []).join(',')}">
-      <div class="jv-acc"><span class="jv-codeline"><i class="vt-no">${String(i + 1).padStart(3, '0')}</i><span class="vt-code">${escapeHtml(l.code || '확인 필요')}</span></span>
-        <span class="vt-name">${escapeHtml(l.name).replace(/-/g, '-<wbr>')}</span><span class="vt-plain">${escapeHtml(l.plain)}</span></div>
-      <div class="jv-memo">${l.hint || l.memo ? `<em class="jv-need">${escapeHtml(l.hint || l.memo)}</em>` : ''}<b>${escapeHtml(memo || '')}</b></div>
-      <div class="jv-amt jv-d${l.side === 'D' && l.amount == null ? ' is-need' : ''}">${l.side === 'D' ? `<small>차변</small><span>${amt(l)}</span>` : ''}</div>
-      <div class="jv-amt jv-c${l.side === 'C' && l.amount == null ? ' is-need' : ''}">${l.side === 'C' ? `<small>대변</small><span>${amt(l)}</span>` : ''}</div>
+  // 장부처럼 한 줄 = 코드 | 계정과목 | 금액, 설명은 계정과목 아래에 같은 줄 시작으로(2026-09-30 지석초이 "코드·계정과목 정렬, 조잡하지 않게")
+  const row = l => `<div class="vt-row" tabindex="0" data-side="${l.side}" data-kinds="${(l.kinds || []).join(',')}">
+      <span class="vt-code">${escapeHtml(l.code || '확인 필요')}</span>
+      <span class="vt-name">${escapeHtml(l.name).replace(/-/g, '-<wbr>')}</span>
+      <span class="vt-amt${l.amount == null ? ' is-need' : ''}">${amt(l)}</span>
+      <span class="vt-plain">${escapeHtml(l.plain)}${l.memo ? `<em>적요 · ${escapeHtml(l.memo)}</em>` : ''}${l.hint ? `<em>${escapeHtml(l.hint)}</em>` : ''}</span>
     </div>`
-  const sumTxt = v => (v == null && preview ? '영수증 받은 뒤' : Voucher.won(v))
-  const ledger = `<div class="vt-ledger jv">
-      <div class="jv-title"><b>전 표</b><span>삼성창원병원</span></div>
-      <div class="jv-th"><span>계정과목</span><span>필요기재사항 · 적요</span><span>차변<small>돈이 쓰인 곳</small></span><span>대변<small>돈이 나간 곳</small></span></div>
-      ${lines.map(row).join('')}
-      <div class="jv-sum"><span>합 계</span><b class="vt-sum">${sumTxt(r.sumD)}</b><b class="vt-sum">${sumTxt(r.sumC)}</b></div>
+  const half = (cls, title, sub, lines, total) => `<div class="vt-half ${cls}">
+      <div class="vt-head-row"><b>${title}</b><span>${sub}</span></div>
+      <div class="vt-rows">${lines.map(row).join('')}</div>
+      <div class="vt-sum"><span>${title} 합계</span><b>${total == null && preview ? '영수증 받은 뒤' : Voucher.won(total)}</b></div>
     </div>`
   const blocks = preview ? [] : r.issues.filter(i => i.level === 'block')
   const ask = '등록비 정산용 증빙은 어떤 종류로, 언제 받을 수 있나요?'
@@ -673,9 +668,13 @@ function voucherView(r, stage, memo, preview) {
   return `<div class="vg-wrap">${stageBar(stage)}
       ${later}
       ${preview ? '' : autoApplied(stage)}
-      ${ledger}
+      <div class="vt-ledger">
+        ${half('vt-d', '차변', '돈이 쓰인 곳', D, r.sumD)}
+        ${half('vt-c', '대변', '돈이 나간 곳', C, r.sumC)}
+      </div>
       ${total}
       ${compareAside(r, stage === 1 ? 'advance' : 'final')}
+      <div class="vt-memo-row"><span>적요</span><b>${escapeHtml(memo || '')}</b></div>
       ${blocks.length ? `<div class="vg-box vg-box-warn"><div class="vg-box-title">⚠️ 확인할 것</div><ul>${blocks.map(b => `<li>${escapeHtml(b.msg)}</li>`).join('')}</ul></div>` : ''}
       ${stage === 1 && vg.feeEvidence === 'unknown' ? `<div class="vg-box"><div class="vg-box-title">주최기관에 이렇게 물어보세요</div><p class="vg-quote">“${ask}”</p></div>` : ''}
       ${preview ? '' : stage === 1 ? `<button type="button" class="vg-link" onclick="vgJump('amounts')">${W.amt} 고치기</button>` : vgSettleNeeded() ? `<button type="button" class="vg-link" onclick="vgJump('settle')">출장정산서 다시 고치기</button>` : ''}</div>`

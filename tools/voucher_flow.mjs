@@ -102,9 +102,9 @@ for (const width of [1280, 390]) {
   check(`[${width}] 선지급 전표: 차 가지급금-기타 1114-99 / 대 보통예금 1102-02 · 300,000`,
     JSON.stringify(ln) === JSON.stringify([['가지급금-기타', '1114-99', 'D', 300000], ['보통예금', '1102-02', 'C', 300000]]), JSON.stringify(ln))
   check(`[${width}] 차변·대변 장부 한 줄씩 + 칸마다 합계, 합계가 맞으면 일치 문구 없음`, (await p.locator('.vt-row').count()) === 2 && (await p.locator('.vt-sum').count()) === 2 && (await p.locator('.vt-total').count()) === 0)
-  { // 2026-10-02 회사 전표 양식: 순번·코드 줄, 계정과목, 설명이 같은 왼쪽 선에서 시작한다
-    const x = await p.evaluate(() => [...document.querySelectorAll('.vt-row')].map(r => [r.querySelector('.jv-codeline').getBoundingClientRect().left, r.querySelector('.vt-name').getBoundingClientRect().left, r.querySelector('.vt-plain').getBoundingClientRect().left].map(Math.round)))
-    check(`[${width}] 전표 양식: 순번·코드 줄·계정과목·설명 같은 왼쪽 선`, x.every(([c, n, pl]) => c === n && n === pl), JSON.stringify(x))
+  { const x = await p.evaluate(() => [...document.querySelectorAll('.vt-row')].map(r => [r.querySelector('.vt-code').getBoundingClientRect(), r.querySelector('.vt-name').getBoundingClientRect(), r.querySelector('.vt-plain').getBoundingClientRect()]).map(([c, n, pl]) => [Math.round(c.left), Math.round(n.left), Math.round(pl.left), Math.round(c.bottom - n.bottom)]))
+    // 넓은 화면: 코드|계정과목 한 줄(바닥선 같음) · 폰: 코드가 계정과목 위 줄, 같은 왼쪽 선. 어느 쪽이든 설명은 계정과목과 같은 시작, 코드가 이름을 덮지 않는다
+    check(`[${width}] 코드·계정과목 정렬, 설명은 계정과목과 같은 시작`, x.every(([c, n, pl, dy]) => n === pl && (width > 640 ? Math.abs(dy) <= 3 : c === n)), JSON.stringify(x))
     const overlap = await p.evaluate(() => [...document.querySelectorAll('.vt-row')].some(r => { const a = r.querySelector('.vt-code').getBoundingClientRect(), b = r.querySelector('.vt-name').getBoundingClientRect(); return a.right > b.left + 1 && a.bottom > b.top + 1 && a.top < b.bottom - 1 }))
     check(`[${width}] 코드가 계정과목 글자를 덮지 않는다`, !overlap) }
   check(`[${width}] 오른쪽 신청서: 등록비 행만 형광펜, 나머지 흐림`, await p.evaluate(() => { const f = document.querySelector('.vx-form'); return !!f.querySelector('tr.hl-main[data-kind="fee"]') && f.querySelectorAll('tr.hl-main').length === 1 && f.querySelectorAll('tr.hl-dim').length >= 3 }))
