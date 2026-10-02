@@ -160,9 +160,10 @@ for (const width of [1280, 390]) {
   await shot(p, `${width}-resume-banner`)
   clicks = 0
   clicks++; await p.click('#voucher-resume .vg-btn-primary'); await p.waitForTimeout(400)
-  check(`[${width}] 재개: 처리됐는지 다시 묻는다(병원 통장에서 먼저 지급하기로 한 등록비)`, (await screen(p)) === 'resumeQ' && (await text(p)).includes('병원 통장에서 먼저 지급하기로 한 등록비는 처리됐나요?'))
-  await shot(p, `${width}-resumeQ`)
-  await tap(p, '네, 처리됐어요')
+  // 2026-10-02 지석초이: ②에 왔다면 먼저 지급한 등록비는 처리된 것 — '처리됐나요?' 대신 영수증 종류를 묻는다(카드6 답으로 미리 선택)
+  check(`[${width}] 재개: '처리됐나요?' 없이 등록비 영수증 종류를 묻는다(카드6 답 미리 선택)`, (await screen(p)) === 'feeRcpt' && (await text(p)).includes('등록비 영수증은 어떤 걸 받았나요?') && !(await text(p)).includes('처리됐나요') && (await p.locator('#vg-screen .choice-btn.is-on').innerText()).includes('기관 영수증 또는 이수증'))
+  await shot(p, `${width}-feeRcpt`)
+  await tap(p, '기관 영수증 또는 이수증')
   check(`[${width}] 재개: 선지급 때 고른 목적·직종은 다시 묻지 않는다`, (await screen(p)) === 'evidence')
   await shot(p, `${width}-evidence`)
   await tap(p, '네, 다 받았어요')
@@ -440,12 +441,12 @@ for (const width of [1280, 390]) {
   await p.evaluate(() => {
     vg = { version: 2, checks: {}, trip: { title: '재무부서장협의회 세미나', startDate: '2026-11-19', endDate: '2026-11-21', isJeju: true, hasDoc: true },
       costs: [{ kind: 'air', label: '항공료 (왕복)', amount: null }, { kind: 'shuttle', label: '공항 셔틀버스', amount: null }, { kind: 'daily', label: '일당 (3일)', amount: 105000 }, { kind: 'fee', label: '교육비 / 등록비', amount: 400000 }],
-      planTotal: 505000, task: 'final', resumed: true, advKinds: ['fee'], feePay: null, purpose: 'trip', screen: 'resumeQ' }
+      planTotal: 505000, task: 'final', resumed: true, advKinds: ['fee'], feePay: 'advance', purpose: 'trip', screen: 'feeRcpt' }
     vgFrom = 11; goToCard(12); renderVoucher()
   })
   await p.waitForTimeout(500)
   autoSame = false
-  await tap(p, '네, 처리됐어요'); await tap(p, '네, 다 받았어요')
+  await tap(p, '세금계산서'); await tap(p, '네, 다 받았어요')
   // 2026-10-02 지석초이: '금액이 바뀌었나요?'는 처음 만든 대로 두 칸(제주도 같다)
   check('제주: "신청서와 금액이 바뀌었나요?" 두 칸 단계', (await screen(p)) === 'changed' && (await text(p)).includes('신청서와 금액이 바뀌었나요?') && (await p.locator('#vg-screen .choice-btn').count()) === 2, await screen(p))
   await tap(p, '바뀌었거나 추가된 비용이 있어요')
@@ -459,6 +460,7 @@ for (const width of [1280, 390]) {
   const ln = await lines(p)
   check('제주: 가지급금 400,000 + 카드 145,000·15,900 + 현금 105,000 (p.7 구조)',
     (await screen(p)) === 'voucher' && JSON.stringify(ln.map(l => [l[0], l[3]])) === JSON.stringify([['여비교통비-국내출장비', 665900], ['가지급금-기타', 400000], ['미지급비용-법인개인카드', 145000], ['미지급비용-법인개인카드', 15900], ['현금', 105000]]), JSON.stringify(ln))
+  check('제주 ②: 고른 영수증 종류(세금계산서)가 서류 이름에', await p.evaluate(() => vgReceiptName() === '세금계산서'))
   check('제주: 오른쪽은 출장정산서, 서류에 출장정산서', (await p.locator('.vc-title').innerText()).includes('출장정산서') && await p.evaluate(() => vgResult().docs.some(d => d.key === 'settlement')))
   await shot(p, 'jeju-voucher')
   // ① 마지막 화면(두 번 정산)의 ② 준비물에도 출장정산서가 미리 보인다
@@ -466,8 +468,9 @@ for (const width of [1280, 390]) {
   const added = await p.evaluate(() => [...document.querySelectorAll('.vd-ro-cell.is-added strong')].map(e => e.textContent))
   check('제주 ① 마지막 화면: ②에 항공·셔틀 매출전표·출장정산서가 + 추가', added.some(t => t.includes('항공권')) && added.some(t => t.includes('셔틀')) && added.includes('출장정산서'), JSON.stringify(added))
   // 같은 화면에서 바로 ②로 — 첫 화면 이어하기 버튼을 찾지 않아도 된다(2026-10-02 지석초이 "금액이 다른가요 단계가 안 나온다")
-  await p.click('#vg-screen .vd-go2'); await p.waitForTimeout(500)
-  check('① 마지막 화면의 "② 시작" → ② 이어하기 첫 질문(먼저 지급한 등록비 처리됐나요?)', (await screen(p)) === 'resumeQ' && (await p.evaluate(() => vg.resumed && vg.task === 'final')) && (await text(p)).includes('등록비는 처리됐나요?'), await screen(p))
+  check('① 마지막 화면: ② 최종 정산 시작은 큰 버튼', (await p.locator('#vg-screen .vd-go2-big').count()) === 1 && (await p.locator('#vg-screen .vd-go2-big').innerText()).includes('최종 정산 전표 작성하기'))
+  await p.click('#vg-screen .vd-go2-big'); await p.waitForTimeout(500)
+  check('큰 버튼 → ② 첫 질문은 등록비 영수증 종류(처리됐나요 없음)', (await screen(p)) === 'feeRcpt' && (await p.evaluate(() => vg.resumed && vg.task === 'final' && vg.feePay === 'advance')) && (await text(p)).includes('어떤 걸 받았나요'), await screen(p))
   autoSame = true
   await ctx.close()
 }
