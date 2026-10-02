@@ -104,6 +104,15 @@ function resumeVoucherGuide(finalNow) {
   renderVoucher()
 }
 
+// ① 마지막 화면에서 바로 ②로(영수증을 이미 받았을 때) — 먼저 지급할 금액을 저장해 두고 이어하기와 같은 길로 들어간다
+function vgStartFinalNow() {
+  vg.pendingFinal = true; vg.advKinds = vgAdvKinds()
+  if (vg.advKinds.includes('fee')) vg.advanceAmount = vg.advanceAmount ?? vgFee()?.amount ?? null
+  if (vg.advKinds.includes('travel')) vg.advanceTravel = vg.advanceTravel ?? Voucher.travelSum(vg)
+  vgSave()
+  resumeVoucherGuide(true)
+}
+
 function renderVoucherResume() {
   const box = document.getElementById('voucher-resume')
   if (!box) return
@@ -246,8 +255,8 @@ function vgScreens() {
       if (needEv) list.push(['evidence', 0])
     }
     // 2026-10-01 지석초이: 금액이 바뀌었는지 먼저 묻고, 바뀌었으면 출장정산서를 만든다(영수증 금액 칸도 정산서 안에)
-    // 신청서에 금액이 공란(제주 항공·공항 셔틀 '사후정산')인 항목이 있으면 금액이 반드시 바뀐다 — 묻지 않고 바로 출장정산서(2026-10-02 지석초이)
-    if (!vgReceiptKinds().length) list.push(['changed', 0])
+    // 신청서에 금액이 공란(제주 항공·공항 셔틀 '사후정산')이면 금액이 반드시 달라진다 — 단계는 보이되 '출장정산서 만들기' 한 칸만(2026-10-02 지석초이)
+    list.push(['changed', 0])
     if (vgSettleNeeded()) list.push(['settle', 1], ['settleView', 1])
     else if (vgReceiptKinds().length) list.push(['receipts', 1])
     list.push(['voucher', 1], ['done', 2])
@@ -777,6 +786,10 @@ const VG_SCREEN = {
   },
 
   changed() {
+    const blank = vgReceiptKinds().map(k => Voucher.KIND_LABEL[k] || k)
+    if (blank.length) return q('신청서와 금액이<br>달라요', `신청서에 사후정산으로 비워 둔 ${blank.join('·')} 금액을 영수증대로 넣어 출장정산서를 만들어요`) + `<div class="choice-list">
+      ${choice(true, `onclick="vgPick('amtChanged', 'yes')"`, '✏️', '출장정산서 만들기', `${blank.join('·')} 영수증 금액 넣기 · 다녀와서 생긴 비용도 추가`)}
+      </div>`
     return q('신청서와 금액이<br>바뀌었나요?', '다녀와서 생긴 리무진·택시·주차비 같은 비용도 여기서 넣어요') + `<div class="choice-list">
       ${pick('amtChanged', 'no', '✅', '신청서 금액 그대로예요', '바로 전표로 넘어가요')}
       ${pick('amtChanged', 'yes', '✏️', '바뀌었거나 추가된 비용이 있어요', '출장정산서를 만들어 바뀐 금액으로 정리해요')}
@@ -898,7 +911,8 @@ function vgCompareDocsHtml(r, name, sub, item) {
   }).join('')
   return `<div class="vd-cmp">
     <div class="vd-cmp-head"><span class="vd-next-num">1</span><b>가지급금 전표</b><small>지금 제출</small></div>
-    <div class="vd-cmp-head is-later"><span class="vd-next-num">2</span><b>최종 정산 전표</b><small>${W.s2.replace(' 최종 출장비 정산', '')}</small></div>
+    <div class="vd-cmp-head is-later"><span class="vd-next-num">2</span><b>최종 정산 전표</b><small>${W.s2.replace(' 최종 출장비 정산', '')}</small>
+      <button type="button" class="vg-btn vd-go2" onclick="vgStartFinalNow()">${W.btn.replace(' · 최종 정산 시작', '')} · ② 시작</button></div>
     ${rows}
   </div>`
 }

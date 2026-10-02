@@ -317,6 +317,12 @@ const vis = (p,sel) => p.evaluate(s=>{const e=document.querySelector(s); return 
   await p.click('#ctaNext4'); await p.waitForTimeout(700)
   check('J 제주 → 카드8', await active(p) === 'card-8', await active(p))
   check('J 제주는 전날 이동을 묻지 않고 "아니요"로 고정', !(await vis(p, '#field-daytrip')) && (await p.evaluate(() => state.prevDayMove)) === false)
+  // 2026-10-02 지석초이: 공항 셔틀버스를 이용한다고 하면 항공료처럼 '영수증 필수' 안내
+  check('J 셔틀 답 전엔 영수증 필수 안내 없음', !(await vis(p, '#shuttle-notice')))
+  await p.click('#shuttle-yes'); await p.waitForTimeout(150)
+  check('J 셔틀 "예" → 공항 셔틀버스(리무진) 영수증 필수 안내', (await vis(p, '#shuttle-notice')) && (await p.textContent('#shuttle-notice')).includes('영수증 필수'))
+  await p.click('#field-shuttle .yn-btn:nth-child(2)'); await p.waitForTimeout(150)
+  check('J 셔틀 "아니요" → 안내 숨김', !(await vis(p, '#shuttle-notice')))
   for (let i = 0; i < 3 && (await active(p)) === 'card-8'; i++) {
     await p.evaluate(() => document.querySelectorAll('#card-8 [id^="field-"]').forEach(f => {
       if (f.classList.contains('hidden') || !f.getBoundingClientRect().height) return

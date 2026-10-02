@@ -3727,6 +3727,7 @@ function prepareCard8() {
   // 제주: 항공은 필수라 안내만, 셔틀은 안 탔으면 영수증을 요구하면 안 되므로 묻는다
   document.getElementById('field-plane').classList.toggle('hidden', !state.isJeju)
   document.getElementById('field-shuttle').classList.toggle('hidden', !state.isJeju)
+  syncShuttleNotice()
   const planned = state.tripStatus === 'planned'
   document.getElementById('shuttle-q').textContent = planned ? '공항 셔틀버스를 이용하실 건가요?' : '공항 셔틀버스를 이용하셨나요?'
   document.getElementById('shuttle-yes').textContent = planned ? '예, 이용할 예정이에요' : '예, 이용했어요'
@@ -3779,8 +3780,13 @@ function goFromCard8() {
 }
 
 // Y/N 버튼 선택 + 조건부 필드 show/hide
+function syncShuttleNotice() {
+  document.getElementById('shuttle-notice')?.classList.toggle('hidden', !(state.isJeju && state.hasShuttle === true))
+}
+
 function setYN(field, val) {
   state[field] = val
+  if (field === 'hasShuttle') syncShuttleNotice()
   if (field === 'isMS') saveProfile({ isMS: val })
   if (field === 'prevDayMove') state.prevDayAuto = false
 
