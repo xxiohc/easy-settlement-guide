@@ -982,6 +982,22 @@ function focusFormRows(kinds, side) {
 }
 
 // 입력칸·체크·전표 칸 연결(이벤트 위임)
+// 식사비 한도 — 넘으면 한도 금액으로 바꾸고 입력칸 아래에 안내를 띄운다(다시 한도 안으로 고치면 안내를 거둔다)
+function vgMealCap() { return typeof MEAL_CAP === 'number' ? MEAL_CAP : 10000 }
+function vgClampMeal(el, d) {
+  const cap = vgMealCap()
+  const over = d && Number(d) > cap
+  if (over) { d = String(cap); el.value = cap.toLocaleString() }
+  const host = el.closest('.vg-money') || el
+  let warn = host.parentElement.querySelector('.vg-cap-warn')
+  if (over) {
+    if (!warn) { warn = document.createElement('div'); warn.className = 'vg-cap-warn'; host.insertAdjacentElement('afterend', warn) }
+    warn.textContent = `식사비 한도는 ${cap.toLocaleString()}원이에요 — ${cap.toLocaleString()}원까지만 정산돼요`
+  } else if (warn && d) warn.remove()
+  if (over) vgNotice = `식사비 한도는 ${cap.toLocaleString()}원이에요 — ${cap.toLocaleString()}원으로 맞췄어요`
+  return d
+}
+
 function bindVoucherEvents() {
   const card = document.getElementById('card-12')
   if (!card || card.dataset.bound) return
@@ -995,6 +1011,7 @@ function bindVoucherEvents() {
   card.addEventListener('change', e => {
     const el = e.target
     if (el.dataset.money) {
+      if (el.dataset.money === 'finalAmounts.meal') vgClampMeal(el, el.value.replace(/[^\d]/g, ''))
       const n = parseInt(el.value.replace(/[^\d]/g, ''), 10)
       vgSet(el.dataset.money, Number.isFinite(n) ? n : null)
     } else if (el.dataset.text) {
@@ -1008,7 +1025,9 @@ function bindVoucherEvents() {
   card.addEventListener('input', e => {
     const el = e.target
     if (!el.dataset.money) return
-    const d = el.value.replace(/[^\d]/g, '')
+    let d = el.value.replace(/[^\d]/g, '')
+    // 식사비는 한도(rates.json mealCap, 1만원)까지만 — 넘게 치면 한도로 고치고 바로 알린다(2026-10-04 지석초이)
+    if (el.dataset.money === 'finalAmounts.meal') d = vgClampMeal(el, d)
     el.value = d ? Number(d).toLocaleString() : ''
     const [root, kind] = el.dataset.money.split('.')
     if ((vg.screen === 'receipts' || vg.screen === 'settle') && root === 'finalAmounts') {

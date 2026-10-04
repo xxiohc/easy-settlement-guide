@@ -380,6 +380,25 @@ for (const width of [1280, 390]) {
   await ctx.close()
 }
 
+// ── 1-k. 식사비는 한도(1만원)까지만 — 넘게 치면 한도로 고치고 알린다(2026-10-04 지석초이) ──
+for (const scr of ['receipts', 'settle']) {
+  const [ctx, p] = await page(1280)
+  await p.evaluate(s => {
+    vg = { version: 2, checks: {}, trip: { title: '세무 실무교육', startDate: '2026-11-12', endDate: '2026-11-12', hasDoc: false },
+      costs: [{ kind: 'transport', label: '교통비', amount: 3300 }, { kind: 'meal', label: '식사비', amount: null }],
+      planTotal: 3300, task: 'final', purpose: 'trip', amtChanged: s === 'settle' ? 'yes' : 'no', screen: s }
+    vgFrom = 11; goToCard(12); renderVoucher()
+  }, scr)
+  await p.waitForTimeout(400)
+  await p.locator('[data-money="finalAmounts.meal"]').pressSequentially('12000'); await p.waitForTimeout(150)
+  const live = await p.evaluate(() => [document.querySelector('[data-money="finalAmounts.meal"]').value, document.querySelector('.vg-cap-warn')?.innerText || ''])
+  check(`식사비 한도(${scr}): 12,000을 치면 10,000으로 막고 바로 안내`, live[0] === '10,000' && live[1].includes('식사비 한도는 10,000원'), JSON.stringify(live))
+  await p.dispatchEvent('[data-money="finalAmounts.meal"]', 'change'); await p.waitForTimeout(250)
+  const after = await p.evaluate(() => [vg.finalAmounts.meal, document.getElementById('vg-screen').innerText.includes('10,000원으로 맞췄어요')])
+  check(`식사비 한도(${scr}): 저장도 10,000 + 맞췄다는 알림`, after[0] === 10000 && after[1], JSON.stringify(after))
+  await ctx.close()
+}
+
 // ── 1-h. 카드6 증빙 칸에 바로 정산 여부 표시 ──
 {
   const [ctx, p] = await page(390)
